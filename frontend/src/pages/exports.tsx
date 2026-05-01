@@ -9,9 +9,33 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Download, FileSpreadsheet, Activity } from "lucide-react";
+import { Download, FileSpreadsheet, Activity, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+
+// Fetch-based download so session cookie is always sent
+async function downloadCsv(url: string, filename: string, setLoading: (v: boolean) => void) {
+  setLoading(true);
+  try {
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) {
+      alert("Export failed. Make sure you are logged in and have export permission.");
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    alert("Download error. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+}
 
 export default function Exports() {
   const { user } = useAuth();
@@ -22,18 +46,21 @@ export default function Exports() {
   }
   const [month, setMonth] = useState(getCurrentMonth());
   const [departmentId, setDepartmentId] = useState<string>("all");
+  const [loadingIssues, setLoadingIssues] = useState(false);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [loadingMonthly, setLoadingMonthly] = useState(false);
 
-  const { data: departments, isLoading } = useListDepartments({ query: { queryKey: getListDepartmentsQueryKey() } });
+  const { data: departments } = useListDepartments({ query: { queryKey: getListDepartmentsQueryKey() } });
 
-  let issuesUrl = `/api/export/issues.csv?month=${month}`;
-  if (departmentId !== "all") {
-    issuesUrl += `&departmentId=${departmentId}`;
-  }
+  const issuesUrl = departmentId !== "all"
+    ? `/api/export/issues.csv?month=${month}&departmentId=${departmentId}`
+    : `/api/export/issues.csv?month=${month}`;
 
-  let inventoryUrl = "";
-  if (departmentId !== "all") {
-    inventoryUrl = `/api/export/inventory.csv?departmentId=${departmentId}&month=${month}`;
-  }
+  const inventoryUrl = departmentId !== "all"
+    ? `/api/export/inventory.csv?departmentId=${departmentId}&month=${month}`
+    : "";
+
+  const monthlyUrl = `/api/export/monthly-report.csv?startMonth=${month}&endMonth=${month}`;
 
   return (
     <Layout>
@@ -75,6 +102,7 @@ export default function Exports() {
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Issues CSV */}
           <Card>
             <CardHeader>
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
@@ -84,15 +112,18 @@ export default function Exports() {
               <CardDescription>Line-by-line log of all items issued, including dates, quantities, and notes.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" asChild>
-                <a href={issuesUrl} download target="_blank" rel="noreferrer">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download Issues
-                </a>
+              <Button
+                className="w-full"
+                disabled={loadingIssues}
+                onClick={() => downloadCsv(issuesUrl, `issues_${month}.csv`, setLoadingIssues)}
+              >
+                {loadingIssues ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                {loadingIssues ? "Downloading…" : "Download Issues"}
               </Button>
             </CardContent>
           </Card>
 
+          {/* Inventory CSV */}
           <Card className={departmentId === "all" ? "opacity-60" : ""}>
             <CardHeader>
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
@@ -107,13 +138,38 @@ export default function Exports() {
                   Select a specific department first
                 </Button>
               ) : (
-                <Button className="w-full" variant="outline" asChild>
-                  <a href={inventoryUrl} download target="_blank" rel="noreferrer">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download Inventory
-                  </a>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  disabled={loadingInventory}
+                  onClick={() => downloadCsv(inventoryUrl, `inventory_${departmentId}_${month}.csv`, setLoadingInventory)}
+                >
+                  {loadingInventory ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  {loadingInventory ? "Downloading…" : "Download Inventory"}
                 </Button>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Monthly Report CSV */}
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
+                <FileSpreadsheet className="h-5 w-5 text-primary" />
+              </div>
+              <CardTitle>Monthly Report CSV</CardTitle>
+              <CardDescription>Full monthly commodity report with opening balances, additions, issues, and closing balances for all items.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                className="w-full"
+                variant="outline"
+                disabled={loadingMonthly}
+                onClick={() => downloadCsv(monthlyUrl, `monthly_report_${month}.csv`, setLoadingMonthly)}
+              >
+                {loadingMonthly ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                {loadingMonthly ? "Downloading…" : "Download Monthly Report"}
+              </Button>
             </CardContent>
           </Card>
         </div>

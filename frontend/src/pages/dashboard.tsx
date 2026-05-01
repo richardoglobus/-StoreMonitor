@@ -27,6 +27,22 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
+// Abbreviate long department names for chart labels
+function abbrevDept(name: string): string {
+  const map: Record<string, string> = {
+    "MALE WARD": "MALE",
+    "FEMALE WARD": "FEMALE",
+    "OPD CASUALTY": "OPD",
+    "MATERNITY": "MATNY",
+    "PHYSIOTHERAPY": "PHYSIO",
+    "RADIOLOGY": "RADIO",
+    "AMBULANCE": "AMBUL",
+    "MAINTAINANCE": "MAINT",
+    "LAUNDRY": "LAUNDR",
+  };
+  return map[name] ?? (name.length > 7 ? name.slice(0, 6) + "…" : name);
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -38,7 +54,7 @@ export default function Dashboard() {
 
   const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary(
     { month },
-    { query: { queryKey: getGetDashboardSummaryQueryKey({ month }) } }
+    { query: { queryKey: getGetDashboardSummaryQueryKey({ month }), refetchInterval: 5 * 60 * 1000 } }
   );
 
   const { data: recentIssues, isLoading: isLoadingRecent } = useGetRecentIssues(
@@ -70,6 +86,11 @@ export default function Dashboard() {
     { limit: 8 },
     { query: { enabled: canViewActivity, queryKey: getListActivityQueryKey({ limit: 8 }) } }
   );
+
+  // Only show departments that have actual issues, with abbreviated names for chart
+  const chartData = (deptUsage ?? [])
+    .filter(d => d.totalIssued > 0)
+    .map(d => ({ ...d, shortName: abbrevDept(d.departmentName) }));
 
   return (
     <Layout>
@@ -120,40 +141,52 @@ export default function Dashboard() {
           <Card className="col-span-1 lg:col-span-2">
             <CardHeader>
               <CardTitle>Department Usage</CardTitle>
-              <CardDescription>Total units issued per department in {format(new Date(`${month}-01`), "MMMM yyyy")}</CardDescription>
+              <CardDescription>
+                Total units issued per department in {format(new Date(`${month}-01`), "MMMM yyyy")}
+                {chartData.length === 0 && !isLoadingUsage ? " — no issues recorded yet" : ""}
+              </CardDescription>
             </CardHeader>
             <CardContent className="pl-0">
               {isLoadingUsage ? (
-                <Skeleton className="h-[300px] w-full ml-4" />
-              ) : deptUsage && deptUsage.length > 0 ? (
-                <div className="h-[300px] w-full">
+                <Skeleton className="h-[320px] w-full ml-4" />
+              ) : chartData.length > 0 ? (
+                <div className="h-[320px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={deptUsage} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+                    <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 70 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                      <XAxis 
-                        dataKey="departmentName" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                      <XAxis
+                        dataKey="shortName"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                         angle={-45}
                         textAnchor="end"
-                        height={60}
+                        height={70}
+                        interval={0}
                       />
-                      <YAxis 
-                        axisLine={false} 
-                        tickLine={false} 
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
                         tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
                       />
-                      <RechartsTooltip 
-                        cursor={{ fill: 'hsl(var(--muted))' }}
-                        contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      <RechartsTooltip
+                        cursor={{ fill: "hsl(var(--muted))" }}
+                        formatter={(value: any, _: any, props: any) => [
+                          `${value} units`,
+                          props.payload?.departmentName ?? "Units Issued"
+                        ]}
+                        contentStyle={{
+                          borderRadius: "8px",
+                          border: "1px solid hsl(var(--border))",
+                          boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                        }}
                       />
                       <Bar dataKey="totalIssued" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Units Issued" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[300px] flex items-center justify-center text-muted-foreground border border-dashed rounded-md mx-6">
+                <div className="h-[320px] flex items-center justify-center text-muted-foreground border border-dashed rounded-md mx-6">
                   No issue data for this month
                 </div>
               )}
@@ -167,6 +200,7 @@ export default function Dashboard() {
                 <AlertTriangle className="h-5 w-5" />
                 Low Stock Alerts
               </CardTitle>
+              <CardDescription className="text-xs">Items at or below 10 units</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingLowStock ? (
@@ -174,20 +208,31 @@ export default function Dashboard() {
                   {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
               ) : lowStock && lowStock.length > 0 ? (
-                <div className="space-y-4">
-                  {lowStock.slice(0, 6).map((item, i) => (
-                    <div key={i} className="flex justify-between items-center pb-3 border-b last:border-0 last:pb-0">
-                      <div>
-                        <p className="font-medium text-sm">{item.itemDescription}</p>
-                        <p className="text-xs text-muted-foreground">{item.departmentName}</p>
+                <div className="space-y-3">
+                  {lowStock.slice(0, 6).map((item, i) => {
+                    const isOut = item.balance <= 0;
+                    return (
+                      <div key={i} className={`flex justify-between items-start pb-3 border-b last:border-0 last:pb-0 ${isOut ? "opacity-100" : ""}`}>
+                        <div className="flex-1 min-w-0 pr-2">
+                          <p className="font-medium text-sm truncate" title={item.itemDescription}>{item.itemDescription}</p>
+                          <p className="text-xs text-muted-foreground">{item.departmentName}</p>
+                        </div>
+                        {isOut ? (
+                          <Badge variant="destructive" className="text-xs shrink-0">
+                            OUT OF STOCK
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="font-mono text-amber-600 border-amber-400 bg-amber-50 shrink-0 text-xs">
+                            ⚠ {item.balance} {item.unit}
+                          </Badge>
+                        )}
                       </div>
-                      <Badge variant={item.balance <= 0 ? "destructive" : "secondary"} className="font-mono">
-                        {item.balance} {item.unit}
-                      </Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {lowStock.length > 6 && (
-                    <p className="text-xs text-center text-muted-foreground pt-2">+ {lowStock.length - 6} more items low on stock</p>
+                    <p className="text-xs text-center text-muted-foreground pt-2">
+                      + {lowStock.length - 6} more items low on stock
+                    </p>
                   )}
                 </div>
               ) : (
@@ -277,6 +322,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
         {canViewActivity && (
           <Card>
             <CardHeader>
@@ -285,7 +331,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {isLoadingActivity ? (
-                <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
+                <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
               ) : activityLog && activityLog.length > 0 ? (
                 <Table>
                   <TableHeader>
