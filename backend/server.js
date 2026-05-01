@@ -9,7 +9,7 @@ const FileSync = require("lowdb/adapters/FileSync");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 
-const adapter = new FileSync(path.join(__dirname, "store.json"));
+const adapter = new FileSync(process.env.DATA_PATH || path.join(__dirname, "store.json"));
 const db = low(adapter);
 
 db.defaults({
