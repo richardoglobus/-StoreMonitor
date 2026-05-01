@@ -1,0 +1,6 @@
+{
+  "name": "storemonitor",
+  "scripts": {
+    "start": "node backend/server.js"
+  }
+}

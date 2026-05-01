@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: mukurweini-hospital-stores-app
+    env: node
+    plan: free
+    autoDeploy: true
+    buildCommand: cd frontend && npm ci && npm run build && cd ../backend && npm ci
+    startCommand: cd backend && node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
