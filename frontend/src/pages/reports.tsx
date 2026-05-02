@@ -98,35 +98,47 @@ export default function MonthlyReportPage() {
                       <div className="overflow-x-auto">
                         <Table>
                           <TableHeader>
-                            <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead className="text-right">Units</TableHead>
+                            <TableRow className="bg-muted/40">
+                              <TableHead className="w-32">Date</TableHead>
+                              <TableHead className="text-right">Opening Units</TableHead>
                               <TableHead className="text-right">Unit Price</TableHead>
-                              <TableHead className="text-right">Total Cost (Opening)</TableHead>
+                              <TableHead className="text-right">Opening Cost</TableHead>
                               <TableHead className="text-right">Additions</TableHead>
                               <TableHead className="text-right">Cost of Additions</TableHead>
                               <TableHead className="text-right">Items Issued</TableHead>
-                              <TableHead className="text-right">Balance</TableHead>
-                              <TableHead>Charge Item</TableHead>
+                              <TableHead className="text-right font-semibold">Balance</TableHead>
+                              <TableHead className="text-center">Charge Item</TableHead>
                               <TableHead>Remarks</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {commodity.rows.map((row, idx) => (
-                              <TableRow key={idx} className={row.rowType==="opening"?"bg-muted/10 font-medium":""}>
-                                <TableCell>{format(new Date(row.date),"d MMM yyyy")}</TableCell>
-                                <TableCell className="text-right font-mono">{row.units}</TableCell>
-                                <TableCell className="text-right font-mono">{row.unitPrice||"-"}</TableCell>
-                                <TableCell className="text-right font-mono">{row.openingTotalCost||"-"}</TableCell>
-                                <TableCell className="text-right font-mono">{row.additionsUnits||"-"}</TableCell>
-                                <TableCell className="text-right font-mono">{row.additionsUnitCost||"-"}</TableCell>
-                                <TableCell className="text-right font-mono">{row.itemsIssued||"-"}</TableCell>
-                                <TableCell className="text-right font-mono font-semibold">{row.balance}</TableCell>
-                                {/* Charge item is always 2211002 for monthly report */}
-                                <TableCell className="font-mono text-xs font-semibold text-primary">{CHARGE_ITEM}</TableCell>
-                                <TableCell>{row.remarks||"-"}</TableCell>
-                              </TableRow>
-                            ))}
+                            {commodity.rows.map((row, idx) => {
+                              const isOpening = row.rowType === "opening";
+                              const isClosing = row.rowType === "closing";
+                              const isAdditions = row.rowType === "additions";
+                              return (
+                                <TableRow key={idx} className={
+                                  isOpening ? "bg-blue-50/30 dark:bg-blue-950/20 font-medium" :
+                                  isAdditions ? "bg-green-50/30 dark:bg-green-950/20" :
+                                  isClosing ? "bg-muted/30 font-semibold border-t-2" : ""
+                                }>
+                                  <TableCell className="text-sm font-medium">
+                                    {format(new Date(row.date), "d MMM yyyy")}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-sm">{row.units != null ? row.units : "-"}</TableCell>
+                                  <TableCell className="text-right font-mono text-sm">{row.unitPrice != null ? row.unitPrice : "-"}</TableCell>
+                                  <TableCell className="text-right font-mono text-sm">{row.openingTotalCost != null ? row.openingTotalCost : "-"}</TableCell>
+                                  <TableCell className="text-right font-mono text-sm text-green-700 dark:text-green-400">{row.additionsUnits != null ? `+${row.additionsUnits}` : "-"}</TableCell>
+                                  <TableCell className="text-right font-mono text-sm">{row.additionsUnitCost != null ? row.additionsUnitCost : "-"}</TableCell>
+                                  <TableCell className="text-right font-mono text-sm text-orange-600 dark:text-orange-400">{row.itemsIssued != null ? row.itemsIssued : "-"}</TableCell>
+                                  <TableCell className={`text-right font-mono font-bold text-sm ${row.balance <= 0 ? "text-destructive" : row.balance <= 10 ? "text-orange-500" : "text-foreground"}`}>
+                                    {row.balance}
+                                  </TableCell>
+                                  <TableCell className="text-center font-mono text-xs font-semibold text-primary">{CHARGE_ITEM}</TableCell>
+                                  <TableCell className="text-sm italic text-muted-foreground">{row.remarks || "-"}</TableCell>
+                                </TableRow>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>

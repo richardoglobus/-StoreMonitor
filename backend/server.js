@@ -654,11 +654,13 @@ function buildReport(startMonth,endMonth,itemId){
   const allP=db.get("purchases").value(),allI=db.get("issues").value();
   const running=new Map();
   const lastPrice=new Map();
+
+  // Compute opening balance before the report period
   for(const item of items) running.set(item.id, Number(item.quantity)||0);
   for(const p of allP.filter(p=>p.purchasedAt<overallStart).sort((a,b)=>a.purchasedAt.localeCompare(b.purchasedAt)||a.id-b.id)){
     if(itemId&&p.itemId!==itemId) continue;
     running.set(p.itemId,(running.get(p.itemId)||0)+p.quantity);
-    lastPrice.set(p.itemId, Number(p.unitPrice)||0);
+    lastPrice.set(p.itemId,Number(p.unitPrice)||0);
   }
   for(const i of allI){
     if(i.issuedAt>=overallStart) continue;
@@ -666,78 +668,90 @@ function buildReport(startMonth,endMonth,itemId){
     running.set(i.itemId,(running.get(i.itemId)||0)-i.quantity);
   }
 
+  const CHARGE="2211002";
   const monthsResult=[];
   for(const month of months){
     const {start,end}=monthRange(month);
     const commodities=[];
     for(const item of items){
-      const openingQty = running.get(item.id)??0;
-      let balance = openingQty;
-      const openingUnitPrice = Number(lastPrice.get(item.id)||0);
-      const txnRows = [{
+      const openingQty=running.get(item.id)??0;
+      const unitPrice=Number(lastPrice.get(item.id)||0);
+
+      // Aggregate all additions (purchases) for the month
+      const monthPurchases=allP.filter(p=>p.itemId===item.id&&inRange(p.purchasedAt,start,end));
+      const totalAdditions=monthPurchases.reduce((s,p)=>s+Number(p.quantity||0),0);
+      const additionsCost=monthPurchases.length?Number(monthPurchases[monthPurchases.length-1].unitPrice||0):unitPrice;
+      if(monthPurchases.length) lastPrice.set(item.id,additionsCost);
+
+      // Aggregate all issues for the month
+      const monthIssues=allI.filter(i=>i.itemId===item.id&&inRange(i.issuedAt,start,end));
+      const totalIssued=monthIssues.reduce((s,i)=>s+Number(i.quantity||0),0);
+
+      const closingBalance=openingQty+totalAdditions-totalIssued;
+
+      // Skip items with no activity and zero stock
+      if(openingQty===0&&totalAdditions===0&&totalIssued===0){
+        running.set(item.id,closingBalance);
+        continue;
+      }
+
+      const rows=[];
+
+      // Row 1: Opening balance — 1st of month
+      rows.push({
         rowType:"opening",
         date:start,
         units:openingQty,
-        unitPrice:openingUnitPrice,
-        openingTotalCost:openingQty*openingUnitPrice,
-        additionsUnits:0,
-        additionsUnitCost:openingUnitPrice,
-        itemsIssued:0,
-        balance,
-        chargeItem:"",
-        responsibleOfficer:"",
+        unitPrice:unitPrice||null,
+        openingTotalCost:unitPrice?openingQty*unitPrice:null,
+        additionsUnits:null,
+        additionsUnitCost:null,
+        itemsIssued:null,
+        balance:openingQty,
+        chargeItem:CHARGE,
         remarks:"Opening balance"
-      }];
-      const txns = [
-        ...allP.filter(p=>p.itemId===item.id&&inRange(p.purchasedAt,start,end)).map(p=>({type:"purchase",date:p.purchasedAt,id:p.id,payload:p})),
-        ...allI.filter(i=>i.itemId===item.id&&inRange(i.issuedAt,start,end)).map(i=>({type:"issue",date:i.issuedAt,id:i.id,payload:i}))
-      ].sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id);
-      for(const txn of txns){
-        if(txn.type==="purchase"){
-          const p=txn.payload;
-          const price=Number(p.unitPrice)||0;
-          balance += p.quantity;
-          lastPrice.set(item.id, price);
-          txnRows.push({
-            rowType:"transaction",
-            date:p.purchasedAt,
-            units:openingQty,
-            unitPrice:price,
-            openingTotalCost:openingQty*price,
-            additionsUnits:p.quantity,
-            additionsUnitCost:price,
-            itemsIssued:0,
-            balance,
-            chargeItem:p.invoiceNo||"",
-            responsibleOfficer:"",
-            remarks:p.note||`Purchase from ${p.supplier}`
-          });
-        } else {
-          const i=txn.payload;
-          balance -= i.quantity;
-          txnRows.push({
-            rowType:"transaction",
-            date:i.issuedAt,
-            units:openingQty,
-            unitPrice:Number(lastPrice.get(item.id)||0),
-            openingTotalCost:openingQty*Number(lastPrice.get(item.id)||0),
-            additionsUnits:0,
-            additionsUnitCost:Number(lastPrice.get(item.id)||0),
-            itemsIssued:i.quantity,
-            balance,
-            chargeItem:i.folioNo||i.s11No||"",
-            responsibleOfficer:"",
-            remarks:i.note||"Issued"
-          });
-        }
+      });
+
+      // Row 2: Additions — only if there were any
+      if(totalAdditions>0){
+        rows.push({
+          rowType:"additions",
+          date:end,
+          units:null,
+          unitPrice:additionsCost||null,
+          openingTotalCost:null,
+          additionsUnits:totalAdditions,
+          additionsUnitCost:additionsCost?totalAdditions*additionsCost:null,
+          itemsIssued:null,
+          balance:openingQty+totalAdditions,
+          chargeItem:CHARGE,
+          remarks:"Additions"
+        });
       }
-      running.set(item.id,balance);
-      if(txnRows.length>1 || openingQty!==0) commodities.push({itemId:item.id,itemDescription:item.description,unit:item.unit,rows:txnRows});
+
+      // Row 3: Closing — always shown, with issues and final balance
+      rows.push({
+        rowType:"closing",
+        date:end,
+        units:null,
+        unitPrice:null,
+        openingTotalCost:null,
+        additionsUnits:null,
+        additionsUnitCost:null,
+        itemsIssued:totalIssued||null,
+        balance:closingBalance,
+        chargeItem:CHARGE,
+        remarks:"Closing balance"
+      });
+
+      running.set(item.id,closingBalance);
+      commodities.push({itemId:item.id,itemDescription:item.description,unit:item.unit,rows});
     }
     monthsResult.push({month,commodities});
   }
   return {startMonth,endMonth,months:monthsResult};
 }
+
 app.get("/api/reports/monthly",requirePermission("viewReports"),(req,res)=>{
   const startMonth=req.query.startMonth||currentMonth(),endMonth=req.query.endMonth||currentMonth();
   const itemId=req.query.itemId?Number(req.query.itemId):undefined;
