@@ -17,11 +17,25 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 
 // Collect all unique units from existing items + a base list
-const BASE_UNITS = ["PKT","BOX","ROLL","PC","PCS","BOTTLE","TUBE","PAIR","SET","LITRE","ML","KG","G","DOZEN","VIAL","AMPOULE","SACHET","SHEET","PIECE"];
+// Canonical units only — no duplicates (PIECE covers PC/PCS, PACKET covers PKT, etc.)
+const BASE_UNITS = [
+  "AMPOULE","BOTTLE","BOX","CAPSULE","DOZEN","GRAM","INJECTION",
+  "KILOGRAM","LITRE","MILLILITRE","PACKET","PAIR","PIECE","ROLL",
+  "SACHET","SET","SHEET","TABLET","TUBE","VIAL"
+];
+// Map common aliases → canonical so old data still matches
+const UNIT_ALIASES: Record<string,string> = {
+  PC:"PIECE",PCS:"PIECE",PKT:"PACKET",KG:"KILOGRAM",G:"GRAM",
+  ML:"MILLILITRE",L:"LITRE",AMPL:"AMPOULE",
+};
+function canonicalUnit(u: string): string {
+  const up = u.trim().toUpperCase();
+  return UNIT_ALIASES[up] ?? up;
+}
 
 function UnitCombobox({ value, onChange, existingUnits }: { value: string; onChange: (v: string) => void; existingUnits: string[] }) {
   const [open, setOpen] = useState(false);
-  const allUnits = Array.from(new Set([...BASE_UNITS, ...existingUnits])).sort();
+  const allUnits = Array.from(new Set([...BASE_UNITS, ...existingUnits.map(canonicalUnit)])).sort();
   const filtered = allUnits.filter(u => u.toLowerCase().includes(value.toLowerCase()));
   const showNew = value.trim() && !allUnits.some(u => u.toLowerCase() === value.toLowerCase());
 

@@ -576,10 +576,9 @@ app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{
   const totalIssued=issues.reduce((s,r)=>s+r.quantity,0);
   const totalReceived=purchases.reduce((s,r)=>s+r.quantity,0);
   let lowStockCount=0,outOfStockCount=0;
-  for(const dept of db.get("departments").value()){
-    for(const r of buildInventoryRows(dept.id,month)){
-      if(r.balance<=0) outOfStockCount++; else if(r.balance<=10) lowStockCount++;
-    }
+  for(const item of db.get("items").value()){
+    const bal=getCurrentStockForItem(item.id);
+    if(bal<=0) outOfStockCount++; else if(bal<=10) lowStockCount++;
   }
   const next=nextIssueDate();
   res.json({month,totalDepartments:depCount,totalItems:itemCount,totalIssuedThisMonth:totalIssued,totalReceivedThisMonth:totalReceived,lowStockCount,outOfStockCount,nextIssueDate:next.date||null,nextIssueWeekday:next.date?next.weekday:null});
@@ -598,13 +597,14 @@ app.get("/api/dashboard/recent-issues",requirePermission("viewDashboard"),(req,r
   res.json(rows.map(r=>({...r,item:itemMap.get(r.itemId),department:deptMap.get(r.departmentId)})));
 });
 app.get("/api/dashboard/low-stock",requirePermission("viewDashboard"),(req,res)=>{
-  const month=req.query.month||currentMonth(),threshold=Number(req.query.threshold)||10;
+  const threshold=Number(req.query.threshold)||10;
   const result=[];
-  for(const dept of db.get("departments").value())
-    for(const r of buildInventoryRows(dept.id,month))
-      if(r.balance<=threshold) result.push({departmentId:dept.id,departmentName:dept.name,itemId:r.itemId,itemDescription:r.item.description,unit:r.item.unit,balance:r.balance});
+  for(const item of db.get("items").orderBy("description","asc").value()){
+    const bal=getCurrentStockForItem(item.id);
+    if(bal<=threshold) result.push({itemId:item.id,itemDescription:item.description,unit:item.unit,balance:bal});
+  }
   result.sort((a,b)=>a.balance-b.balance);
-  res.json(result.slice(0,50));
+  res.json(result);
 });
 app.get("/api/dashboard/department-usage",requirePermission("viewDashboard"),(req,res)=>{
   const month=req.query.month||currentMonth(),{start,end}=monthRange(month);
