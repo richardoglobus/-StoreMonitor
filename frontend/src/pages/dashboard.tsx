@@ -59,8 +59,8 @@ export default function Dashboard() {
   const { data: recentIssues, isLoading: isLoadingRecent } = useGetRecentIssues(
     { limit: 5 }, { query: { queryKey: getGetRecentIssuesQueryKey({ limit: 5 }) } }
   );
-  const { data: lowStockRaw, isLoading: isLoadingLowStock } = useGetLowStock(
-    { month }, { query: { queryKey: getGetLowStockQueryKey({ month }), refetchInterval: 60_000 } }
+  const { data: lowStockRaw, isLoading: isLoadingLowStock, error: lowStockError } = useGetLowStock(
+    { threshold: 10 }, { query: { queryKey: getGetLowStockQueryKey("global"), refetchInterval: 30_000 } }
   );
   const { data: deptUsage, isLoading: isLoadingUsage } = useGetDepartmentUsage(
     { month }, { query: { queryKey: getGetDepartmentUsageQueryKey({ month }) } }
@@ -107,7 +107,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title="Total Items Issued" value={summary?.totalIssuedThisMonth??0} icon={ArrowUpRight} loading={isLoadingSummary} description="Units issued this month"/>
           <StatCard title="Items Received" value={summary?.totalReceivedThisMonth??0} icon={ArrowDownRight} loading={isLoadingSummary} description="Units received this month"/>
-          <StatCard title="Low Stock Items" value={summary?.lowStockCount??0} icon={AlertTriangle} loading={isLoadingSummary} description="Items below threshold" critical={(summary?.lowStockCount??0)>0}/>
+          <StatCard title="Low Stock Items" value={isLoadingLowStock ? "…" : lowStock.length} icon={AlertTriangle} loading={false} description={`${lowStock.filter(i=>i.balance<=0).length} out of stock, ${lowStock.filter(i=>i.balance>0).length} low`} critical={lowStock.length>0}/>
           <StatCard title="Next Issue Day" value={summary?.nextIssueWeekday??"-"} icon={Calendar} loading={isLoadingSummary} description={summary?.nextIssueDate?format(new Date(summary.nextIssueDate),"EEE, MMM d yyyy"):"No scheduled issues"}/>
         </div>
 

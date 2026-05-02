@@ -597,11 +597,13 @@ app.get("/api/dashboard/recent-issues",requirePermission("viewDashboard"),(req,r
   res.json(rows.map(r=>({...r,item:itemMap.get(r.itemId),department:deptMap.get(r.departmentId)})));
 });
 app.get("/api/dashboard/low-stock",requirePermission("viewDashboard"),(req,res)=>{
-  const threshold=Number(req.query.threshold)||10;
+  const threshold=req.query.threshold!=null?Number(req.query.threshold):10;
   const result=[];
-  for(const item of db.get("items").orderBy("description","asc").value()){
+  for(const item of db.get("items").value()){
     const bal=getCurrentStockForItem(item.id);
-    if(bal<=threshold) result.push({itemId:item.id,itemDescription:item.description,unit:item.unit,balance:bal});
+    if(bal<=threshold){
+      result.push({itemId:item.id,itemDescription:item.description,unit:item.unit,balance:bal});
+    }
   }
   result.sort((a,b)=>a.balance-b.balance);
   res.json(result);
