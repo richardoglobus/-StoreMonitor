@@ -29,6 +29,17 @@ async function downloadCsv(url: string, filename: string, setLoading: (v: boolea
   finally { setLoading(false); }
 }
 
+// Month label row to separate months within one table
+function MonthDivider({ month }: { month: string }) {
+  return (
+    <TableRow className="bg-primary/10 border-y border-primary/20">
+      <TableCell colSpan={10} className="py-1 px-4 text-xs font-bold uppercase tracking-widest text-primary">
+        {format(parseISO(`${month}-01`), "MMMM yyyy")}
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export default function MonthlyReportPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -39,7 +50,6 @@ export default function MonthlyReportPage() {
   const [queryDates, setQueryDates] = useState({ from: firstOfMonth(), to: todayStr() });
   const [loadingCsv, setLoadingCsv] = useState(false);
 
-  // Convert full dates to month strings for the API
   const startMonth = queryDates.from.slice(0, 7);
   const endMonth = queryDates.to.slice(0, 7);
 
@@ -48,8 +58,10 @@ export default function MonthlyReportPage() {
     { query: { queryKey: getGetMonthlyReportQueryKey({ startMonth, endMonth }) } }
   );
 
-  const handleGenerate = () => setQueryDates({ from, to });
+  // report.commodities is now a flat list; each row has a `month` field
+  const commodities = (report as any)?.commodities ?? [];
 
+  const handleGenerate = () => setQueryDates({ from, to });
   const downloadUrl = `/api/export/monthly-report.csv?startMonth=${startMonth}&endMonth=${endMonth}`;
 
   return (
@@ -68,91 +80,130 @@ export default function MonthlyReportPage() {
           <CardContent className="flex flex-col sm:flex-row items-end gap-4 flex-wrap">
             <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
             <Button onClick={handleGenerate} className="gap-2">
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : <BarChart3 className="h-4 w-4"/>}
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
               Generate Report
             </Button>
-            {report && (
+            {commodities.length > 0 && (
               <Button variant="outline" className="gap-2" disabled={loadingCsv}
-                onClick={()=>downloadCsv(downloadUrl,`monthly_report_${startMonth}_${endMonth}.csv`,setLoadingCsv)}>
-                {loadingCsv ? <Loader2 className="h-4 w-4 animate-spin"/> : <Download className="h-4 w-4"/>}
+                onClick={() => downloadCsv(downloadUrl, `monthly_report_${startMonth}_${endMonth}.csv`, setLoadingCsv)}>
+                {loadingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 {loadingCsv ? "Downloading…" : "Download CSV"}
               </Button>
             )}
           </CardContent>
         </Card>
 
-        {report && report.months.length > 0 ? (
-          <div className="space-y-8">
-            {report.months.map((monthData) => (
-              <Card key={monthData.month} className="overflow-hidden">
-                <CardHeader className="bg-muted/30">
-                  <CardTitle>{format(parseISO(`${monthData.month}-01`),"MMMM yyyy")}</CardTitle>
-                </CardHeader>
-                <div className="space-y-5 p-4">
-                  {monthData.commodities.map((commodity) => (
-                    <Card key={`${monthData.month}-${commodity.itemId}`} className="overflow-hidden border">
-                      <CardHeader className="py-3 bg-muted/20">
-                        <CardTitle className="text-base">{commodity.itemDescription}</CardTitle>
-                        <CardDescription>Unit: {commodity.unit}</CardDescription>
-                      </CardHeader>
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/40">
-                              <TableHead className="w-32">Date</TableHead>
-                              <TableHead className="text-right">Opening Units</TableHead>
-                              <TableHead className="text-right">Unit Price</TableHead>
-                              <TableHead className="text-right">Opening Cost</TableHead>
-                              <TableHead className="text-right">Additions</TableHead>
-                              <TableHead className="text-right">Cost of Additions</TableHead>
-                              <TableHead className="text-right">Items Issued</TableHead>
-                              <TableHead className="text-right font-semibold">Balance</TableHead>
-                              <TableHead className="text-center">Charge Item</TableHead>
-                              <TableHead>Remarks</TableHead>
+        {isLoading ? (
+          <div className="space-y-4">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        ) : commodities.length > 0 ? (
+          <div className="space-y-6">
+            {commodities.map((commodity: any) => {
+              // Group rows by month to insert dividers
+              const rowsWithDividers: { type: "divider" | "row"; month?: string; row?: any }[] = [];
+              let lastMonth = "";
+              for (const row of commodity.rows) {
+                if (row.month !== lastMonth) {
+                  rowsWithDividers.push({ type: "divider", month: row.month });
+                  lastMonth = row.month;
+                }
+                rowsWithDividers.push({ type: "row", row });
+              }
+
+              return (
+                <Card key={commodity.itemId} className="overflow-hidden border shadow-sm">
+                  {/* Commodity header */}
+                  <CardHeader className="py-3 px-5 bg-muted/30 border-b">
+                    <CardTitle className="text-base">{commodity.itemDescription}</CardTitle>
+                    <CardDescription>Unit: {commodity.unit}</CardDescription>
+                  </CardHeader>
+
+                  {/* Single table for ALL months */}
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/40">
+                          <TableHead className="w-32">Date</TableHead>
+                          <TableHead className="text-right">Opening Units</TableHead>
+                          <TableHead className="text-right">Unit Price</TableHead>
+                          <TableHead className="text-right">Opening Cost</TableHead>
+                          <TableHead className="text-right">Additions</TableHead>
+                          <TableHead className="text-right">Cost of Additions</TableHead>
+                          <TableHead className="text-right">Items Issued</TableHead>
+                          <TableHead className="text-right font-semibold">Balance</TableHead>
+                          <TableHead className="text-center">Charge Item</TableHead>
+                          <TableHead>Remarks</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rowsWithDividers.map((entry, idx) => {
+                          if (entry.type === "divider") {
+                            return <MonthDivider key={`div-${entry.month}`} month={entry.month!} />;
+                          }
+                          const row = entry.row;
+                          const isOpening = row.rowType === "opening";
+                          const isClosing = row.rowType === "closing";
+                          const isAdditions = row.rowType === "additions";
+                          return (
+                            <TableRow key={idx} className={
+                              isOpening
+                                ? "bg-blue-50/40 dark:bg-blue-950/20 font-medium"
+                                : isAdditions
+                                ? "bg-green-50/30 dark:bg-green-950/20"
+                                : isClosing
+                                ? "bg-muted/40 font-semibold border-t-2 border-border"
+                                : ""
+                            }>
+                              <TableCell className="text-sm font-medium whitespace-nowrap">
+                                {format(new Date(row.date), "d MMM yyyy")}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                {row.units != null ? row.units : "-"}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                {row.unitPrice != null ? row.unitPrice : "-"}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                {row.openingTotalCost != null ? row.openingTotalCost : "-"}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm text-green-700 dark:text-green-400 font-semibold">
+                                {row.additionsUnits != null ? `+${row.additionsUnits}` : "-"}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm">
+                                {row.additionsUnitCost != null ? row.additionsUnitCost : "-"}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-sm text-orange-600 dark:text-orange-400">
+                                {row.itemsIssued != null ? row.itemsIssued : "-"}
+                              </TableCell>
+                              <TableCell className={`text-right font-mono font-bold text-sm ${
+                                row.balance <= 0 ? "text-destructive" :
+                                row.balance <= 10 ? "text-orange-500" : ""
+                              }`}>
+                                {row.balance}
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-xs font-semibold text-primary">
+                                {CHARGE_ITEM}
+                              </TableCell>
+                              <TableCell className="text-sm italic text-muted-foreground">
+                                {row.remarks || "-"}
+                              </TableCell>
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {commodity.rows.map((row, idx) => {
-                              const isOpening = row.rowType === "opening";
-                              const isClosing = row.rowType === "closing";
-                              const isAdditions = row.rowType === "additions";
-                              return (
-                                <TableRow key={idx} className={
-                                  isOpening ? "bg-blue-50/30 dark:bg-blue-950/20 font-medium" :
-                                  isAdditions ? "bg-green-50/30 dark:bg-green-950/20" :
-                                  isClosing ? "bg-muted/30 font-semibold border-t-2" : ""
-                                }>
-                                  <TableCell className="text-sm font-medium">
-                                    {format(new Date(row.date), "d MMM yyyy")}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono text-sm">{row.units != null ? row.units : "-"}</TableCell>
-                                  <TableCell className="text-right font-mono text-sm">{row.unitPrice != null ? row.unitPrice : "-"}</TableCell>
-                                  <TableCell className="text-right font-mono text-sm">{row.openingTotalCost != null ? row.openingTotalCost : "-"}</TableCell>
-                                  <TableCell className="text-right font-mono text-sm text-green-700 dark:text-green-400">{row.additionsUnits != null ? `+${row.additionsUnits}` : "-"}</TableCell>
-                                  <TableCell className="text-right font-mono text-sm">{row.additionsUnitCost != null ? row.additionsUnitCost : "-"}</TableCell>
-                                  <TableCell className="text-right font-mono text-sm text-orange-600 dark:text-orange-400">{row.itemsIssued != null ? row.itemsIssued : "-"}</TableCell>
-                                  <TableCell className={`text-right font-mono font-bold text-sm ${row.balance <= 0 ? "text-destructive" : row.balance <= 10 ? "text-orange-500" : "text-foreground"}`}>
-                                    {row.balance}
-                                  </TableCell>
-                                  <TableCell className="text-center font-mono text-xs font-semibold text-primary">{CHARGE_ITEM}</TableCell>
-                                  <TableCell className="text-sm italic text-muted-foreground">{row.remarks || "-"}</TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </Card>
-            ))}
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
-        ) : isLoading ? (
-          <div className="space-y-4">{[1,2,3,4,5].map(i=><Skeleton key={i} className="h-12 w-full"/>)}</div>
+        ) : report !== undefined ? (
+          <div className="h-64 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-lg">
+            <BarChart3 className="h-12 w-12 mb-4 opacity-20" />
+            <p>No activity found for this date range</p>
+          </div>
         ) : (
           <div className="h-64 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-lg">
-            <BarChart3 className="h-12 w-12 mb-4 opacity-20"/>
+            <BarChart3 className="h-12 w-12 mb-4 opacity-20" />
             <p>Select a date range and click "Generate Report"</p>
           </div>
         )}
