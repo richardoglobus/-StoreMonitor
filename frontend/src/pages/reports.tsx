@@ -53,13 +53,30 @@ export default function MonthlyReportPage() {
   const startMonth = queryDates.from.slice(0, 7);
   const endMonth = queryDates.to.slice(0, 7);
 
-  const { data: report, isLoading } = useGetMonthlyReport(
+  const { data: report, isLoading, error } = useGetMonthlyReport(
     { startMonth, endMonth },
-    { query: { queryKey: getGetMonthlyReportQueryKey({ startMonth, endMonth }) } }
+    { query: { queryKey: [...getGetMonthlyReportQueryKey({ startMonth, endMonth }), "_v2"], refetchOnMount: true, staleTime: 0 } }
   );
 
-  // report.commodities is now a flat list; each row has a `month` field
-  const commodities = (report as any)?.commodities ?? [];
+  // Handle both new {commodities:[]} and old {months:[]} formats
+  const commodities: any[] = (() => {
+    if (!report) return [];
+    const r = report as any;
+    // New format
+    if (Array.isArray(r.commodities)) return r.commodities;
+    // Old format — flatten months into commodities
+    if (Array.isArray(r.months)) {
+      const map = new Map<number, any>();
+      for (const m of r.months) {
+        for (const c of (m.commodities ?? [])) {
+          if (!map.has(c.itemId)) map.set(c.itemId, { ...c, rows: [] });
+          for (const row of c.rows) map.get(c.itemId).rows.push({ ...row, month: m.month });
+        }
+      }
+      return Array.from(map.values());
+    }
+    return [];
+  })();
 
   const handleGenerate = () => setQueryDates({ from, to });
   const downloadUrl = `/api/export/monthly-report.csv?startMonth=${startMonth}&endMonth=${endMonth}`;
@@ -83,16 +100,19 @@ export default function MonthlyReportPage() {
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
               Generate Report
             </Button>
-            {commodities.length > 0 && (
-              <Button variant="outline" className="gap-2" disabled={loadingCsv}
-                onClick={() => downloadCsv(downloadUrl, `monthly_report_${startMonth}_${endMonth}.csv`, setLoadingCsv)}>
-                {loadingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                {loadingCsv ? "Downloading…" : "Download CSV"}
-              </Button>
-            )}
+            <Button variant="outline" className="gap-2" disabled={loadingCsv}
+              onClick={() => downloadCsv(downloadUrl, `monthly_report_${startMonth}_${endMonth}.csv`, setLoadingCsv)}>
+              {loadingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {loadingCsv ? "Downloading…" : "Download CSV"}
+            </Button>
           </CardContent>
         </Card>
 
+        {error && (
+          <div className="p-4 bg-destructive/10 border border-destructive rounded-lg text-destructive text-sm">
+            Failed to load report. Try generating again or check your connection.
+          </div>
+        )}
         {isLoading ? (
           <div className="space-y-4">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : commodities.length > 0 ? (
