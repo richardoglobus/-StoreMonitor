@@ -830,6 +830,133 @@ app.get("/api/export/monthly-report.csv",requirePermission("exportData"),(req,re
   res.send(lines.join("\n"));
 });
 
+app.get("/api/export/monthly-report.xlsx",requirePermission("exportData"),async(req,res)=>{
+  try{
+    const ExcelJS=require("exceljs");
+    const startMonth=req.query.startMonth||currentMonth(),endMonth=req.query.endMonth||currentMonth();
+    const itemId=req.query.itemId?Number(req.query.itemId):undefined;
+    const data=buildReport(startMonth,endMonth,itemId);
+    const commodities=data.commodities||[];
+
+    const wb=new ExcelJS.Workbook();
+    wb.creator="Mukurweini Hospital Stores";
+    wb.created=new Date();
+
+    // Bright colors for commodity name rows
+    const COMMODITY_COLORS=["4F46E5","EC4899","F59E0B","10B981","3B82F6","EF4444","8B5CF6","14B8A6","F97316","06B6D4","84CC16","E11D48"];
+
+    commodities.forEach((c,ci)=>{
+      // Sheet name max 31 chars, no special chars
+      const sheetName=(c.itemDescription||`Item${c.itemId}`).replace(/[\\/:*?\[\]]/g,"").slice(0,28);
+      const ws=wb.addWorksheet(sheetName);
+
+      // Commodity title row - colorful
+      const titleColor=COMMODITY_COLORS[ci%COMMODITY_COLORS.length];
+      const titleRow=ws.addRow([c.itemDescription]);
+      titleRow.getCell(1).font={bold:true,size:13,color:{argb:"FF"+titleColor}};
+      titleRow.getCell(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"F5F3FF"}};
+
+      const unitRow=ws.addRow([`Unit: ${c.unit}`]);
+      unitRow.getCell(1).font={italic:true,color:{argb:"FF6B7280"},size:10};
+      ws.addRow([]); // blank
+
+      // Headers - bold
+      const headers=["Date","Opening Units","Unit Price","Opening Cost","Additions","Cost of Additions","Items Issued","Balance","Charge Item","Remarks"];
+      const headerRow=ws.addRow(headers);
+      headerRow.eachCell(cell=>{
+        cell.font={bold:true,color:{argb:"FFFFFFFF"},size:10};
+        cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+titleColor}};
+        cell.border={bottom:{style:"thin",color:{argb:"FFE5E7EB"}}};
+        cell.alignment={horizontal:"center"};
+      });
+
+      // Data rows
+      let lastMonth="";
+      c.rows.forEach((r)=>{
+        // Add subtle month separator row (just blank with light color)
+        if(r.month&&r.month!==lastMonth){
+          if(lastMonth){
+            const sepRow=ws.addRow([]);
+            sepRow.height=4;
+          }
+          lastMonth=r.month;
+        }
+
+        const isOpening=r.rowType==="opening";
+        const isClosing=r.rowType==="closing";
+        const isAdditions=r.rowType==="additions";
+
+        const row=ws.addRow([
+          r.date,
+          r.units!=null?r.units:"",
+          r.unitPrice!=null?r.unitPrice:"",
+          r.openingTotalCost!=null?r.openingTotalCost:"",
+          r.additionsUnits!=null?r.additionsUnits:"",
+          r.additionsUnitCost!=null?r.additionsUnitCost:"",
+          r.itemsIssued!=null?r.itemsIssued:"",
+          r.balance,
+          r.chargeItem||"2211002",
+          r.remarks||""
+        ]);
+
+        // Row styling
+        if(isOpening){
+          row.eachCell(cell=>{cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE0E7FF"}};});
+          row.getCell(1).font={bold:true};
+        } else if(isAdditions){
+          row.eachCell(cell=>{cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD1FAE5"}};});
+          row.getCell(5).font={bold:true,color:{argb:"FF059669"}};
+        } else if(isClosing){
+          row.eachCell(cell=>{cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF3F4F6"}};});
+          row.getCell(8).font={bold:true};
+        }
+
+        // Balance color
+        const bal=Number(r.balance);
+        if(bal<=0) row.getCell(8).font={bold:true,color:{argb:"FFDC2626"}};
+        else if(bal<=10) row.getCell(8).font={bold:true,color:{argb:"FFD97706"}};
+      });
+
+      // Set column widths
+      ws.columns=[
+        {width:14},{width:14},{width:12},{width:16},
+        {width:12},{width:18},{width:13},{width:10},
+        {width:13},{width:22}
+      ];
+    });
+
+    // Summary sheet
+    const summary=wb.addWorksheet("Summary");
+    const sumTitle=summary.addRow(["Monthly Report Summary"]);
+    sumTitle.getCell(1).font={bold:true,size:14,color:{argb:"FF4F46E5"}};
+    summary.addRow([`Period: ${startMonth} to ${endMonth}`]).getCell(1).font={italic:true};
+    summary.addRow([]);
+    const sumHeaders=summary.addRow(["Commodity","Unit","Total Additions","Total Issued","Closing Balance"]);
+    sumHeaders.eachCell(cell=>{
+      cell.font={bold:true,color:{argb:"FFFFFFFF"}};
+      cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF4F46E5"}};
+    });
+    commodities.forEach((c,ci)=>{
+      const lastRow=c.rows[c.rows.length-1];
+      const totalAdded=c.rows.filter(r=>r.rowType==="additions").reduce((s,r)=>s+(r.additionsUnits||0),0);
+      const totalIssued=c.rows.filter(r=>r.rowType==="closing").reduce((s,r)=>s+(r.itemsIssued||0),0);
+      const row=summary.addRow([c.itemDescription,c.unit,totalAdded,totalIssued,lastRow?.balance??""]);
+      const color=COMMODITY_COLORS[ci%COMMODITY_COLORS.length];
+      row.getCell(1).font={color:{argb:"FF"+color}};
+    });
+    summary.columns=[{width:35},{width:10},{width:16},{width:14},{width:16}];
+
+    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition",`attachment; filename="monthly_report_${startMonth}_to_${endMonth}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  }catch(err){
+    console.error("Excel export error:",err);
+    res.status(500).json({error:"Excel export failed: "+err.message});
+  }
+});
+
+
 // Serve frontend build in production deployments (single-origin app)
 const frontendDistPath = path.join(__dirname, "..", "frontend", "dist");
 app.use(express.static(frontendDistPath));

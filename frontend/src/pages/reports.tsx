@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, todayStr, firstOfMonth } from "@/components/date-range-picker";
 import { useGetMonthlyReport, getGetMonthlyReportQueryKey } from "@/lib/api";
@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, BarChart3, Loader2 } from "lucide-react";
+import { Download, BarChart3, Loader2, FileSpreadsheet } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
@@ -29,17 +29,6 @@ async function downloadCsv(url: string, filename: string, setLoading: (v: boolea
   finally { setLoading(false); }
 }
 
-// Month label row to separate months within one table
-function MonthDivider({ month }: { month: string }) {
-  return (
-    <TableRow className="bg-primary/10 border-y border-primary/20">
-      <TableCell colSpan={10} className="py-1 px-4 text-xs font-bold uppercase tracking-widest text-primary">
-        {format(parseISO(`${month}-01`), "MMMM yyyy")}
-      </TableCell>
-    </TableRow>
-  );
-}
-
 export default function MonthlyReportPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -49,6 +38,7 @@ export default function MonthlyReportPage() {
   const [to, setTo] = useState(todayStr());
   const [queryDates, setQueryDates] = useState({ from: firstOfMonth(), to: todayStr() });
   const [loadingCsv, setLoadingCsv] = useState(false);
+  const [loadingXlsx, setLoadingXlsx] = useState(false);
 
   const startMonth = queryDates.from.slice(0, 7);
   const endMonth = queryDates.to.slice(0, 7);
@@ -80,6 +70,7 @@ export default function MonthlyReportPage() {
 
   const handleGenerate = () => setQueryDates({ from, to });
   const downloadUrl = `/api/export/monthly-report.csv?startMonth=${startMonth}&endMonth=${endMonth}`;
+  const xlsxUrl = `/api/export/monthly-report.xlsx?startMonth=${startMonth}&endMonth=${endMonth}`;
 
   return (
     <Layout>
@@ -105,6 +96,11 @@ export default function MonthlyReportPage() {
               {loadingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {loadingCsv ? "Downloading…" : "Download CSV"}
             </Button>
+            <Button className="gap-2 bg-green-600 hover:bg-green-700 text-white" disabled={loadingXlsx}
+              onClick={() => downloadCsv(xlsxUrl, `monthly_report_${startMonth}_${endMonth}.xlsx`, setLoadingXlsx)}>
+              {loadingXlsx ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+              {loadingXlsx ? "Downloading…" : "Download Excel"}
+            </Button>
           </CardContent>
         </Card>
 
@@ -118,17 +114,6 @@ export default function MonthlyReportPage() {
         ) : commodities.length > 0 ? (
           <div className="space-y-6">
             {commodities.map((commodity: any) => {
-              // Group rows by month to insert dividers
-              const rowsWithDividers: { type: "divider" | "row"; month?: string; row?: any }[] = [];
-              let lastMonth = "";
-              for (const row of commodity.rows) {
-                if (row.month !== lastMonth) {
-                  rowsWithDividers.push({ type: "divider", month: row.month });
-                  lastMonth = row.month;
-                }
-                rowsWithDividers.push({ type: "row", row });
-              }
-
               return (
                 <Card key={commodity.itemId} className="overflow-hidden border shadow-sm">
                   {/* Commodity header */}
@@ -155,11 +140,7 @@ export default function MonthlyReportPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {rowsWithDividers.map((entry, idx) => {
-                          if (entry.type === "divider") {
-                            return <MonthDivider key={`div-${entry.month}`} month={entry.month!} />;
-                          }
-                          const row = entry.row;
+                        {commodity.rows.map((row: any, idx: number) => {
                           const isOpening = row.rowType === "opening";
                           const isClosing = row.rowType === "closing";
                           const isAdditions = row.rowType === "additions";

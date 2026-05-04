@@ -12,11 +12,18 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Cell } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+
+const CHART_COLORS = [
+  "#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6",
+  "#ef4444","#8b5cf6","#14b8a6","#f97316","#06b6d4",
+  "#84cc16","#e11d48","#7c3aed","#0ea5e9","#d97706",
+  "#22c55e","#a855f7","#fb923c","#2dd4bf","#f43f5e",
+];
 
 function abbrevDept(name: string): string {
   const map: Record<string,string> = {
@@ -130,7 +137,11 @@ export default function Dashboard() {
                       <RechartsTooltip cursor={{fill:"hsl(var(--muted))"}}
                         formatter={(value:any,_:any,props:any)=>[`${value} units`,props.payload?.departmentName??"Units Issued"]}
                         contentStyle={{borderRadius:"8px",border:"1px solid hsl(var(--border))"}}/>
-                      <Bar dataKey="totalIssued" fill="hsl(var(--primary))" radius={[4,4,0,0]} name="Units Issued"/>
+                      <Bar dataKey="totalIssued" radius={[4,4,0,0]} name="Units Issued">
+                        {chartData.map((_entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
