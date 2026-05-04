@@ -808,16 +808,22 @@ app.get("/api/export/monthly-report.csv",requirePermission("exportData"),(req,re
   const itemId=req.query.itemId?Number(req.query.itemId):undefined;
   const data=buildReport(startMonth,endMonth,itemId);
   const lines=[];
-  for(const m of data.months){
-    lines.push([`INVENTORY ${m.month}`].map(csvEscape).join(","));
-    for(const c of m.commodities){
-      lines.push([`${c.itemDescription}`].map(csvEscape).join(","));
-      lines.push(["Date","Units","Unit Price","Total Cost (Opening)","Additions (Units)","Unit Cost of Additions","Items Issued","Balance","Charge Item","Responsible Officer","Remarks"].map(csvEscape).join(","));
-      for(const r of c.rows){
-        lines.push([r.date,r.units,r.unitPrice,r.openingTotalCost,r.additionsUnits,r.additionsUnitCost,r.itemsIssued,r.balance,r.chargeItem,r.responsibleOfficer,r.remarks].map(csvEscape).join(","));
+  // New format: data.commodities (flat list with month per row)
+  const commodities=data.commodities||[];
+  for(const c of commodities){
+    lines.push([csvEscape(`COMMODITY: ${c.itemDescription} (${c.unit})`)]);
+    lines.push(["Date","Opening Units","Unit Price","Opening Cost","Additions","Cost of Additions","Items Issued","Balance","Charge Item","Remarks"].map(csvEscape).join(","));
+    let lastMonth="";
+    for(const r of c.rows){
+      if(r.month&&r.month!==lastMonth){
+        const [y,m]=r.month.split("-").map(Number);
+        const monthName=new Date(Date.UTC(y,m-1,1)).toLocaleString("en-US",{month:"long",year:"numeric",timeZone:"UTC"});
+        lines.push([csvEscape(`--- ${monthName} ---`)]);
+        lastMonth=r.month;
       }
-      lines.push("");
+      lines.push([r.date,r.units??"",r.unitPrice??"",r.openingTotalCost??"",r.additionsUnits??"",r.additionsUnitCost??"",r.itemsIssued??"",r.balance,r.chargeItem||"2211002",r.remarks||""].map(csvEscape).join(","));
     }
+    lines.push("");
   }
   res.setHeader("Content-Type","text/csv");
   res.setHeader("Content-Disposition",`attachment; filename="monthly_report_${startMonth}_to_${endMonth}.csv"`);

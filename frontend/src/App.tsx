@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { ThemeProvider } from "@/lib/theme-context";
 import Dashboard from "@/pages/dashboard";
 import Departments from "@/pages/departments";
 import DepartmentDetail from "@/pages/department-detail";
@@ -55,19 +56,19 @@ function Router() {
   );
 }
 
-function App() {
+export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <WouterRouter>
-            <Router />
-          </WouterRouter>
+          <TooltipProvider>
+            <WouterRouter>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
         </AuthProvider>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
-
-export default App;
