@@ -1,10 +1,9 @@
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { CalendarDays } from "lucide-react";
 
 interface DateRangePickerProps {
-  from: string;   // YYYY-MM-DD
-  to: string;     // YYYY-MM-DD
+  from: string;
+  to: string;
   onFromChange: (v: string) => void;
   onToChange: (v: string) => void;
   label?: boolean;
@@ -14,18 +13,50 @@ export function DateRangePicker({ from, to, onFromChange, onToChange, label = tr
   return (
     <div className="flex flex-wrap items-end gap-4">
       <div className="space-y-1">
-        {label && <Label className="flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="h-3 w-3" />From</Label>}
-        <Input type="date" value={from} onChange={e => onFromChange(e.target.value)} className="w-40 text-sm" />
+        {label && (
+          <Label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <CalendarDays className="h-3 w-3" />From
+          </Label>
+        )}
+        <div className="relative">
+          <input
+            type="date"
+            value={from}
+            onChange={e => onFromChange(e.target.value)}
+            className="w-40 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm
+              text-foreground
+              [color-scheme:light]
+              dark:[color-scheme:dark]
+              focus:outline-none focus:ring-1 focus:ring-ring
+              cursor-pointer"
+          />
+        </div>
       </div>
       <div className="space-y-1">
-        {label && <Label className="flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="h-3 w-3" />To</Label>}
-        <Input type="date" value={to} max={new Date().toISOString().slice(0,10)} onChange={e => onToChange(e.target.value)} className="w-40 text-sm" />
+        {label && (
+          <Label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <CalendarDays className="h-3 w-3" />To
+          </Label>
+        )}
+        <div className="relative">
+          <input
+            type="date"
+            value={to}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={e => onToChange(e.target.value)}
+            className="w-40 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm
+              text-foreground
+              [color-scheme:light]
+              dark:[color-scheme:dark]
+              focus:outline-none focus:ring-1 focus:ring-ring
+              cursor-pointer"
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-// Convert YYYY-MM-DD to YYYY-MM for API calls that still need month
 export function dateToMonth(date: string) {
   return date.slice(0, 7);
 }

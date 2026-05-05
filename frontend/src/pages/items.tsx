@@ -77,8 +77,8 @@ export default function Items() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editItemId, setEditItemId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
-  const [newItem, setNewItem] = useState({ description: "", unit: "", quantity: "0" });
-  const [editItem, setEditItem] = useState({ description: "", unit: "", quantity: "0" });
+  const [newItem, setNewItem] = useState({ description: "", unit: "", quantity: "0", lowStockThreshold: "10" });
+  const [editItem, setEditItem] = useState({ description: "", unit: "", quantity: "0", lowStockThreshold: "10" });
 
   const { data: items, isLoading } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
 
@@ -126,20 +126,20 @@ export default function Items() {
     e.preventDefault();
     if (!newItem.description.trim() || !newItem.unit.trim()) return;
     // Save in UPPERCASE
-    createItem.mutate({ data: { description: newItem.description.trim().toUpperCase(), unit: newItem.unit.trim().toUpperCase(), quantity: Number(newItem.quantity)||0 } as any });
+    createItem.mutate({ data: { description: newItem.description.trim().toUpperCase(), unit: newItem.unit.trim().toUpperCase(), quantity: Number(newItem.quantity)||0, lowStockThreshold: newItem.lowStockThreshold!==''?Number(newItem.lowStockThreshold):null } as any });
   };
 
   const handleDelete = (id: number) => { if (!confirm("Delete this item?")) return; deleteItem.mutate({ itemId: id }); };
 
   const openEditDialog = (item: any) => {
     setEditItemId(item.id);
-    setEditItem({ description: item.description, unit: item.unit, quantity: String(item.quantity??0) });
+    setEditItem({ description: item.description, unit: item.unit, quantity: String(item.quantity??0), lowStockThreshold: item.lowStockThreshold!=null?String(item.lowStockThreshold):"10" });
     setEditDialogOpen(true);
   };
   const handleEditSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editItemId || !editItem.description.trim() || !editItem.unit.trim()) return;
-    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), quantity: Number(editItem.quantity)||0 } });
+    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null } as any });
   };
 
   const filteredItems = items?.filter(item => item.description.toLowerCase().includes(search.toLowerCase()));
@@ -196,6 +196,13 @@ export default function Items() {
                       <Label>Physical Quantity</Label>
                       <Input type="number" min="0" value={newItem.quantity} onChange={e=>setNewItem({...newItem,quantity:e.target.value})}/>
                     </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        Low Stock Alert Threshold
+                        <span className="text-xs text-muted-foreground font-normal">(warn when stock falls to this level)</span>
+                      </Label>
+                      <Input type="number" min="0" placeholder="e.g. 10" value={newItem.lowStockThreshold} onChange={e=>setNewItem({...newItem,lowStockThreshold:e.target.value})}/>
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={()=>setIsDialogOpen(false)}>Cancel</Button>
@@ -224,6 +231,7 @@ export default function Items() {
                   <TableHead className="w-28 text-right">Purchased</TableHead>
                   <TableHead className="w-28 text-right">Issued</TableHead>
                   <TableHead className="w-28 text-right">In Stock</TableHead>
+                  <TableHead className="w-20 text-right">Alert At</TableHead>
                   {canManageCatalog && <TableHead className="w-24 text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -246,6 +254,7 @@ export default function Items() {
                     <TableCell className="text-right font-mono">{item.purchasedTotal}</TableCell>
                     <TableCell className="text-right font-mono">{item.issuedTotal}</TableCell>
                     <TableCell className={`text-right font-mono ${getStockColorClass(item.stockBalance)}`}>{item.stockBalance<=0?"OUT":item.stockBalance}</TableCell>
+                    <TableCell className="text-right font-mono text-xs text-muted-foreground">{item.lowStockThreshold!=null?item.lowStockThreshold:10}</TableCell>
                     {canManageCatalog&&(
                       <TableCell className="text-right">
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={()=>openEditDialog(item)}><Pencil className="h-4 w-4"/></Button>
@@ -282,6 +291,13 @@ export default function Items() {
                 <div className="space-y-2">
                   <Label>Physical Quantity</Label>
                   <Input type="number" min="0" value={editItem.quantity} onChange={e=>setEditItem({...editItem,quantity:e.target.value})}/>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    Low Stock Threshold
+                    <span className="text-xs text-muted-foreground font-normal">(alert when at or below)</span>
+                  </Label>
+                  <Input type="number" min="0" placeholder="e.g. 10" value={editItem.lowStockThreshold} onChange={e=>setEditItem({...editItem,lowStockThreshold:e.target.value})}/>
                 </div>
               </div>
               <DialogFooter>

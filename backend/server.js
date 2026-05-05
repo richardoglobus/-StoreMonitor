@@ -430,7 +430,7 @@ app.get("/api/items/stock",(_,res)=>{
   })));
 });
 app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
-  const {description,unit,quantity}=req.body; if(!description||!unit) return res.status(400).json({error:"Missing fields"});
+  const {description,unit,quantity,lowStockThreshold}=req.body; if(!description||!unit) return res.status(400).json({error:"Missing fields"});
   if(db.get("items").find({description}).value()) return res.status(400).json({error:"Already exists"});
   const row={id:nextId("items"),description,unit,quantity:Number(quantity)||0};
   db.get("items").push(row).write();
@@ -449,8 +449,9 @@ app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
     if(dup) return res.status(400).json({error:"Already exists"});
   }
   const updates={};
-  if(description!==undefined) updates.description=description;
-  if(unit!==undefined) updates.unit=unit;
+  if(description!==undefined) updates.description=String(description).trim().toUpperCase();
+  if(unit!==undefined) updates.unit=String(unit).trim().toUpperCase();
+  if(req.body.lowStockThreshold!==undefined) updates.lowStockThreshold=req.body.lowStockThreshold===''||req.body.lowStockThreshold===null?null:Number(req.body.lowStockThreshold);
   if(quantity!==undefined) updates.quantity=Number(quantity)||0;
   row.assign(updates).write();
   logActivity(req, "UPDATE_ITEM", "ITEM", id, updates);
@@ -578,7 +579,8 @@ app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{
   let lowStockCount=0,outOfStockCount=0;
   for(const item of db.get("items").value()){
     const bal=getCurrentStockForItem(item.id);
-    if(bal<=0) outOfStockCount++; else if(bal<=10) lowStockCount++;
+    const thr=item.lowStockThreshold!=null?Number(item.lowStockThreshold):10;
+    if(bal<=0) outOfStockCount++; else if(bal<=thr) lowStockCount++;
   }
   const next=nextIssueDate();
   res.json({month,totalDepartments:depCount,totalItems:itemCount,totalIssuedThisMonth:totalIssued,totalReceivedThisMonth:totalReceived,lowStockCount,outOfStockCount,nextIssueDate:next.date||null,nextIssueWeekday:next.date?next.weekday:null});
@@ -597,12 +599,13 @@ app.get("/api/dashboard/recent-issues",requirePermission("viewDashboard"),(req,r
   res.json(rows.map(r=>({...r,item:itemMap.get(r.itemId),department:deptMap.get(r.departmentId)})));
 });
 app.get("/api/dashboard/low-stock",requirePermission("viewDashboard"),(req,res)=>{
-  const threshold=req.query.threshold!=null?Number(req.query.threshold):10;
+  const globalThreshold=req.query.threshold!=null?Number(req.query.threshold):10;
   const result=[];
   for(const item of db.get("items").value()){
+    const threshold=item.lowStockThreshold!=null?Number(item.lowStockThreshold):globalThreshold;
     const bal=getCurrentStockForItem(item.id);
     if(bal<=threshold){
-      result.push({itemId:item.id,itemDescription:item.description,unit:item.unit,balance:bal});
+      result.push({itemId:item.id,itemDescription:item.description,unit:item.unit,balance:bal,threshold});
     }
   }
   result.sort((a,b)=>a.balance-b.balance);
@@ -821,7 +824,7 @@ app.get("/api/export/monthly-report.csv",requirePermission("exportData"),(req,re
         lines.push([csvEscape(`--- ${monthName} ---`)]);
         lastMonth=r.month;
       }
-      lines.push([r.date,r.units??"",r.unitPrice??"",r.openingTotalCost??"",r.additionsUnits??"",r.additionsUnitCost??"",r.itemsIssued??"",r.balance,r.chargeItem||"2211002",r.remarks||""].map(csvEscape).join(","));
+      lines.push([r.date,r.units??"",r.unitPrice??"",r.openingTotalCost??"",r.additionsUnits??"",r.additionsUnitCost??"",r.itemsIssued??"",r.balance,r.chargeItem||"2211002",r.responsibleOfficer||"",r.remarks||""].map(csvEscape).join(","));
     }
     lines.push("");
   }
@@ -861,7 +864,7 @@ app.get("/api/export/monthly-report.xlsx",requirePermission("exportData"),async(
       ws.addRow([]); // blank
 
       // Headers - bold
-      const headers=["Date","Opening Units","Unit Price","Opening Cost","Additions","Cost of Additions","Items Issued","Balance","Charge Item","Remarks"];
+      const headers=["Date","Opening Units","Unit Price","Opening Cost","Additions","Cost of Additions","Items Issued","Balance","Charge Item","Responsible Officer","Remarks"];
       const headerRow=ws.addRow(headers);
       headerRow.eachCell(cell=>{
         cell.font={bold:true,color:{argb:"FFFFFFFF"},size:10};
@@ -896,6 +899,7 @@ app.get("/api/export/monthly-report.xlsx",requirePermission("exportData"),async(
           r.itemsIssued!=null?r.itemsIssued:"",
           r.balance,
           r.chargeItem||"2211002",
+          r.responsibleOfficer||"",
           r.remarks||""
         ]);
 
