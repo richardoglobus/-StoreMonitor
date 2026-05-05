@@ -46,7 +46,7 @@ function getWeekdayColor(label: string): string {
 function VoucherItemRow({
   vItem, index, itemStock, onRemove, onChange, canRemove,
 }: {
-  vItem: { itemId: string; quantity: string; note: string; search: string };
+  vItem: { itemId: string; quantity: string; note: string; search: string; folioNo: string };
   index: number;
   itemStock: any[];
   onRemove: () => void;
@@ -72,8 +72,8 @@ function VoucherItemRow({
         />
       </div>
 
-      <div className="grid grid-cols-12 gap-3 items-end">
-        <div className="col-span-12 md:col-span-5 space-y-1">
+      <div className="grid grid-cols-12 gap-2 items-end">
+        <div className="col-span-12 md:col-span-4 space-y-1">
           <Label className="text-xs">Item</Label>
           <Select
             value={vItem.itemId}
@@ -106,7 +106,16 @@ function VoucherItemRow({
           />
         </div>
 
-        <div className="col-span-5 md:col-span-4 space-y-1">
+        <div className="col-span-6 md:col-span-2 space-y-1">
+          <Label className="text-xs">Folio No <span className="text-destructive">*</span></Label>
+          <Input
+            placeholder="Folio No" className="h-9"
+            value={vItem.folioNo}
+            onChange={e => onChange("folioNo", e.target.value)}
+            required
+          />
+        </div>
+        <div className="col-span-5 md:col-span-2 space-y-1">
           <Label className="text-xs">Note (Optional)</Label>
           <Input
             placeholder="Note" className="h-9"
@@ -135,7 +144,7 @@ function VoucherItemRow({
   );
 }
 
-const emptyRow = () => ({ itemId: "", quantity: "", note: "", search: "" });
+const emptyRow = () => ({ itemId: "", quantity: "", note: "", search: "", folioNo: "" });
 
 export default function Issues() {
   const queryClient = useQueryClient();
@@ -151,7 +160,7 @@ export default function Issues() {
 
   const [voucherData, setVoucherData] = useState({
     departmentId: "", issuedAt: format(new Date(), "yyyy-MM-dd"),
-    folioNo: "", s11No: "", note: ""
+    s11No: "", note: ""
   });
   const [voucherItems, setVoucherItems] = useState([emptyRow()]);
 
@@ -169,7 +178,7 @@ export default function Issues() {
         queryClient.invalidateQueries({ queryKey: getListIssuesQueryKey(queryParams) });
         queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() });
         setIsDialogOpen(false);
-        setVoucherData({ departmentId: "", issuedAt: format(new Date(), "yyyy-MM-dd"), folioNo: "", s11No: "", note: "" });
+        setVoucherData({ departmentId: "", issuedAt: format(new Date(), "yyyy-MM-dd"), s11No: "", note: "" });
         setVoucherItems([emptyRow()]);
       },
       onError: () => toast.error("Failed to record issue voucher"),
@@ -191,7 +200,7 @@ export default function Issues() {
 
   const handleRecordVoucher = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!voucherData.departmentId || !voucherData.folioNo.trim() || !voucherData.s11No.trim() || voucherItems.some(i => !i.itemId || !i.quantity)) {
+    if (!voucherData.departmentId || !voucherData.s11No.trim() || voucherItems.some(i => !i.itemId || !i.quantity || !i.folioNo.trim())) {
       toast.error("Please fill in all required fields"); return;
     }
     for (const vItem of voucherItems) {
@@ -203,10 +212,9 @@ export default function Issues() {
       data: {
         departmentId: Number(voucherData.departmentId),
         issuedAt: voucherData.issuedAt,
-        folioNo: voucherData.folioNo.trim(),
         s11No: voucherData.s11No.trim(),
         note: voucherData.note || undefined,
-        items: voucherItems.map(i => ({ itemId: Number(i.itemId), quantity: Number(i.quantity), note: i.note || undefined }))
+        items: voucherItems.map(i => ({ itemId: Number(i.itemId), quantity: Number(i.quantity), folioNo: i.folioNo.trim(), note: i.note || undefined }))
       }
     });
   };
@@ -257,10 +265,7 @@ export default function Issues() {
                     <Label>Date</Label>
                     <Input type="date" value={voucherData.issuedAt} onChange={e => setVoucherData({...voucherData, issuedAt: e.target.value})} required />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Folio No</Label>
-                    <Input placeholder="Folio No" value={voucherData.folioNo} onChange={e => setVoucherData({...voucherData, folioNo: e.target.value})} required />
-                  </div>
+
                   <div className="space-y-2">
                     <Label>S11 No</Label>
                     <Input placeholder="S11 No" value={voucherData.s11No} onChange={e => setVoucherData({...voucherData, s11No: e.target.value})} required />
@@ -294,7 +299,7 @@ export default function Issues() {
 
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                  <Button type="submit" disabled={createVoucher.isPending || !voucherData.departmentId || !voucherData.folioNo.trim() || !voucherData.s11No.trim()}>
+                  <Button type="submit" disabled={createVoucher.isPending || !voucherData.departmentId || !voucherData.s11No.trim()}>
                     {createVoucher.isPending ? "Creating..." : "Create Issue Voucher"}
                   </Button>
                 </DialogFooter>

@@ -526,19 +526,19 @@ app.post("/api/issues",requirePermission("issueItems"),(req,res)=>{
   res.status(201).json(row);
 });
 app.post("/api/issues/voucher",requirePermission("issueItems"),(req,res)=>{
-  const {departmentId,issuedAt,folioNo,s11No,note,items}=req.body;
+  const {departmentId,issuedAt,s11No,note,items}=req.body;
   if(!departmentId) return res.status(400).json({error:"Department is required"});
-  if(!folioNo||!String(folioNo).trim()) return res.status(400).json({error:"Folio number is required"});
   if(!s11No||!String(s11No).trim()) return res.status(400).json({error:"S11 number is required"});
   if(!items||!items.length) return res.status(400).json({error:"No items"});
   for (const it of items) {
+    if(!it.folioNo||!String(it.folioNo).trim()) return res.status(400).json({error:`Folio number required for each item`});
     const available = getCurrentStockForItem(it.itemId);
     if (available <= 0) return res.status(400).json({ error: "One or more items are out of stock" });
     if (Number(it.quantity) > available) return res.status(400).json({ error: "One or more quantities exceed stock in hand" });
   }
   const voucherId=uuidv4(),wd=weekdayFor(issuedAt),inserted=[];
   for(const it of items){
-    const row={id:nextId("issues"),voucherId,folioNo:folioNo||null,s11No:s11No||null,departmentId,itemId:it.itemId,quantity:it.quantity,issuedAt,weekday:wd,note:it.note||note||null};
+    const row={id:nextId("issues"),voucherId,folioNo:String(it.folioNo||"").trim()||null,s11No:s11No||null,departmentId,itemId:it.itemId,quantity:it.quantity,issuedAt,weekday:wd,note:it.note||note||null};
     db.get("issues").push(row).write(); inserted.push(row);
   }
   logActivity(req, "CREATE_ISSUE_VOUCHER", "ISSUE", null, { departmentId, itemCount: items.length, voucherId });
@@ -957,6 +957,142 @@ app.get("/api/export/monthly-report.xlsx",requirePermission("exportData"),async(
   }catch(err){
     console.error("Excel export error:",err);
     res.status(500).json({error:"Excel export failed: "+err.message});
+  }
+});
+
+
+app.get("/api/export/all-departments.xlsx",requirePermission("exportData"),async(req,res)=>{
+  try{
+    const ExcelJS=require("exceljs");
+    const startMonth=req.query.startMonth||currentMonth();
+    const endMonth=req.query.endMonth||currentMonth();
+    const wb=new ExcelJS.Workbook();
+    wb.creator="Mukurweini Hospital Stores";
+    wb.created=new Date();
+    const DEPT_COLORS=["4F46E5","EC4899","F59E0B","10B981","3B82F6","EF4444","8B5CF6","14B8A6","F97316","06B6D4","84CC16","E11D48","7C3AED","0EA5E9","D97706"];
+    const months=expandMonths(startMonth,endMonth);
+    const departments=db.get("departments").value();
+
+    departments.forEach((dept,di)=>{
+      const color=DEPT_COLORS[di%DEPT_COLORS.length];
+      const sheetName=dept.name.replace(/[\\/:*?\[\]]/g,"").slice(0,28);
+      const ws=wb.addWorksheet(sheetName);
+
+      // Dept title
+      const titleRow=ws.addRow([dept.name]);
+      titleRow.getCell(1).font={bold:true,size:14,color:{argb:"FF"+color}};
+      titleRow.getCell(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF5F3FF"}};
+      ws.addRow([`Period: ${startMonth} to ${endMonth}`]).getCell(1).font={italic:true,color:{argb:"FF6B7280"}};
+      ws.addRow([]);
+
+      // Collect all Tue/Fri dates across months
+      const issueDates=[];
+      for(const month of months){
+        const {start,end}=monthRange(month);
+        const [y,m]=month.split("-").map(Number);
+        const dim=new Date(Date.UTC(y,m,0)).getUTCDate();
+        for(let d=1;d<=dim;d++){
+          const day=new Date(Date.UTC(y,m-1,d)).getUTCDay();
+          if(day===2||day===5){
+            const ds=`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            issueDates.push({date:ds,label:new Date(Date.UTC(y,m-1,d)).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}),weekday:day===2?"TUE":"FRI"});
+          }
+        }
+      }
+
+      // Get all issues for this dept in range
+      const {start:rs}=monthRange(months[0]);
+      const {end:re}=monthRange(months[months.length-1]);
+      const deptIssues=db.get("issues").filter(i=>i.departmentId===dept.id&&i.issuedAt>=rs&&i.issuedAt<re).value();
+      const items=db.get("items").orderBy("description","asc").value();
+
+      // Build issue lookup: itemId -> date -> qty
+      const issueLookup=new Map();
+      for(const iss of deptIssues){
+        if(!issueLookup.has(iss.itemId)) issueLookup.set(iss.itemId,new Map());
+        const dm=issueLookup.get(iss.itemId);
+        dm.set(iss.issuedAt,(dm.get(iss.issuedAt)||0)+iss.quantity);
+      }
+
+      // Header row: Item | Unit | Date1 | Date2 | ... | Total
+      const headerCells=["Item","Unit",...issueDates.map(d=>d.label),"Total Issued"];
+      const headerRow=ws.addRow(headerCells);
+      headerRow.eachCell((cell,ci)=>{
+        cell.font={bold:true,color:{argb:"FFFFFFFF"},size:9};
+        cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+color}};
+        cell.alignment={horizontal:"center",wrapText:true};
+        cell.border={bottom:{style:"thin"}};
+      });
+      headerRow.height=32;
+
+      // Add weekday sub-header
+      const wdCells=["","",... issueDates.map(d=>d.weekday),""];
+      const wdRow=ws.addRow(wdCells);
+      wdRow.eachCell((cell,ci)=>{
+        if(ci<=2) return;
+        const wd=issueDates[ci-3]?.weekday;
+        cell.font={bold:true,size:8,color:{argb:wd==="TUE"?"FF3B82F6":"FF8B5CF6"}};
+        cell.alignment={horizontal:"center"};
+        cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:wd==="TUE"?"FFDBEAFE":"FFEDE9FE"}};
+      });
+
+      // Data rows
+      let hasData=false;
+      items.forEach((item,ii)=>{
+        const dm=issueLookup.get(item.id);
+        if(!dm) return;
+        hasData=true;
+        const total=Array.from(dm.values()).reduce((a,b)=>a+b,0);
+        const rowData=[item.description,item.unit,...issueDates.map(d=>dm.get(d.date)||""),total];
+        const row=ws.addRow(rowData);
+        const bgColor=ii%2===0?"FFFFFFFF":"FFF9FAFB";
+        row.eachCell((cell,ci)=>{
+          cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:bgColor}};
+          if(ci===1) cell.font={bold:false};
+          if(ci>2&&cell.value) cell.font={bold:true,color:{argb:"FF"+color}};
+          if(ci===rowData.length) cell.font={bold:true};
+          cell.alignment={horizontal:ci<=2?"left":"center"};
+        });
+      });
+
+      if(!hasData){
+        ws.addRow(["No issues recorded for this period"]);
+      }
+
+      // Column widths
+      ws.getColumn(1).width=35;
+      ws.getColumn(2).width=8;
+      for(let i=3;i<=issueDates.length+2;i++) ws.getColumn(i).width=11;
+      ws.getColumn(issueDates.length+3).width=13;
+    });
+
+    // Summary sheet
+    const sumWs=wb.addWorksheet("Summary");
+    const sumTitle=sumWs.addRow(["All Departments Summary"]);
+    sumTitle.getCell(1).font={bold:true,size:14,color:{argb:"FF4F46E5"}};
+    sumWs.addRow([`Period: ${startMonth} to ${endMonth}`]).getCell(1).font={italic:true};
+    sumWs.addRow([]);
+    const sumH=sumWs.addRow(["Department","Total Issues","Unique Items Issued"]);
+    sumH.eachCell(cell=>{cell.font={bold:true,color:{argb:"FFFFFFFF"}};cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF4F46E5"}};});
+    const {start:allStart}=monthRange(months[0]);
+    const {end:allEnd}=monthRange(months[months.length-1]);
+    departments.forEach((dept,di)=>{
+      const dIssues=db.get("issues").filter(i=>i.departmentId===dept.id&&i.issuedAt>=allStart&&i.issuedAt<allEnd).value();
+      const totalQty=dIssues.reduce((s,i)=>s+i.quantity,0);
+      const uniqueItems=new Set(dIssues.map(i=>i.itemId)).size;
+      const row=sumWs.addRow([dept.name,totalQty,uniqueItems]);
+      const color=DEPT_COLORS[di%DEPT_COLORS.length];
+      row.getCell(1).font={color:{argb:"FF"+color},bold:true};
+    });
+    sumWs.columns=[{width:30},{width:15},{width:20}];
+
+    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition",`attachment; filename="all_departments_${startMonth}_to_${endMonth}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  }catch(err){
+    console.error("All-depts Excel error:",err);
+    res.status(500).json({error:"Export failed: "+err.message});
   }
 });
 
