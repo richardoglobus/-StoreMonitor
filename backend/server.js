@@ -572,17 +572,38 @@ app.delete("/api/purchases/:id",requirePermission("deleteTransactions"),(req,res
 
 // ── Settings ─────────────────────────────────────────────────────────────
 const DEFAULT_SETTINGS = {
+  // Session & Security
   inactivityTimeoutMinutes: 1,
   warningBeforeSeconds: 10,
-  lowStockDefaultThreshold: 10,
-  issueDays: ["TUESDAY","FRIDAY"],
-  hospitalName: "Mukurweini Hospital Stores",
   sessionDurationDays: 30,
+  maxLoginAttempts: 5,
+  // Branding
+  hospitalName: "Mukurweini Hospital Stores",
+  facilityCode: "",
+  countyName: "",
+  subCountyName: "",
+  // Stock & Alerts
+  lowStockDefaultThreshold: 10,
+  enableLowStockEmailAlert: false,
+  alertEmailAddress: "",
+  // Issue Rules
+  issueDays: ["TUESDAY","FRIDAY"],
   requireFolioPerItem: true,
+  requireS11PerVoucher: true,
+  allowIssueOnNonScheduledDays: true,
+  maxIssueQuantityPerItem: 0,
+  // Purchases
+  defaultCurrency: "KES",
+  requireInvoiceNumber: true,
+  requireSupplierName: true,
+  // Reports & Exports
   reportChargeItem: "2211002",
   responsibleOfficer: "",
+  storeOfficerTitle: "Store Officer",
+  reportingOfficerTitle: "Reporting Officer",
+  financialYear: "2025/2026",
   allowDataExports: true,
-  maxLoginAttempts: 5,
+  exportIncludeZeroStock: false,
 };
 function getSettings(){
   const stored=db.get("settings").value()||{};
@@ -603,7 +624,17 @@ app.patch("/api/settings",requirePermission("manageUsers"),(req,res)=>{
 });
 app.get("/api/settings/public",(req,res)=>{
   const s=getSettings();
-  res.json({hospitalName:s.hospitalName,inactivityTimeoutMinutes:s.inactivityTimeoutMinutes,warningBeforeSeconds:s.warningBeforeSeconds});
+  res.json({
+    hospitalName:s.hospitalName,
+    facilityCode:s.facilityCode,
+    countyName:s.countyName,
+    subCountyName:s.subCountyName,
+    inactivityTimeoutMinutes:s.inactivityTimeoutMinutes,
+    warningBeforeSeconds:s.warningBeforeSeconds,
+    defaultCurrency:s.defaultCurrency||"KES",
+    financialYear:s.financialYear,
+    issueDays:s.issueDays,
+  });
 });
 
 app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{
