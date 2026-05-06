@@ -685,97 +685,58 @@ function expandMonths(start,end){
 }
 function buildReport(startMonth,endMonth,itemId){
   const months=expandMonths(startMonth,endMonth);
-  if(!months.length) return {startMonth,endMonth,months:[]};
+  if(!months.length) return {startMonth,endMonth,commodities:[]};
   const overallStart=monthRange(months[0]).start;
   let items=db.get("items").orderBy("description","asc").value();
   if(itemId) items=items.filter(i=>i.id===itemId);
   const allP=db.get("purchases").value(),allI=db.get("issues").value();
-  const running=new Map();
-  const lastPrice=new Map();
-  for(const item of items) running.set(item.id, Number(item.quantity)||0);
+  const running=new Map(),lastPrice=new Map();
+  for(const item of items) running.set(item.id,Number(item.quantity)||0);
   for(const p of allP.filter(p=>p.purchasedAt<overallStart).sort((a,b)=>a.purchasedAt.localeCompare(b.purchasedAt)||a.id-b.id)){
     if(itemId&&p.itemId!==itemId) continue;
     running.set(p.itemId,(running.get(p.itemId)||0)+p.quantity);
-    lastPrice.set(p.itemId, Number(p.unitPrice)||0);
+    lastPrice.set(p.itemId,Number(p.unitPrice)||0);
   }
   for(const i of allI){
     if(i.issuedAt>=overallStart) continue;
     if(itemId&&i.itemId!==itemId) continue;
     running.set(i.itemId,(running.get(i.itemId)||0)-i.quantity);
   }
-
-  const monthsResult=[];
+  const CHARGE="2211002";
+  const commodityMap=new Map();
+  for(const item of items) commodityMap.set(item.id,{itemId:item.id,itemDescription:item.description,unit:item.unit,rows:[],hasActivity:false});
   for(const month of months){
     const {start,end}=monthRange(month);
-    const commodities=[];
+    const [y,m]=month.split("-").map(Number);
+    const lastDayDate=new Date(Date.UTC(y,m,0));
+    const lastDay=lastDayDate.getUTCFullYear()+"-"+String(lastDayDate.getUTCMonth()+1).padStart(2,"0")+"-"+String(lastDayDate.getUTCDate()).padStart(2,"0");
     for(const item of items){
-      const openingQty = running.get(item.id)??0;
-      let balance = openingQty;
-      const openingUnitPrice = Number(lastPrice.get(item.id)||0);
-      const txnRows = [{
-        rowType:"opening",
-        date:start,
-        units:openingQty,
-        unitPrice:openingUnitPrice,
-        openingTotalCost:openingQty*openingUnitPrice,
-        additionsUnits:0,
-        additionsUnitCost:openingUnitPrice,
-        itemsIssued:0,
-        balance,
-        chargeItem:"",
-        responsibleOfficer:"",
-        remarks:"Opening balance"
-      }];
-      const txns = [
-        ...allP.filter(p=>p.itemId===item.id&&inRange(p.purchasedAt,start,end)).map(p=>({type:"purchase",date:p.purchasedAt,id:p.id,payload:p})),
-        ...allI.filter(i=>i.itemId===item.id&&inRange(i.issuedAt,start,end)).map(i=>({type:"issue",date:i.issuedAt,id:i.id,payload:i}))
-      ].sort((a,b)=>a.date.localeCompare(b.date)||a.id-b.id);
-      for(const txn of txns){
-        if(txn.type==="purchase"){
-          const p=txn.payload;
-          const price=Number(p.unitPrice)||0;
-          balance += p.quantity;
-          lastPrice.set(item.id, price);
-          txnRows.push({
-            rowType:"transaction",
-            date:p.purchasedAt,
-            units:openingQty,
-            unitPrice:price,
-            openingTotalCost:openingQty*price,
-            additionsUnits:p.quantity,
-            additionsUnitCost:price,
-            itemsIssued:0,
-            balance,
-            chargeItem:p.invoiceNo||"",
-            responsibleOfficer:"",
-            remarks:p.note||`Purchase from ${p.supplier}`
-          });
-        } else {
-          const i=txn.payload;
-          balance -= i.quantity;
-          txnRows.push({
-            rowType:"transaction",
-            date:i.issuedAt,
-            units:openingQty,
-            unitPrice:Number(lastPrice.get(item.id)||0),
-            openingTotalCost:openingQty*Number(lastPrice.get(item.id)||0),
-            additionsUnits:0,
-            additionsUnitCost:Number(lastPrice.get(item.id)||0),
-            itemsIssued:i.quantity,
-            balance,
-            chargeItem:i.folioNo||i.s11No||"",
-            responsibleOfficer:"",
-            remarks:i.note||"Issued"
-          });
-        }
+      const openingQty=running.get(item.id)??0;
+      const openingPrice=Number(lastPrice.get(item.id)||0);
+      const monthPurchases=allP.filter(p=>p.itemId===item.id&&inRange(p.purchasedAt,start,end)).sort((a,b)=>a.purchasedAt.localeCompare(b.purchasedAt)||a.id-b.id);
+      const monthIssues=allI.filter(i=>i.itemId===item.id&&inRange(i.issuedAt,start,end));
+      const totalIssued=monthIssues.reduce((s,i)=>s+Number(i.quantity||0),0);
+      const totalAdditions=monthPurchases.reduce((s,p)=>s+Number(p.quantity||0),0);
+      const closingBalance=openingQty+totalAdditions-totalIssued;
+      const commodity=commodityMap.get(item.id);
+      if(openingQty===0&&totalAdditions===0&&totalIssued===0){running.set(item.id,closingBalance);continue;}
+      commodity.hasActivity=true;
+      commodity.rows.push({rowType:"opening",month,date:start,units:openingQty,unitPrice:openingPrice||null,openingTotalCost:openingPrice?openingQty*openingPrice:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:null,balance:openingQty,chargeItem:CHARGE,responsibleOfficer:null,remarks:"Opening balance"});
+      let runBal=openingQty;
+      for(const p of monthPurchases){
+        const price=Number(p.unitPrice||0);
+        runBal+=Number(p.quantity||0);
+        lastPrice.set(item.id,price||lastPrice.get(item.id)||0);
+        commodity.rows.push({rowType:"additions",month,date:p.purchasedAt,units:null,unitPrice:price||null,openingTotalCost:null,additionsUnits:Number(p.quantity||0),additionsUnitCost:price?Number(p.quantity||0)*price:null,itemsIssued:null,balance:runBal,chargeItem:CHARGE,responsibleOfficer:null,remarks:p.note||(p.supplier?"From "+p.supplier:"Additions")});
       }
-      running.set(item.id,balance);
-      if(txnRows.length>1 || openingQty!==0) commodities.push({itemId:item.id,itemDescription:item.description,unit:item.unit,rows:txnRows});
+      commodity.rows.push({rowType:"closing",month,date:lastDay,units:null,unitPrice:null,openingTotalCost:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:totalIssued||null,balance:closingBalance,chargeItem:CHARGE,responsibleOfficer:null,remarks:"Closing balance"});
+      running.set(item.id,closingBalance);
     }
-    monthsResult.push({month,commodities});
   }
-  return {startMonth,endMonth,months:monthsResult};
+  const commodities=Array.from(commodityMap.values()).filter(c=>c.hasActivity);
+  return {startMonth,endMonth,commodities};
 }
+
 app.get("/api/reports/monthly",requirePermission("viewReports"),(req,res)=>{
   const startMonth=req.query.startMonth||currentMonth(),endMonth=req.query.endMonth||currentMonth();
   const itemId=req.query.itemId?Number(req.query.itemId):undefined;
@@ -820,16 +781,21 @@ app.get("/api/export/monthly-report.csv",requirePermission("exportData"),(req,re
   const itemId=req.query.itemId?Number(req.query.itemId):undefined;
   const data=buildReport(startMonth,endMonth,itemId);
   const lines=[];
-  for(const m of data.months){
-    lines.push([`INVENTORY ${m.month}`].map(csvEscape).join(","));
-    for(const c of m.commodities){
-      lines.push([`${c.itemDescription}`].map(csvEscape).join(","));
-      lines.push(["Date","Units","Unit Price","Total Cost (Opening)","Additions (Units)","Unit Cost of Additions","Items Issued","Balance","Charge Item","Responsible Officer","Remarks"].map(csvEscape).join(","));
-      for(const r of c.rows){
-        lines.push([r.date,r.units,r.unitPrice,r.openingTotalCost,r.additionsUnits,r.additionsUnitCost,r.itemsIssued,r.balance,r.chargeItem,r.responsibleOfficer,r.remarks].map(csvEscape).join(","));
+  const commodities=data.commodities||[];
+  for(const c of commodities){
+    lines.push([csvEscape("COMMODITY: "+c.itemDescription+" ("+c.unit+")")]);
+    lines.push(["Date","Opening Units","Unit Price","Opening Cost","Additions","Cost of Additions","Items Issued","Balance","Charge Item","Responsible Officer","Remarks"].map(csvEscape).join(","));
+    let lastMon="";
+    for(const r of c.rows){
+      if(r.month&&r.month!==lastMon){
+        const [y,m]=r.month.split("-").map(Number);
+        const mn=new Date(Date.UTC(y,m-1,1)).toLocaleString("en-US",{month:"long",year:"numeric",timeZone:"UTC"});
+        lines.push([csvEscape("--- "+mn+" ---")]);
+        lastMon=r.month;
       }
-      lines.push("");
+      lines.push([r.date,r.units??"",r.unitPrice??"",r.openingTotalCost??"",r.additionsUnits??"",r.additionsUnitCost??"",r.itemsIssued??"",r.balance,r.chargeItem||"2211002",r.responsibleOfficer||"",r.remarks||""].map(csvEscape).join(","));
     }
+    lines.push("");
   }
   res.setHeader("Content-Type","text/csv");
   res.setHeader("Content-Disposition",`attachment; filename="monthly_report_${startMonth}_to_${endMonth}.csv"`);
@@ -849,6 +815,10 @@ app.get("/api/export/monthly-report.xlsx", requirePermission("exportData"), asyn
     wb.created = new Date();
     const COLORS = ["4F46E5","EC4899","F59E0B","10B981","3B82F6","EF4444","8B5CF6","14B8A6","F97316","06B6D4","84CC16","E11D48"];
 
+    if(commodities.length===0){
+      const ws=wb.addWorksheet("No Data");
+      ws.addRow(["No activity found for the selected period"]);
+    }
     commodities.forEach((c, ci) => {
       const color = COLORS[ci % COLORS.length];
       const sheetName = c.itemDescription.replace(/[\\/:*?\[\]]/g, "").slice(0, 28);
