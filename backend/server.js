@@ -836,6 +836,251 @@ app.get("/api/export/monthly-report.csv",requirePermission("exportData"),(req,re
   res.send(lines.join("\n"));
 });
 
+// ── Excel Exports ────────────────────────────────────────────────────────────
+app.get("/api/export/monthly-report.xlsx", requirePermission("exportData"), async (req, res) => {
+  try {
+    const ExcelJS = require("exceljs");
+    const startMonth = req.query.startMonth || currentMonth();
+    const endMonth = req.query.endMonth || currentMonth();
+    const data = buildReport(startMonth, endMonth);
+    const commodities = data.commodities || [];
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Mukurweini Hospital Stores";
+    wb.created = new Date();
+    const COLORS = ["4F46E5","EC4899","F59E0B","10B981","3B82F6","EF4444","8B5CF6","14B8A6","F97316","06B6D4","84CC16","E11D48"];
+
+    commodities.forEach((c, ci) => {
+      const color = COLORS[ci % COLORS.length];
+      const sheetName = c.itemDescription.replace(/[\\/:*?\[\]]/g, "").slice(0, 28);
+      const ws = wb.addWorksheet(sheetName);
+
+      const titleRow = ws.addRow([c.itemDescription]);
+      titleRow.getCell(1).font = { bold: true, size: 13, color: { argb: "FF" + color } };
+      titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
+      ws.addRow(["Unit: " + c.unit]).getCell(1).font = { italic: true, color: { argb: "FF6B7280" }, size: 10 };
+      ws.addRow([]);
+
+      const headers = ["Date","Opening Units","Unit Price","Opening Cost","Additions","Cost of Additions","Items Issued","Balance","Charge Item","Responsible Officer","Remarks"];
+      const headerRow = ws.addRow(headers);
+      headerRow.eachCell(cell => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + color } };
+        cell.alignment = { horizontal: "center" };
+      });
+
+      let lastMonth = "";
+      c.rows.forEach(r => {
+        if (r.month && r.month !== lastMonth) {
+          if (lastMonth) { const s = ws.addRow([]); s.height = 4; }
+          lastMonth = r.month;
+          const [y, m] = r.month.split("-").map(Number);
+          const mn = new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+          const mRow = ws.addRow(["\u2500\u2500 " + mn + " \u2500\u2500"]);
+          mRow.getCell(1).font = { bold: true, italic: true, color: { argb: "FF" + color }, size: 10 };
+        }
+        const isO = r.rowType === "opening", isA = r.rowType === "additions", isC = r.rowType === "closing";
+        const row = ws.addRow([
+          r.date,
+          r.units != null ? r.units : "",
+          r.unitPrice != null ? r.unitPrice : "",
+          r.openingTotalCost != null ? r.openingTotalCost : "",
+          r.additionsUnits != null ? r.additionsUnits : "",
+          r.additionsUnitCost != null ? r.additionsUnitCost : "",
+          r.itemsIssued != null ? r.itemsIssued : "",
+          r.balance,
+          r.chargeItem || "2211002",
+          r.responsibleOfficer || "",
+          r.remarks || ""
+        ]);
+        if (isO) row.eachCell(cell => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E7FF" } }; });
+        else if (isA) row.eachCell(cell => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } }; });
+        else if (isC) { row.eachCell(cell => { cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } }; }); }
+        const bal = Number(r.balance);
+        if (bal <= 0) row.getCell(8).font = { bold: true, color: { argb: "FFDC2626" } };
+        else if (bal <= 10) row.getCell(8).font = { bold: true, color: { argb: "FFD97706" } };
+        else if (isC) row.getCell(8).font = { bold: true };
+      });
+
+      ws.columns = [{width:14},{width:14},{width:12},{width:16},{width:12},{width:18},{width:13},{width:10},{width:13},{width:20},{width:22}];
+    });
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="monthly_report_' + startMonth + '_to_' + endMonth + '.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Monthly Excel error:", err);
+    res.status(500).json({ error: "Excel export failed: " + err.message });
+  }
+});
+
+app.get("/api/export/all-departments.xlsx", requirePermission("exportData"), async (req, res) => {
+  try {
+    const ExcelJS = require("exceljs");
+    const startMonth = req.query.startMonth || currentMonth();
+    const endMonth = req.query.endMonth || currentMonth();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Mukurweini Hospital Stores";
+    wb.created = new Date();
+    const DEPT_COLORS = ["4F46E5","EC4899","F59E0B","10B981","3B82F6","EF4444","8B5CF6","14B8A6","F97316","06B6D4","84CC16","E11D48","7C3AED","0EA5E9","D97706"];
+    const months = expandMonths(startMonth, endMonth);
+    const departments = db.get("departments").value();
+    const allItems = db.get("items").orderBy("description", "asc").value();
+    const DAY_NAMES = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+    const DAY_COLORS = {TUE:"FF3B82F6",FRI:"FF8B5CF6",MON:"FF10B981",WED:"FFF59E0B",THU:"FFF97316",SAT:"FFEC4899",SUN:"FFEF4444"};
+    const DAY_BG = {TUE:"FFDBEAFE",FRI:"FFEDE9FE",MON:"FFD1FAE5",WED:"FFFEF3C7",THU:"FFFFEDD5",SAT:"FFFCE7F3",SUN:"FFFEE2E2"};
+
+    departments.forEach((dept, di) => {
+      const color = DEPT_COLORS[di % DEPT_COLORS.length];
+      const sheetName = dept.name.replace(/[\\/:*?\[\]]/g, "").slice(0, 28);
+      const ws = wb.addWorksheet(sheetName);
+
+      const titleRow = ws.addRow([dept.name]);
+      titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF" + color } };
+      titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3FF" } };
+      ws.addRow(["Period: " + startMonth + " to " + endMonth]).getCell(1).font = { italic: true, color: { argb: "FF6B7280" } };
+      ws.addRow([]);
+
+      for (const month of months) {
+        const { start, end } = monthRange(month);
+        const [y, m] = month.split("-").map(Number);
+        const monthLabel = new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+        const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+
+        // Get all issues for this dept this month
+        const deptIssues = db.get("issues").filter(i => i.departmentId === dept.id && inRange(i.issuedAt, start, end)).value();
+        const issuedDatesSet = new Set(deptIssues.map(i => i.issuedAt));
+
+        // All dates that had issues OR are Tue/Fri
+        const allDates = [];
+        for (let d = 1; d <= dim; d++) {
+          const dt = new Date(Date.UTC(y, m - 1, d));
+          const dayNum = dt.getUTCDay();
+          const ds = y + "-" + String(m).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+          const isTueFri = dayNum === 2 || dayNum === 5;
+          if (isTueFri || issuedDatesSet.has(ds)) {
+            allDates.push({ ds, label: d + " " + dt.toLocaleString("en-US",{month:"short",timeZone:"UTC"}), weekday: DAY_NAMES[dayNum], isTueFri });
+          }
+        }
+
+        // Month header
+        const mLabelRow = ws.addRow([monthLabel]);
+        mLabelRow.getCell(1).font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+        mLabelRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + color } };
+        if (allDates.length > 0) ws.mergeCells(mLabelRow.number, 1, mLabelRow.number, 6 + allDates.length);
+
+        // Column headers
+        const headerCells = ["Item","Unit","Opening","KEMSA","MEDS", ...allDates.map(d => d.weekday + "\n" + d.label), "Total Issued","Balance"];
+        const headerRow = ws.addRow(headerCells);
+        headerRow.height = 36;
+        headerRow.eachCell((cell, ci) => {
+          cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 9 };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + color } };
+          cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        });
+        headerRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+
+        // Weekday sub-header
+        const wdRow = ws.addRow(["","","","","",...allDates.map(d=>d.weekday),"",""]);
+        wdRow.eachCell((cell, ci) => {
+          if (ci <= 5 || ci > 5 + allDates.length) return;
+          const wd = allDates[ci - 6] && allDates[ci - 6].weekday;
+          if (!wd) return;
+          cell.font = { bold: true, size: 8, color: { argb: DAY_COLORS[wd] || "FF374151" } };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DAY_BG[wd] || "FFF3F4F6" } };
+          cell.alignment = { horizontal: "center" };
+        });
+
+        // Build lookups
+        const receipts = db.get("receipts").filter(r => r.departmentId === dept.id && inRange(r.receivedAt, start, end)).value();
+        const invRows = db.get("inventory").filter({ departmentId: dept.id, month }).value();
+        const invByItem = new Map(invRows.map(r => [r.itemId, r]));
+        const recvKemsa = new Map(), recvMeds = new Map();
+        for (const r of receipts) {
+          if (r.source === "KEMSA") recvKemsa.set(r.itemId, (recvKemsa.get(r.itemId)||0) + r.quantity);
+          else if (r.source === "MEDS") recvMeds.set(r.itemId, (recvMeds.get(r.itemId)||0) + r.quantity);
+        }
+        const issueLookup = new Map();
+        for (const iss of deptIssues) {
+          if (!issueLookup.has(iss.itemId)) issueLookup.set(iss.itemId, new Map());
+          const dm = issueLookup.get(iss.itemId);
+          dm.set(iss.issuedAt, (dm.get(iss.issuedAt)||0) + iss.quantity);
+        }
+
+        let hasData = false;
+        allItems.forEach((item, ii) => {
+          const inv = invByItem.get(item.id);
+          const opening = inv ? inv.physicalCount : 0;
+          const kemsa = recvKemsa.get(item.id) || 0;
+          const meds = recvMeds.get(item.id) || 0;
+          const dm = issueLookup.get(item.id);
+          const totalIssued = dm ? Array.from(dm.values()).reduce((a,b)=>a+b,0) : 0;
+          const balance = opening + kemsa + meds - totalIssued;
+          if (opening === 0 && kemsa === 0 && meds === 0 && totalIssued === 0) return;
+          hasData = true;
+          const issueCols = allDates.map(d => dm && dm.get(d.ds) ? dm.get(d.ds) : "");
+          const rowData = [item.description, item.unit, opening||"", kemsa||"", meds||"", ...issueCols, totalIssued||"", balance];
+          const row = ws.addRow(rowData);
+          row.eachCell((cell, ci) => {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ii%2===0?"FFFFFFFF":"FFF9FAFB" } };
+            cell.alignment = { horizontal: ci <= 2 ? "left" : "center", vertical: "middle" };
+          });
+          if (kemsa > 0) row.getCell(4).font = { bold: true, color: { argb: "FF059669" } };
+          if (meds > 0) row.getCell(5).font = { bold: true, color: { argb: "FF0891B2" } };
+          allDates.forEach((d, idx) => {
+            const cell = row.getCell(6 + idx);
+            if (cell.value) {
+              const fg = DAY_COLORS[d.weekday] || "FF374151";
+              cell.font = { bold: true, color: { argb: fg } };
+              if (!d.isTueFri) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+            }
+          });
+          const balCell = row.getCell(7 + allDates.length);
+          const bv = Number(balance);
+          if (bv <= 0) balCell.font = { bold: true, color: { argb: "FFDC2626" } };
+          else if (bv <= 10) balCell.font = { bold: true, color: { argb: "FFD97706" } };
+          else balCell.font = { bold: true, color: { argb: "FF059669" } };
+        });
+
+        if (!hasData) ws.addRow(["No activity for this month"]).getCell(1).font = { italic: true, color: { argb: "FF9CA3AF" } };
+        ws.addRow([]);
+      }
+
+      ws.getColumn(1).width = 34;
+      ws.getColumn(2).width = 8;
+      ws.getColumn(3).width = 10;
+      ws.getColumn(4).width = 10;
+      ws.getColumn(5).width = 10;
+      for (let i = 6; i <= 50; i++) ws.getColumn(i).width = 10;
+    });
+
+    // Summary sheet
+    const sumWs = wb.addWorksheet("Summary");
+    sumWs.addRow(["All Departments Summary"]).getCell(1).font = { bold: true, size: 14, color: { argb: "FF4F46E5" } };
+    sumWs.addRow(["Period: " + startMonth + " to " + endMonth]).getCell(1).font = { italic: true };
+    sumWs.addRow([]);
+    const sumH = sumWs.addRow(["Department","Total Qty Issued","Unique Items","KEMSA Received","MEDS Received"]);
+    sumH.eachCell(cell => { cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } }; });
+    const { start: aS } = monthRange(months[0]), { end: aE } = monthRange(months[months.length - 1]);
+    departments.forEach((dept, di) => {
+      const di2 = db.get("issues").filter(i => i.departmentId===dept.id && i.issuedAt>=aS && i.issuedAt<aE).value();
+      const dr = db.get("receipts").filter(r => r.departmentId===dept.id && r.receivedAt>=aS && r.receivedAt<aE).value();
+      const row = sumWs.addRow([dept.name, di2.reduce((s,i)=>s+i.quantity,0), new Set(di2.map(i=>i.itemId)).size, dr.filter(r=>r.source==="KEMSA").reduce((s,r)=>s+r.quantity,0)||"-", dr.filter(r=>r.source==="MEDS").reduce((s,r)=>s+r.quantity,0)||"-"]);
+      row.getCell(1).font = { color: { argb: "FF" + DEPT_COLORS[di%DEPT_COLORS.length] }, bold: true };
+    });
+    sumWs.columns = [{width:30},{width:18},{width:15},{width:18},{width:18}];
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="all_departments_' + startMonth + '_to_' + endMonth + '.xlsx"');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("All-depts Excel error:", err);
+    res.status(500).json({ error: "Export failed: " + err.message });
+  }
+});
+
+
 // Serve frontend build in production deployments (single-origin app)
 const frontendDistPath = path.join(__dirname, "..", "frontend", "dist");
 app.use(express.static(frontendDistPath));
