@@ -19,6 +19,7 @@ interface AppSettings {
   sessionDurationDays: number;
   requireFolioPerItem: boolean;
   reportChargeItem: string;
+  responsibleOfficer: string;
   allowDataExports: boolean;
   maxLoginAttempts: number;
 }
@@ -32,6 +33,7 @@ const DEFAULTS: AppSettings = {
   sessionDurationDays: 30,
   requireFolioPerItem: true,
   reportChargeItem: "2211002",
+  responsibleOfficer: "",
   allowDataExports: true,
   maxLoginAttempts: 5,
 };
@@ -264,15 +266,26 @@ export default function SettingsPage() {
             <CardDescription>Configure report defaults and export permissions.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Monthly Report Charge Item Code</Label>
-              <Input
-                value={settings.reportChargeItem}
-                onChange={e => update("reportChargeItem", e.target.value)}
-                placeholder="2211002"
-                className="font-mono max-w-xs"
-              />
-              <p className="text-xs text-muted-foreground">This code appears in the "Charge Item" column of every monthly report row.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Monthly Report Charge Item Code</Label>
+                <Input
+                  value={settings.reportChargeItem}
+                  onChange={e => update("reportChargeItem", e.target.value)}
+                  placeholder="2211002"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">Appears in the "Charge Item" column of every monthly report row.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Responsible Officer Name</Label>
+                <Input
+                  value={settings.responsibleOfficer}
+                  onChange={e => update("responsibleOfficer", e.target.value)}
+                  placeholder="e.g. John Kamau"
+                />
+                <p className="text-xs text-muted-foreground">Name shown in the "Responsible Officer" column on monthly reports and Excel exports.</p>
+              </div>
             </div>
             <div className="flex items-center justify-between border rounded-lg p-3">
               <div>

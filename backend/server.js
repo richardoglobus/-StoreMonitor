@@ -580,6 +580,7 @@ const DEFAULT_SETTINGS = {
   sessionDurationDays: 30,
   requireFolioPerItem: true,
   reportChargeItem: "2211002",
+  responsibleOfficer: "",
   allowDataExports: true,
   maxLoginAttempts: 5,
 };
@@ -702,7 +703,9 @@ function buildReport(startMonth,endMonth,itemId){
     if(itemId&&i.itemId!==itemId) continue;
     running.set(i.itemId,(running.get(i.itemId)||0)-i.quantity);
   }
-  const CHARGE="2211002";
+  const settings=getSettings();
+  const CHARGE=settings.reportChargeItem||"2211002";
+  const OFFICER=settings.responsibleOfficer||"";
   const commodityMap=new Map();
   for(const item of items) commodityMap.set(item.id,{itemId:item.id,itemDescription:item.description,unit:item.unit,rows:[],hasActivity:false});
   for(const month of months){
@@ -721,15 +724,15 @@ function buildReport(startMonth,endMonth,itemId){
       const commodity=commodityMap.get(item.id);
       if(openingQty===0&&totalAdditions===0&&totalIssued===0){running.set(item.id,closingBalance);continue;}
       commodity.hasActivity=true;
-      commodity.rows.push({rowType:"opening",month,date:start,units:openingQty,unitPrice:openingPrice||null,openingTotalCost:openingPrice?openingQty*openingPrice:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:null,balance:openingQty,chargeItem:CHARGE,responsibleOfficer:null,remarks:"Opening balance"});
+      commodity.rows.push({rowType:"opening",month,date:start,units:openingQty,unitPrice:openingPrice||null,openingTotalCost:openingPrice?openingQty*openingPrice:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:null,balance:openingQty,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:"Opening balance"});
       let runBal=openingQty;
       for(const p of monthPurchases){
         const price=Number(p.unitPrice||0);
         runBal+=Number(p.quantity||0);
         lastPrice.set(item.id,price||lastPrice.get(item.id)||0);
-        commodity.rows.push({rowType:"additions",month,date:p.purchasedAt,units:null,unitPrice:price||null,openingTotalCost:null,additionsUnits:Number(p.quantity||0),additionsUnitCost:price?Number(p.quantity||0)*price:null,itemsIssued:null,balance:runBal,chargeItem:CHARGE,responsibleOfficer:null,remarks:p.note||(p.supplier?"From "+p.supplier:"Additions")});
+        commodity.rows.push({rowType:"additions",month,date:p.purchasedAt,units:null,unitPrice:price||null,openingTotalCost:null,additionsUnits:Number(p.quantity||0),additionsUnitCost:price?Number(p.quantity||0)*price:null,itemsIssued:null,balance:runBal,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:p.note||(p.supplier?"From "+p.supplier:"Additions")});
       }
-      commodity.rows.push({rowType:"closing",month,date:lastDay,units:null,unitPrice:null,openingTotalCost:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:totalIssued||null,balance:closingBalance,chargeItem:CHARGE,responsibleOfficer:null,remarks:"Closing balance"});
+      commodity.rows.push({rowType:"closing",month,date:lastDay,units:null,unitPrice:null,openingTotalCost:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:totalIssued||null,balance:closingBalance,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:"Closing balance"});
       running.set(item.id,closingBalance);
     }
   }
@@ -849,15 +852,29 @@ app.get("/api/export/monthly-report.xlsx", requirePermission("exportData"), asyn
           mRow.getCell(1).font = { bold: true, italic: true, color: { argb: "FF" + color }, size: 10 };
         }
         const isO = r.rowType === "opening", isA = r.rowType === "additions", isC = r.rowType === "closing";
+        const rowNum = ws.rowCount + 1;
+        // Use formulas for calculated columns
+        const openingCostVal = isO && r.units != null && r.unitPrice != null
+          ? { formula: "B"+rowNum+"*C"+rowNum, result: r.openingTotalCost || 0 }
+          : "";
+        const costOfAddVal = isA && r.additionsUnits != null && r.unitPrice != null
+          ? { formula: "E"+rowNum+"*C"+rowNum, result: r.additionsUnitCost || 0 }
+          : "";
+        // Balance formula: opening = units, additions = prev_H + E, closing = prev_H - G
+        let balanceVal;
+        if(isO){ balanceVal = r.units != null ? r.units : r.balance; }
+        else if(isA){ balanceVal = { formula: "H"+(rowNum-1)+"+E"+rowNum, result: r.balance }; }
+        else if(isC){ balanceVal = { formula: "H"+(rowNum-1)+"-G"+rowNum, result: r.balance }; }
+        else { balanceVal = r.balance; }
         const row = ws.addRow([
           r.date,
           r.units != null ? r.units : "",
           r.unitPrice != null ? r.unitPrice : "",
-          r.openingTotalCost != null ? r.openingTotalCost : "",
+          openingCostVal,
           r.additionsUnits != null ? r.additionsUnits : "",
-          r.additionsUnitCost != null ? r.additionsUnitCost : "",
+          costOfAddVal,
           r.itemsIssued != null ? r.itemsIssued : "",
-          r.balance,
+          balanceVal,
           r.chargeItem || "2211002",
           r.responsibleOfficer || "",
           r.remarks || ""
