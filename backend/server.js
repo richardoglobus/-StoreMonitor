@@ -904,10 +904,11 @@ app.get("/api/export/monthly-report.xlsx", requirePermission("exportData"), asyn
       ws.columns = [{width:14},{width:14},{width:12},{width:16},{width:12},{width:18},{width:13},{width:10},{width:13},{width:20},{width:22}];
     });
 
+    const buffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="monthly_report_' + startMonth + '_to_' + endMonth + '.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
   } catch (err) {
     console.error("Monthly Excel error:", err);
     res.status(500).json({ error: "Excel export failed: " + err.message });
@@ -1070,10 +1071,11 @@ app.get("/api/export/all-departments.xlsx", requirePermission("exportData"), asy
     });
     sumWs.columns = [{width:30},{width:18},{width:15},{width:18},{width:18}];
 
+    const buffer = await wb.xlsx.writeBuffer();
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="all_departments_' + startMonth + '_to_' + endMonth + '.xlsx"');
-    await wb.xlsx.write(res);
-    res.end();
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
   } catch (err) {
     console.error("All-depts Excel error:", err);
     res.status(500).json({ error: "Export failed: " + err.message });
