@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Building2, PackageSearch, FileText,
   Download, Menu, ShoppingCart, BarChart3, Users,
-  LogOut, User as UserIcon, Sun, Moon,
+  LogOut, User as UserIcon, Sun, Moon, Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/reports", label: "Monthly Report", icon: BarChart3, permission: "viewReports" },
   { href: "/exports", label: "Exports", icon: Download, permission: "exportData" },
   { href: "/admin/users", label: "Users", icon: Users, permission: "manageUsers" },
+  { href: "/admin/settings", label: "Settings", icon: Settings2, permission: "manageUsers" },
 ];
 
 function ThemeToggle() {
