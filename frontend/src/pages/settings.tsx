@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package } from "lucide-react";
+import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
@@ -151,6 +151,43 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleBackup = async () => {
+    try {
+      const res = await fetch("/api/admin/backup", { credentials: "include" });
+      if (!res.ok) { toast.error("Backup failed"); return; }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `storemonitor_backup_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      toast.success("Backup downloaded successfully");
+    } catch { toast.error("Backup failed"); }
+  };
+
+  const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm("WARNING: Restoring a backup will REPLACE all current data. Are you absolutely sure?")) {
+      e.target.value = ""; return;
+    }
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await fetch("/api/admin/restore", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Restore failed"); return; }
+      toast.success("Backup restored! Refreshing in 2 seconds…");
+      setTimeout(() => window.location.reload(), 2000);
+    } catch { toast.error("Invalid backup file"); }
+    e.target.value = "";
   };
 
   if (loading) return (
@@ -331,7 +368,31 @@ export default function SettingsPage() {
           <ToggleRow label="Include Zero-Stock Items in Exports" description="If on, items with zero stock appear in inventory exports. If off, they are hidden." checked={settings.exportIncludeZeroStock} onChange={(v: boolean) => update("exportIncludeZeroStock", v)} />
         </SectionCard>
 
-        {/* 7. Catalog */}
+        {/* 7. Backup & Restore */}
+        <SectionCard icon={Database} title="Backup & Restore" description="Download a backup of all data or restore from a previous backup.">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Download Backup</Label>
+              <Button variant="outline" className="w-full gap-2" onClick={handleBackup}>
+                <Database className="h-4 w-4" />Download Backup JSON
+              </Button>
+              <p className="text-xs text-muted-foreground">Downloads all data (items, purchases, issues, users) as a JSON file. Store it safely.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Restore from Backup</Label>
+              <label className="w-full">
+                <div className="flex items-center justify-center gap-2 border-2 border-dashed border-destructive/40 rounded-md py-2 px-4 cursor-pointer hover:bg-destructive/5 transition-colors">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">Choose backup file…</span>
+                </div>
+                <input type="file" accept=".json" className="sr-only" onChange={handleRestore} />
+              </label>
+              <p className="text-xs text-destructive font-medium">⚠ This will replace ALL current data. Cannot be undone.</p>
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* 8. Catalog */}
         <SectionCard icon={Package} title="Catalog" description="Rules for the item catalog.">
           <div className="p-3 bg-muted/40 rounded-lg text-sm text-muted-foreground space-y-2">
             <p>Per-item settings (low stock threshold, unit) are managed directly on each item in the <strong>Catalog</strong> section.</p>

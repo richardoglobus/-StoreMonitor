@@ -15,6 +15,7 @@ import Issues from "@/pages/issues";
 import Reports from "@/pages/reports";
 import UserManagement from "@/pages/user-management";
 import SettingsPage from "@/pages/settings";
+import StockValuationPage from "@/pages/stock-valuation";
 import Exports from "@/pages/exports";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
@@ -95,6 +96,7 @@ function AppWithAuth() {
         <Route path="/exports" component={Exports} />
         <Route path="/admin/users" component={UserManagement} />
         <Route path="/admin/settings" component={SettingsPage} />
+        <Route path="/stock-valuation" component={StockValuationPage} />
         <Route component={NotFound} />
       </Switch>
       <InactivityWarning secondsLeft={warningSeconds} />

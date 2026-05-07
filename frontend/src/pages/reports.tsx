@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, BarChart3, Loader2, FileSpreadsheet } from "lucide-react";
+import { Download, BarChart3, Loader2, FileSpreadsheet, Printer } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
@@ -39,6 +39,7 @@ export default function MonthlyReportPage() {
   const [queryDates, setQueryDates] = useState({ from: firstOfMonth(), to: todayStr() });
   const [loadingCsv, setLoadingCsv] = useState(false);
   const [loadingXlsx, setLoadingXlsx] = useState(false);
+  const handlePrint = () => window.print();
 
   const startMonth = queryDates.from.slice(0, 7);
   const endMonth = queryDates.to.slice(0, 7);
@@ -73,7 +74,9 @@ export default function MonthlyReportPage() {
   const xlsxUrl = `/api/export/monthly-report.xlsx?startMonth=${startMonth}&endMonth=${endMonth}`;
 
   return (
-    <Layout>
+    <>
+      <style>{`@media print { nav,aside,header,[data-no-print]{display:none!important;} main{padding:0!important;} }`}</style>
+      <Layout>
       <div className="flex flex-col gap-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Monthly Report</h1>
@@ -95,6 +98,9 @@ export default function MonthlyReportPage() {
               onClick={() => downloadCsv(downloadUrl, `monthly_report_${startMonth}_${endMonth}.csv`, setLoadingCsv)}>
               {loadingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {loadingCsv ? "Downloading…" : "Download CSV"}
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={handlePrint}>
+              <Printer className="h-4 w-4" />Print
             </Button>
             <Button className="gap-2 bg-green-600 hover:bg-green-700 text-white" disabled={loadingXlsx}
               onClick={() => downloadCsv(xlsxUrl, `monthly_report_${startMonth}_${endMonth}.xlsx`, setLoadingXlsx)}>
@@ -210,5 +216,6 @@ export default function MonthlyReportPage() {
         )}
       </div>
     </Layout>
+    </>
   );
 }

@@ -561,7 +561,8 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   const {supplier,itemId,quantity,unitPrice,purchasedAt,note,invoiceNo}=req.body;
   if(!supplier||!String(supplier).trim()) return res.status(400).json({error:"Supplier is required"});
   if(!invoiceNo||!String(invoiceNo).trim()) return res.status(400).json({error:"Invoice number is required"});
-  const row={id:nextId("purchases"),supplier,itemId,quantity,unitPrice:Number(unitPrice),invoiceNo:invoiceNo||null,purchasedAt,note:note||null};
+  const {batchNo,expiryDate}=req.body;
+  const row={id:nextId("purchases"),supplier,itemId,quantity,unitPrice:Number(unitPrice),invoiceNo:invoiceNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
   db.get("purchases").push(row).write();
   logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplier, itemId, quantity, invoiceNo: row.invoiceNo });
   res.status(201).json(row);
@@ -1097,6 +1098,220 @@ app.get("/api/export/all-departments.xlsx", requirePermission("exportData"), asy
   } catch (err) {
     console.error("All-depts Excel error:", err);
     res.status(500).json({ error: "Export failed: " + err.message });
+  }
+});
+
+
+app.get("/api/export/purchases.csv", requirePermission("exportData"), (req, res) => {
+  const start = req.query.from || (currentMonth() + "-01");
+  const end = req.query.to || new Date().toISOString().slice(0,10);
+  const rows = db.get("purchases").filter(p => p.purchasedAt >= start && p.purchasedAt <= end)
+    .orderBy("purchasedAt","asc").value();
+  const lines = [["Date","Supplier","Invoice No","Item","Unit","Qty","Unit Price","Total","Batch No","Expiry Date","Note"].map(csvEscape).join(",")];
+  for (const p of rows) {
+    const item = db.get("items").find({id:p.itemId}).value();
+    const total = Number(p.quantity) * Number(p.unitPrice);
+    lines.push([p.purchasedAt, p.supplier||"", p.invoiceNo||"", item?.description||"", item?.unit||"", p.quantity, p.unitPrice, total.toFixed(2), p.batchNo||"", p.expiryDate||"", p.note||""].map(csvEscape).join(","));
+  }
+  res.setHeader("Content-Type","text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="purchases_${start}_to_${end}.csv"`);
+  res.send(lines.join("\n"));
+});
+
+app.get("/api/export/purchases.xlsx", requirePermission("exportData"), async (req, res) => {
+  try {
+    const ExcelJS = require("exceljs");
+    const start = req.query.from || (currentMonth() + "-01");
+    const end = req.query.to || new Date().toISOString().slice(0,10);
+    const rows = db.get("purchases").filter(p => p.purchasedAt >= start && p.purchasedAt <= end)
+      .orderBy("purchasedAt","asc").value();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "Mukurweini Hospital Stores";
+    const ws = wb.addWorksheet("Purchases");
+    const s = getSettings();
+
+    // Title
+    ws.addRow([s.hospitalName || "Hospital Stores"]).getCell(1).font = {bold:true,size:14,color:{argb:"FF4F46E5"}};
+    ws.addRow([`Purchases: ${start} to ${end}`]).getCell(1).font = {italic:true,color:{argb:"FF6B7280"}};
+    ws.addRow([]);
+
+    const headers = ["Date","Supplier","Invoice No","Item","Unit","Qty","Unit Price (KES)","Total (KES)","Batch No","Expiry Date","Note"];
+    const hRow = ws.addRow(headers);
+    hRow.eachCell(cell => {
+      cell.font = {bold:true,color:{argb:"FFFFFFFF"}};
+      cell.fill = {type:"pattern",pattern:"solid",fgColor:{argb:"FF4F46E5"}};
+      cell.alignment = {horizontal:"center"};
+    });
+
+    let grandTotal = 0;
+    rows.forEach((p, i) => {
+      const item = db.get("items").find({id:p.itemId}).value();
+      const total = Number(p.quantity) * Number(p.unitPrice);
+      grandTotal += total;
+      const row = ws.addRow([
+        p.purchasedAt, p.supplier||"", p.invoiceNo||"",
+        item?.description||"", item?.unit||"",
+        p.quantity, Number(p.unitPrice), total,
+        p.batchNo||"", p.expiryDate||"", p.note||""
+      ]);
+      row.eachCell((cell,ci) => {
+        cell.fill = {type:"pattern",pattern:"solid",fgColor:{argb: i%2===0?"FFFFFFFF":"FFF5F3FF"}};
+        if(ci >= 7) cell.numFmt = "#,##0.00";
+        if(ci === 2) { // check expiry
+          if(p.expiryDate) {
+            const exp = new Date(p.expiryDate);
+            const now = new Date();
+            const daysLeft = Math.floor((exp.getTime()-now.getTime())/(1000*60*60*24));
+            if(daysLeft < 0) cell.fill = {type:"pattern",pattern:"solid",fgColor:{argb:"FFFEE2E2"}};
+            else if(daysLeft < 90) cell.fill = {type:"pattern",pattern:"solid",fgColor:{argb:"FFFEF3C7"}};
+          }
+        }
+      });
+      // expired expiry date — red
+      if(p.expiryDate) {
+        const exp = new Date(p.expiryDate);
+        const daysLeft = Math.floor((exp.getTime()-new Date().getTime())/(1000*60*60*24));
+        const expCell = row.getCell(10);
+        if(daysLeft < 0) expCell.font = {bold:true,color:{argb:"FFDC2626"}};
+        else if(daysLeft < 90) expCell.font = {bold:true,color:{argb:"FFD97706"}};
+      }
+    });
+
+    // Grand total row
+    const totalRow = ws.addRow(["","","","","","GRAND TOTAL","",grandTotal,"","",""]);
+    totalRow.getCell(6).font = {bold:true};
+    totalRow.getCell(8).font = {bold:true,color:{argb:"FF4F46E5"}};
+    totalRow.getCell(8).numFmt = "#,##0.00";
+
+    ws.columns = [{width:12},{width:20},{width:15},{width:35},{width:8},{width:8},{width:16},{width:16},{width:14},{width:14},{width:25}];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="purchases_${start}_to_${end}.xlsx"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
+  } catch(err) {
+    console.error("Purchases Excel error:", err);
+    res.status(500).json({error:"Export failed: "+err.message});
+  }
+});
+
+// ── Feature 8: Stock Valuation Report ────────────────────────────────────
+app.get("/api/reports/stock-valuation", requirePermission("viewReports"), (req, res) => {
+  const items = db.get("items").orderBy("description","asc").value();
+  const purchases = db.get("purchases").value();
+  const rows = [];
+  let grandTotal = 0;
+  for (const item of items) {
+    const currentStock = getCurrentStockForItem(item.id);
+    // Get latest unit price from purchases
+    const lastPurchase = purchases.filter(p=>p.itemId===item.id).sort((a,b)=>b.purchasedAt.localeCompare(a.purchasedAt))[0];
+    const unitPrice = lastPurchase ? Number(lastPurchase.unitPrice) : 0;
+    const value = currentStock > 0 ? currentStock * unitPrice : 0;
+    grandTotal += value;
+    const thr = item.lowStockThreshold != null ? Number(item.lowStockThreshold) : 10;
+    rows.push({
+      itemId: item.id,
+      description: item.description,
+      unit: item.unit,
+      currentStock,
+      unitPrice,
+      totalValue: value,
+      lastPurchaseDate: lastPurchase?.purchasedAt||null,
+      lastSupplier: lastPurchase?.supplier||null,
+      stockStatus: currentStock <= 0 ? "OUT" : currentStock <= thr ? "LOW" : "OK",
+      threshold: thr,
+    });
+  }
+  res.json({ rows, grandTotal, generatedAt: new Date().toISOString(), currency: getSettings().defaultCurrency||"KES" });
+});
+
+app.get("/api/export/stock-valuation.xlsx", requirePermission("exportData"), async (req, res) => {
+  try {
+    const ExcelJS = require("exceljs");
+    const data = await new Promise((resolve) => {
+      const items = db.get("items").orderBy("description","asc").value();
+      const purchases = db.get("purchases").value();
+      const s = getSettings();
+      const rows = [];
+      let grandTotal = 0;
+      for (const item of items) {
+        const currentStock = getCurrentStockForItem(item.id);
+        const lastPurchase = purchases.filter(p=>p.itemId===item.id).sort((a,b)=>b.purchasedAt.localeCompare(a.purchasedAt))[0];
+        const unitPrice = lastPurchase ? Number(lastPurchase.unitPrice) : 0;
+        const value = currentStock > 0 ? currentStock * unitPrice : 0;
+        grandTotal += value;
+        const thr = item.lowStockThreshold != null ? Number(item.lowStockThreshold) : 10;
+        rows.push({description:item.description,unit:item.unit,currentStock,unitPrice,totalValue:value,lastPurchaseDate:lastPurchase?.purchasedAt||"-",lastSupplier:lastPurchase?.supplier||"-",stockStatus:currentStock<=0?"OUT":currentStock<=thr?"LOW":"OK"});
+      }
+      resolve({rows,grandTotal,currency:s.defaultCurrency||"KES",hospitalName:s.hospitalName,officer:s.responsibleOfficer});
+    });
+    const {rows,grandTotal,currency,hospitalName,officer} = data;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Stock Valuation");
+    ws.addRow([hospitalName]).getCell(1).font={bold:true,size:14,color:{argb:"FF4F46E5"}};
+    ws.addRow(["Stock Valuation Report — " + new Date().toLocaleDateString("en-GB")]).getCell(1).font={italic:true};
+    if(officer) ws.addRow(["Responsible Officer: " + officer]).getCell(1).font={italic:true,color:{argb:"FF6B7280"}};
+    ws.addRow([]);
+    const hRow = ws.addRow(["#","Item Description","Unit","Stock Qty","Unit Price ("+currency+")","Total Value ("+currency+")","Last Purchase","Supplier","Status"]);
+    hRow.eachCell(cell=>{cell.font={bold:true,color:{argb:"FFFFFFFF"}};cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF4F46E5"}};cell.alignment={horizontal:"center"};});
+    rows.forEach((r,i)=>{
+      const row = ws.addRow([i+1,r.description,r.unit,r.currentStock,r.unitPrice,r.totalValue,r.lastPurchaseDate,r.lastSupplier,r.stockStatus]);
+      const bg = i%2===0?"FFFFFFFF":"FFF8FAFF";
+      row.eachCell((cell,ci)=>{
+        cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:bg}};
+        if(ci>=5&&ci<=6){cell.numFmt="#,##0.00";cell.alignment={horizontal:"right"};}
+        if(ci===4){cell.alignment={horizontal:"right"};}
+      });
+      // Status color
+      const stCell=row.getCell(9);
+      if(r.stockStatus==="OUT"){stCell.font={bold:true,color:{argb:"FFDC2626"}};stCell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFEE2E2"}};}
+      else if(r.stockStatus==="LOW"){stCell.font={bold:true,color:{argb:"FFD97706"}};stCell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFEF3C7"}};}
+      else{stCell.font={bold:true,color:{argb:"FF059669"}};stCell.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD1FAE5"}};}
+      // Value color
+      if(r.totalValue>0) row.getCell(6).font={bold:true,color:{argb:"FF4F46E5"}};
+    });
+    // Grand total
+    const gt=ws.addRow(["","","","GRAND TOTAL","",grandTotal,"","",""]);
+    gt.getCell(4).font={bold:true};
+    gt.getCell(6).font={bold:true,color:{argb:"FF4F46E5"},size:12};
+    gt.getCell(6).numFmt="#,##0.00";
+    ws.columns=[{width:5},{width:38},{width:8},{width:12},{width:18},{width:18},{width:14},{width:22},{width:10}];
+    const buffer = await wb.xlsx.writeBuffer();
+    res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition",'attachment; filename="stock_valuation_'+new Date().toISOString().slice(0,10)+'.xlsx"');
+    res.setHeader("Content-Length",buffer.length);
+    res.end(buffer);
+  } catch(err) {
+    console.error("Valuation Excel error:",err);
+    res.status(500).json({error:"Export failed: "+err.message});
+  }
+});
+
+// ── Feature 6: Backup & Restore ──────────────────────────────────────────
+app.get("/api/admin/backup", requirePermission("manageUsers"), (req, res) => {
+  const data = db.getState();
+  const json = JSON.stringify(data, null, 2);
+  const date = new Date().toISOString().slice(0,10);
+  res.setHeader("Content-Type","application/json");
+  res.setHeader("Content-Disposition", `attachment; filename="storemonitor_backup_${date}.json"`);
+  res.send(json);
+});
+
+app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
+  try {
+    const data = req.body;
+    if (!data || !data.users || !data.items) return res.status(400).json({error:"Invalid backup file — missing required collections"});
+    // Validate collections
+    const required = ["users","departments","items","purchases","issues","receipts","inventory"];
+    for (const key of required) {
+      if (!Array.isArray(data[key])) return res.status(400).json({error:`Invalid backup: '${key}' must be an array`});
+    }
+    db.setState(data).write();
+    logActivity(req,"RESTORE_BACKUP","SYSTEM",null,{restoredAt:new Date().toISOString()});
+    res.json({success:true,message:"Backup restored successfully. Please refresh the app."});
+  } catch(err) {
+    res.status(500).json({error:"Restore failed: "+err.message});
   }
 });
 
