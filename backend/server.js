@@ -1198,59 +1198,81 @@ app.get("/api/export/purchases.xlsx", requirePermission("exportData"), async (re
 
 // ── Feature 8: Stock Valuation Report ────────────────────────────────────
 app.get("/api/reports/stock-valuation", requirePermission("viewReports"), (req, res) => {
+  // asAt: calculate stock as at this date (default: today)
+  const asAt = req.query.asAt || new Date().toISOString().slice(0,10);
+  const asAtEnd = asAt + "T23:59:59"; // include full day
   const items = db.get("items").orderBy("description","asc").value();
-  const purchases = db.get("purchases").value();
+  const allPurchases = db.get("purchases").value();
+  const allIssues = db.get("issues").value();
   const rows = [];
   let grandTotal = 0;
+  const s = getSettings();
   for (const item of items) {
-    const currentStock = getCurrentStockForItem(item.id);
-    // Get latest unit price from purchases
-    const lastPurchase = purchases.filter(p=>p.itemId===item.id).sort((a,b)=>b.purchasedAt.localeCompare(a.purchasedAt))[0];
+    // Calculate stock as at the chosen date
+    const openingQty = Number(item.quantity) || 0;
+    const purchasedUpTo = allPurchases.filter(p => p.itemId === item.id && p.purchasedAt <= asAt);
+    const issuedUpTo = allIssues.filter(i => i.itemId === item.id && i.issuedAt <= asAt);
+    const totalPurchased = purchasedUpTo.reduce((s,p) => s + Number(p.quantity||0), 0);
+    const totalIssued = issuedUpTo.reduce((s,i) => s + Number(i.quantity||0), 0);
+    const stockAsAt = openingQty + totalPurchased - totalIssued;
+    // Get latest unit price from purchases up to asAt date
+    const lastPurchase = purchasedUpTo.sort((a,b) => b.purchasedAt.localeCompare(a.purchasedAt))[0];
     const unitPrice = lastPurchase ? Number(lastPurchase.unitPrice) : 0;
-    const value = currentStock > 0 ? currentStock * unitPrice : 0;
+    const value = stockAsAt > 0 ? stockAsAt * unitPrice : 0;
     grandTotal += value;
-    const thr = item.lowStockThreshold != null ? Number(item.lowStockThreshold) : 10;
+    const thr = item.lowStockThreshold != null ? Number(item.lowStockThreshold) : (s.lowStockDefaultThreshold||10);
     rows.push({
       itemId: item.id,
       description: item.description,
       unit: item.unit,
-      currentStock,
+      currentStock: stockAsAt,
       unitPrice,
       totalValue: value,
-      lastPurchaseDate: lastPurchase?.purchasedAt||null,
-      lastSupplier: lastPurchase?.supplier||null,
-      stockStatus: currentStock <= 0 ? "OUT" : currentStock <= thr ? "LOW" : "OK",
+      lastPurchaseDate: lastPurchase?.purchasedAt || null,
+      lastSupplier: lastPurchase?.supplier || null,
+      stockStatus: stockAsAt <= 0 ? "OUT" : stockAsAt <= thr ? "LOW" : "OK",
       threshold: thr,
     });
   }
-  res.json({ rows, grandTotal, generatedAt: new Date().toISOString(), currency: getSettings().defaultCurrency||"KES" });
+  res.json({
+    rows,
+    grandTotal,
+    asAt,
+    generatedAt: new Date().toISOString(),
+    currency: s.defaultCurrency || "KES"
+  });
 });
 
 app.get("/api/export/stock-valuation.xlsx", requirePermission("exportData"), async (req, res) => {
   try {
     const ExcelJS = require("exceljs");
     const data = await new Promise((resolve) => {
+      const asAt = req.query.asAt || new Date().toISOString().slice(0,10);
       const items = db.get("items").orderBy("description","asc").value();
-      const purchases = db.get("purchases").value();
+      const allPurchases = db.get("purchases").value();
+      const allIssues = db.get("issues").value();
       const s = getSettings();
       const rows = [];
       let grandTotal = 0;
       for (const item of items) {
-        const currentStock = getCurrentStockForItem(item.id);
-        const lastPurchase = purchases.filter(p=>p.itemId===item.id).sort((a,b)=>b.purchasedAt.localeCompare(a.purchasedAt))[0];
+        const openingQty = Number(item.quantity) || 0;
+        const purchasedUpTo = allPurchases.filter(p => p.itemId===item.id && p.purchasedAt<=asAt);
+        const issuedUpTo = allIssues.filter(i => i.itemId===item.id && i.issuedAt<=asAt);
+        const stockAsAt = openingQty + purchasedUpTo.reduce((s,p)=>s+Number(p.quantity||0),0) - issuedUpTo.reduce((s,i)=>s+Number(i.quantity||0),0);
+        const lastPurchase = purchasedUpTo.sort((a,b)=>b.purchasedAt.localeCompare(a.purchasedAt))[0];
         const unitPrice = lastPurchase ? Number(lastPurchase.unitPrice) : 0;
-        const value = currentStock > 0 ? currentStock * unitPrice : 0;
+        const value = stockAsAt > 0 ? stockAsAt * unitPrice : 0;
         grandTotal += value;
-        const thr = item.lowStockThreshold != null ? Number(item.lowStockThreshold) : 10;
-        rows.push({description:item.description,unit:item.unit,currentStock,unitPrice,totalValue:value,lastPurchaseDate:lastPurchase?.purchasedAt||"-",lastSupplier:lastPurchase?.supplier||"-",stockStatus:currentStock<=0?"OUT":currentStock<=thr?"LOW":"OK"});
+        const thr = item.lowStockThreshold != null ? Number(item.lowStockThreshold) : (s.lowStockDefaultThreshold||10);
+        rows.push({description:item.description,unit:item.unit,currentStock:stockAsAt,unitPrice,totalValue:value,lastPurchaseDate:lastPurchase?.purchasedAt||"-",lastSupplier:lastPurchase?.supplier||"-",stockStatus:stockAsAt<=0?"OUT":stockAsAt<=thr?"LOW":"OK"});
       }
-      resolve({rows,grandTotal,currency:s.defaultCurrency||"KES",hospitalName:s.hospitalName,officer:s.responsibleOfficer});
+      resolve({rows,grandTotal,asAt,currency:s.defaultCurrency||"KES",hospitalName:s.hospitalName,officer:s.responsibleOfficer});
     });
     const {rows,grandTotal,currency,hospitalName,officer} = data;
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Stock Valuation");
     ws.addRow([hospitalName]).getCell(1).font={bold:true,size:14,color:{argb:"FF4F46E5"}};
-    ws.addRow(["Stock Valuation Report — " + new Date().toLocaleDateString("en-GB")]).getCell(1).font={italic:true};
+    ws.addRow(["Stock Valuation Report — As at " + (data.asAt||new Date().toISOString().slice(0,10))]).getCell(1).font={italic:true};
     if(officer) ws.addRow(["Responsible Officer: " + officer]).getCell(1).font={italic:true,color:{argb:"FF6B7280"}};
     ws.addRow([]);
     const hRow = ws.addRow(["#","Item Description","Unit","Stock Qty","Unit Price ("+currency+")","Total Value ("+currency+")","Last Purchase","Supplier","Status"]);
