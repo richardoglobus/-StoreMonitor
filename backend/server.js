@@ -605,6 +605,10 @@ const DEFAULT_SETTINGS = {
   financialYear: "2025/2026",
   allowDataExports: true,
   exportIncludeZeroStock: false,
+  // Appearance
+  appLogo: "Building2",
+  appTheme: "indigo",
+  sidebarStyle: "default",
 };
 function getSettings(){
   const stored=db.get("settings").value()||{};
@@ -635,6 +639,8 @@ app.get("/api/settings/public",(req,res)=>{
     defaultCurrency:s.defaultCurrency||"KES",
     financialYear:s.financialYear,
     issueDays:s.issueDays,
+    appTheme:s.appTheme||'indigo',
+    appLogo:s.appLogo||'Building2',
   });
 });
 

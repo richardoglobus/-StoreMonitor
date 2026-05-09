@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle } from "lucide-react";
+import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle, Palette } from "lucide-react";
+import { useTheme, THEMES, LOGOS, AppTheme, AppLogo } from "@/lib/theme-context";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
@@ -44,6 +45,8 @@ interface AppSettings {
   financialYear: string;
   allowDataExports: boolean;
   exportIncludeZeroStock: boolean;
+  appLogo: string;
+  appTheme: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -73,6 +76,8 @@ const DEFAULTS: AppSettings = {
   financialYear: "2025/2026",
   allowDataExports: true,
   exportIncludeZeroStock: false,
+  appLogo: "Building2",
+  appTheme: "indigo",
 };
 
 const ALL_DAYS = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"];
@@ -109,6 +114,7 @@ export default function SettingsPage() {
   if (!user?.permissions?.manageUsers) { setLocation("/"); return null; }
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULTS);
+  const { setAppTheme, setAppLogo } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -123,6 +129,9 @@ export default function SettingsPage() {
   const update = (key: keyof AppSettings, value: any) => {
     setSettings(s => ({ ...s, [key]: value }));
     setDirty(true);
+    // Apply appearance changes immediately
+    if (key === "appTheme") setAppTheme(value as AppTheme);
+    if (key === "appLogo") setAppLogo(value as AppLogo);
   };
 
   const toggleDay = (day: string) => {
@@ -389,6 +398,55 @@ export default function SettingsPage() {
               </label>
               <p className="text-xs text-destructive font-medium">⚠ This will replace ALL current data. Cannot be undone.</p>
             </div>
+          </div>
+        </SectionCard>
+
+        {/* 7. Appearance */}
+        <SectionCard icon={Palette} title="Appearance" description="Customize the logo icon and color theme of the app. Changes apply instantly for everyone.">
+          {/* Logo picker */}
+          <div className="space-y-2">
+            <Label>App Logo / Icon</Label>
+            <div className="grid grid-cols-5 gap-2">
+              {Object.entries(LOGOS).map(([key, val]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => update("appLogo", key)}
+                  title={val.label}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${
+                    settings.appLogo === key
+                      ? "border-primary bg-primary/10 scale-105"
+                      : "border-border hover:border-primary/40 hover:bg-muted"
+                  }`}
+                >
+                  <span className="text-2xl">{val.emoji}</span>
+                  <span className="text-[9px] text-muted-foreground truncate w-full text-center">{val.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Theme color picker */}
+          <div className="space-y-2 pt-2">
+            <Label>Color Theme</Label>
+            <div className="grid grid-cols-4 gap-2">
+              {Object.entries(THEMES).map(([key, val]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => update("appTheme", key)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                    settings.appTheme === key
+                      ? "border-primary scale-105 shadow-sm"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <div className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: val.primary }} />
+                  <span className="text-xs truncate">{val.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Theme color is saved and applied for all users after clicking Save.</p>
           </div>
         </SectionCard>
 
