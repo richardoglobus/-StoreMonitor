@@ -609,6 +609,7 @@ const DEFAULT_SETTINGS = {
   appLogo: "Building2",
   appTheme: "indigo",
   sidebarStyle: "default",
+  loginEffect: "split",
 };
 function getSettings(){
   const stored=db.get("settings").value()||{};
@@ -641,6 +642,7 @@ app.get("/api/settings/public",(req,res)=>{
     issueDays:s.issueDays,
     appTheme:s.appTheme||'indigo',
     appLogo:s.appLogo||'Building2',
+    loginEffect:s.loginEffect||'split',
   });
 });
 

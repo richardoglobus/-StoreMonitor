@@ -47,6 +47,7 @@ interface AppSettings {
   exportIncludeZeroStock: boolean;
   appLogo: string;
   appTheme: string;
+  loginEffect: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -78,6 +79,7 @@ const DEFAULTS: AppSettings = {
   exportIncludeZeroStock: false,
   appLogo: "Building2",
   appTheme: "indigo",
+  loginEffect: "split",
 };
 
 const ALL_DAYS = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"];
@@ -447,6 +449,38 @@ export default function SettingsPage() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground">Theme color is saved and applied for all users after clicking Save.</p>
+          </div>
+
+          {/* Login Effect picker */}
+          <div className="space-y-2 pt-2">
+            <Label>Login Page Animation Style</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                { key: "split",     label: "Split Panel",       desc: "Left form, right welcome panel",     preview: "🟧🟦" },
+                { key: "particles", label: "Particle Network",  desc: "Floating connected particles on dark", preview: "✨" },
+                { key: "glass",     label: "Glassmorphism",     desc: "Frosted glass card with blobs",        preview: "🫧" },
+                { key: "wave",      label: "Wave Gradient",     desc: "Animated flowing colour gradient",     preview: "🌊" },
+                { key: "gradient",  label: "Mesh Gradient",     desc: "Colourful glowing mesh background",    preview: "🎨" },
+              ] as const).map(ef => (
+                <button
+                  key={ef.key}
+                  type="button"
+                  onClick={() => update("loginEffect", ef.key)}
+                  className={`flex items-start gap-3 p-3 rounded-lg border-2 text-left transition-all ${
+                    settings.loginEffect === ef.key
+                      ? "border-primary bg-primary/10 scale-[1.02]"
+                      : "border-border hover:border-primary/40 hover:bg-muted"
+                  }`}
+                >
+                  <span className="text-2xl shrink-0">{ef.preview}</span>
+                  <div>
+                    <p className="text-sm font-semibold">{ef.label}</p>
+                    <p className="text-xs text-muted-foreground">{ef.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Applies immediately on next login page load. Save settings to persist for all users.</p>
           </div>
         </SectionCard>
 
