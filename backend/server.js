@@ -610,6 +610,8 @@ const DEFAULT_SETTINGS = {
   appTheme: "indigo",
   sidebarStyle: "default",
   loginEffect: "split",
+  allowSelfRegistration: false,
+  selfRegistrationNote: "New accounts require admin approval before login.",
 };
 function getSettings(){
   const stored=db.get("settings").value()||{};
@@ -643,6 +645,8 @@ app.get("/api/settings/public",(req,res)=>{
     appTheme:s.appTheme||'indigo',
     appLogo:s.appLogo||'Building2',
     loginEffect:s.loginEffect||'split',
+    allowSelfRegistration:s.allowSelfRegistration||false,
+    selfRegistrationNote:s.selfRegistrationNote||'',
   });
 });
 
@@ -1343,6 +1347,49 @@ app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
   } catch(err) {
     res.status(500).json({error:"Restore failed: "+err.message});
   }
+});
+
+
+// ── Self Registration (if enabled in settings) ────────────────────────────
+app.post("/api/auth/register",(req,res)=>{
+  const s=getSettings();
+  if(!s.allowSelfRegistration) return res.status(403).json({error:"Self-registration is disabled"});
+  const {username,password,fullName}=req.body;
+  if(!username||!password||!fullName) return res.status(400).json({error:"All fields are required"});
+  if(password.length<6) return res.status(400).json({error:"Password must be at least 6 characters"});
+  if(db.get("users").find({username}).value()) return res.status(400).json({error:"Username already taken"});
+  const hash=bcrypt.hashSync(password,10);
+  const defaultPerms={viewDashboard:true,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
+  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
+  db.get("users").push(user).write();
+  logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
+  res.status(201).json({success:true,message:"Account created. Please wait for admin approval before logging in."});
+});
+
+// ── Forgot Password (admin resets — no email yet) ─────────────────────────
+app.post("/api/auth/forgot-password",(req,res)=>{
+  const {username}=req.body;
+  if(!username) return res.status(400).json({error:"Username is required"});
+  const user=db.get("users").find({username}).value();
+  if(!user) return res.status(404).json({error:"No account found with that username"});
+  // Generate a temporary reset token stored in db
+  const token=Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+  const expires=new Date(Date.now()+3600000).toISOString(); // 1 hour
+  db.get("users").find({username}).assign({resetToken:token,resetExpires:expires}).write();
+  // In a real system, email the token. Here we return it so admin can relay it.
+  res.json({success:true,message:"Password reset token generated. Contact your system administrator with your username to get the reset token.",token,note:"Admin: use PATCH /api/auth/reset-password to reset"});
+});
+
+app.patch("/api/auth/reset-password",(req,res)=>{
+  const {username,token,newPassword}=req.body;
+  if(!username||!token||!newPassword) return res.status(400).json({error:"Missing fields"});
+  if(newPassword.length<6) return res.status(400).json({error:"Password must be at least 6 characters"});
+  const user=db.get("users").find({username}).value();
+  if(!user||user.resetToken!==token) return res.status(400).json({error:"Invalid or expired reset token"});
+  if(user.resetExpires&&new Date(user.resetExpires)<new Date()) return res.status(400).json({error:"Reset token has expired"});
+  const hash=bcrypt.hashSync(newPassword,10);
+  db.get("users").find({username}).assign({passwordHash:hash,resetToken:null,resetExpires:null}).write();
+  res.json({success:true,message:"Password reset successfully. You can now log in."});
 });
 
 

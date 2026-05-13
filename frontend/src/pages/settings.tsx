@@ -48,6 +48,8 @@ interface AppSettings {
   appLogo: string;
   appTheme: string;
   loginEffect: string;
+  allowSelfRegistration: boolean;
+  selfRegistrationNote: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -80,6 +82,8 @@ const DEFAULTS: AppSettings = {
   appLogo: "Building2",
   appTheme: "indigo",
   loginEffect: "split",
+  allowSelfRegistration: false,
+  selfRegistrationNote: "New accounts require admin approval before login.",
 };
 
 const ALL_DAYS = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"];
@@ -480,8 +484,29 @@ export default function SettingsPage() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Applies immediately on next login page load. Save settings to persist for all users.</p>
+            <p className="text-xs text-muted-foreground">
+              Applies on next login page load. Staff can also click the <strong>🎨 1/5</strong> button on the login page to cycle through all styles in real time.
+            </p>
           </div>
+
+          {/* Self-registration */}
+          <Separator />
+          <ToggleRow
+            label="Allow Self-Registration"
+            description="Let staff create their own accounts from the login page. New accounts still require admin approval before they can log in."
+            checked={settings.allowSelfRegistration}
+            onChange={(v: boolean) => update("allowSelfRegistration", v)}
+          />
+          {settings.allowSelfRegistration && (
+            <div className="space-y-2">
+              <Label>Registration Notice (shown to new users)</Label>
+              <Input
+                value={settings.selfRegistrationNote}
+                onChange={e => update("selfRegistrationNote", e.target.value)}
+                placeholder="e.g. New accounts require admin approval before login."
+              />
+            </div>
+          )}
         </SectionCard>
 
         {/* 8. Catalog */}
