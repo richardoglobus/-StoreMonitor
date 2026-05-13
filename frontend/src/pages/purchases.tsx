@@ -70,7 +70,8 @@ export default function Purchases() {
   const { data: items } = useListItems({ query: { queryKey: getListItemsQueryKey() } });
 
   const month = from.slice(0, 7);
-  const queryParams = { month };
+  // Pass full from/to dates to API so changing "from" doesn't lose data
+  const queryParams = { from, to } as any;
   const { data: purchases, isLoading } = useListPurchases(queryParams, { query: { queryKey: getListPurchasesQueryKey(queryParams) } });
 
   const createPurchase = useCreatePurchase({
@@ -97,7 +98,7 @@ export default function Purchases() {
     e.preventDefault();
     if (!form.supplier.trim() || !form.itemId || !form.quantity || !form.unitPrice) return;
     createPurchase.mutate({ data: {
-      supplier: form.supplier.trim(),
+      supplier: form.supplier.trim().toUpperCase(),
       invoiceNo: form.invoiceNo.trim() || undefined,
       itemId: Number(form.itemId),
       quantity: Number(form.quantity),
@@ -182,7 +183,7 @@ export default function Purchases() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2 col-span-2">
                       <Label>Supplier / Company <span className="text-destructive">*</span></Label>
-                      <Input placeholder="e.g. KEMSA, MEDS" value={form.supplier} onChange={e => setForm({...form, supplier: e.target.value})} required/>
+                      <Input placeholder="e.g. KEMSA, MEDS" value={form.supplier} onChange={e => setForm({...form, supplier: e.target.value.toUpperCase()})} required/>
                     </div>
                     <div className="space-y-2">
                       <Label>Invoice Number</Label>
