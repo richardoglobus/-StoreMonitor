@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle, Palette } from "lucide-react";
+import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle, Palette, Pencil, Trash2, Tag } from "lucide-react";
 import { useTheme, THEMES, LOGOS, AppTheme, AppLogo } from "@/lib/theme-context";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -121,6 +121,40 @@ export default function SettingsPage() {
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULTS);
   const { setAppTheme, setAppLogo } = useTheme();
+  const [units, setUnits] = useState<{unit:string;itemCount:number;items:{id:number;description:string}[]}[]>([]);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<string|null>(null);
+  const [newUnitName, setNewUnitName] = useState("");
+  const [unitSearch, setUnitSearch] = useState("");
+
+  const loadUnits = () => {
+    setUnitsLoading(true);
+    fetch("/api/catalog/units",{credentials:"include"})
+      .then(r=>r.json()).then(setUnits).catch(()=>{}).finally(()=>setUnitsLoading(false));
+  };
+
+  const handleRenameUnit = async (oldUnit: string) => {
+    if (!newUnitName.trim()) return;
+    const res = await fetch(`/api/catalog/units/${encodeURIComponent(oldUnit)}`,{
+      method:"PATCH",credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({newUnit:newUnitName.trim().toUpperCase()})
+    });
+    const data = await res.json();
+    if (!res.ok){toast.error(data.error||"Rename failed");return;}
+    toast.success(`Renamed "${oldUnit}" → "${data.newUnit}" on ${data.affectedItems} item(s)`);
+    setEditingUnit(null); setNewUnitName("");
+    loadUnits();
+  };
+
+  const handleDeleteUnit = async (unit: string, count: number) => {
+    if (!confirm(`Delete unit "${unit}" from ${count} item(s)? Their unit will be cleared and must be reassigned.`)) return;
+    const res = await fetch(`/api/catalog/units/${encodeURIComponent(unit)}`,{method:"DELETE",credentials:"include"});
+    const data = await res.json();
+    if (!res.ok){toast.error(data.error||"Delete failed");return;}
+    toast.success(`Deleted unit "${unit}" from ${data.affectedItems} item(s). Please update those items in Catalog.`);
+    loadUnits();
+  };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -407,7 +441,64 @@ export default function SettingsPage() {
           </div>
         </SectionCard>
 
-        {/* 7. Appearance */}
+        {/* 7. Units Management */}
+        <SectionCard icon={Tag} title="Units Management" description="View, rename or delete measurement units used in the item catalog.">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={loadUnits} disabled={unitsLoading} className="gap-2">
+              {unitsLoading ? <Loader2 className="h-3 w-3 animate-spin"/> : <Tag className="h-3 w-3"/>}
+              {unitsLoading ? "Loading…" : units.length ? "Refresh Units" : "Load Units"}
+            </Button>
+            {units.length > 0 && (
+              <div className="flex items-center gap-2 border rounded-md px-3 h-8 bg-background flex-1 max-w-xs">
+                <input placeholder="Search units…" value={unitSearch} onChange={e=>setUnitSearch(e.target.value)}
+                  className="bg-transparent text-sm outline-none flex-1"/>
+              </div>
+            )}
+          </div>
+
+          {units.length > 0 && (
+            <div className="space-y-1 max-h-80 overflow-y-auto">
+              {units.filter(u=>!unitSearch||u.unit.toLowerCase().includes(unitSearch.toLowerCase())).map(u=>(
+                <div key={u.unit} className="flex items-center gap-3 p-2.5 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                  {editingUnit === u.unit ? (
+                    <>
+                      <Input
+                        value={newUnitName} onChange={e=>setNewUnitName(e.target.value.toUpperCase())}
+                        placeholder="New unit name" className="h-7 text-sm font-mono flex-1 max-w-[140px]"
+                        autoFocus onKeyDown={e=>{if(e.key==="Enter") handleRenameUnit(u.unit); if(e.key==="Escape"){setEditingUnit(null);setNewUnitName("");}}}
+                      />
+                      <Button size="sm" className="h-7 text-xs" onClick={()=>handleRenameUnit(u.unit)} disabled={!newUnitName.trim()}>Save</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={()=>{setEditingUnit(null);setNewUnitName("");}}>Cancel</Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-mono font-semibold text-sm w-28 shrink-0">{u.unit}</span>
+                      <span className="text-xs text-muted-foreground flex-1">{u.itemCount} item{u.itemCount!==1?"s":""}</span>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={()=>{setEditingUnit(u.unit);setNewUnitName(u.unit);}}>
+                        <Pencil className="h-3 w-3"/>
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={()=>handleDeleteUnit(u.unit,u.itemCount)}>
+                        <Trash2 className="h-3 w-3"/>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {units.filter(u=>!unitSearch||u.unit.toLowerCase().includes(unitSearch.toLowerCase())).length===0&&(
+                <p className="text-sm text-muted-foreground text-center py-4">No units match your search</p>
+              )}
+            </div>
+          )}
+
+          {!unitsLoading && units.length===0&&(
+            <p className="text-sm text-muted-foreground italic">Click "Load Units" to see all units currently in use in the catalog.</p>
+          )}
+          <p className="text-xs text-muted-foreground">Renaming a unit updates all catalog items using that unit. Deleting clears the unit from those items — you must then reassign them in the Catalog.</p>
+        </SectionCard>
+
+        {/* 8. Appearance */}
         <SectionCard icon={Palette} title="Appearance" description="Customize the logo icon and color theme of the app. Changes apply instantly for everyone.">
           {/* Logo picker */}
           <div className="space-y-2">

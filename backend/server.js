@@ -548,12 +548,21 @@ app.delete("/api/issues/:id",requirePermission("deleteTransactions"),(req,res)=>
 
 // PURCHASES
 app.get("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
-  const month=req.query.month,itemId=req.query.itemId?Number(req.query.itemId):null;
-  const {start,end}=month?monthRange(month):{start:null,end:null};
+  const itemId=req.query.itemId?Number(req.query.itemId):null;
   const itemMap=getItemMap();
+  // Support ?from=YYYY-MM-DD&to=YYYY-MM-DD OR ?month=YYYY-MM
+  let start, end;
+  if (req.query.from && req.query.to) {
+    start = req.query.from;
+    end = req.query.to;
+  } else if (req.query.month) {
+    const r = monthRange(req.query.month); start = r.start; end = r.end;
+  } else {
+    const r = monthRange(currentMonth()); start = r.start; end = r.end;
+  }
   let rows=db.get("purchases").value();
   if(itemId) rows=rows.filter(r=>r.itemId===itemId);
-  if(start) rows=rows.filter(r=>inRange(r.purchasedAt,start,end));
+  if(start) rows=rows.filter(r=>r.purchasedAt>=start&&r.purchasedAt<=end);
   rows=rows.sort((a,b)=>b.purchasedAt.localeCompare(a.purchasedAt)||b.id-a.id);
   res.json(rows.map(r=>({...r,item:itemMap.get(r.itemId)})));
 });
@@ -562,7 +571,7 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   if(!supplier||!String(supplier).trim()) return res.status(400).json({error:"Supplier is required"});
   if(!invoiceNo||!String(invoiceNo).trim()) return res.status(400).json({error:"Invoice number is required"});
   const {batchNo,expiryDate}=req.body;
-  const row={id:nextId("purchases"),supplier,itemId,quantity,unitPrice:Number(unitPrice),invoiceNo:invoiceNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
+  const row={id:nextId("purchases"),supplier:String(supplier).trim().toUpperCase(),itemId,quantity,unitPrice:Number(unitPrice),invoiceNo:invoiceNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
   db.get("purchases").push(row).write();
   logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplier, itemId, quantity, invoiceNo: row.invoiceNo });
   res.status(201).json(row);
@@ -1390,6 +1399,49 @@ app.patch("/api/auth/reset-password",(req,res)=>{
   const hash=bcrypt.hashSync(newPassword,10);
   db.get("users").find({username}).assign({passwordHash:hash,resetToken:null,resetExpires:null}).write();
   res.json({success:true,message:"Password reset successfully. You can now log in."});
+});
+
+
+// ── Units Management ──────────────────────────────────────────────────────
+app.get("/api/catalog/units", requirePermission("manageCatalog"), (req, res) => {
+  const items = db.get("items").value();
+  const unitMap = new Map();
+  for (const item of items) {
+    const u = (item.unit || "").trim().toUpperCase();
+    if (!u) continue;
+    if (!unitMap.has(u)) unitMap.set(u, []);
+    unitMap.get(u).push({ id: item.id, description: item.description });
+  }
+  const units = Array.from(unitMap.entries())
+    .sort((a,b) => a[0].localeCompare(b[0]))
+    .map(([unit, items]) => ({ unit, itemCount: items.length, items }));
+  res.json(units);
+});
+
+app.patch("/api/catalog/units/:unit", requirePermission("manageCatalog"), (req, res) => {
+  const oldUnit = decodeURIComponent(req.params.unit).toUpperCase();
+  const newUnit = String(req.body.newUnit || "").trim().toUpperCase();
+  if (!newUnit) return res.status(400).json({ error: "New unit name is required" });
+  if (newUnit === oldUnit) return res.status(400).json({ error: "New unit is the same as old unit" });
+  const items = db.get("items").filter(i => (i.unit||"").toUpperCase() === oldUnit).value();
+  if (!items.length) return res.status(404).json({ error: "Unit not found" });
+  for (const item of items) {
+    db.get("items").find({ id: item.id }).assign({ unit: newUnit }).write();
+  }
+  logActivity(req, "RENAME_UNIT", "CATALOG", null, { oldUnit, newUnit, affectedItems: items.length });
+  res.json({ success: true, oldUnit, newUnit, affectedItems: items.length });
+});
+
+app.delete("/api/catalog/units/:unit", requirePermission("manageCatalog"), (req, res) => {
+  const unit = decodeURIComponent(req.params.unit).toUpperCase();
+  const items = db.get("items").filter(i => (i.unit||"").toUpperCase() === unit).value();
+  if (!items.length) return res.status(404).json({ error: "Unit not found" });
+  // Clear unit from all items (set to empty string so admin must fix)
+  for (const item of items) {
+    db.get("items").find({ id: item.id }).assign({ unit: "" }).write();
+  }
+  logActivity(req, "DELETE_UNIT", "CATALOG", null, { unit, affectedItems: items.length });
+  res.json({ success: true, unit, affectedItems: items.length });
 });
 
 
