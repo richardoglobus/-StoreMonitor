@@ -35,6 +35,7 @@ export default function MonthlyReportPage() {
   if (!user?.permissions?.viewReports) { setLocation("/"); return null; }
 
   const [from, setFrom] = useState(firstOfMonth());
+  const [search, setSearch] = useState("");
   const [to, setTo] = useState(todayStr());
   const [queryDates, setQueryDates] = useState({ from: firstOfMonth(), to: todayStr() });
   const [loadingCsv, setLoadingCsv] = useState(false);
@@ -50,7 +51,7 @@ export default function MonthlyReportPage() {
   );
 
   // Handle both new {commodities:[]} and old {months:[]} formats
-  const commodities: any[] = (() => {
+  const allCommodities: any[] = (() => {
     if (!report) return [];
     const r = report as any;
     // New format
@@ -68,6 +69,10 @@ export default function MonthlyReportPage() {
     }
     return [];
   })();
+
+  const commodities = allCommodities.filter((c: any) =>
+    !search.trim() || c.itemDescription.toLowerCase().includes(search.trim().toLowerCase())
+  );
 
   const handleGenerate = () => setQueryDates({ from, to });
   const downloadUrl = `/api/export/monthly-report.csv?startMonth=${startMonth}&endMonth=${endMonth}`;
@@ -94,6 +99,14 @@ export default function MonthlyReportPage() {
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
               Generate Report
             </Button>
+            {allCommodities.length > 0 && (
+              <div className="flex items-center gap-2 border rounded-md px-3 h-9 bg-background w-full sm:w-64">
+                <svg className="h-4 w-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input placeholder="Search commodity…" value={search} onChange={e => setSearch(e.target.value)}
+                  className="bg-transparent text-sm outline-none flex-1 text-foreground placeholder:text-muted-foreground"/>
+                {search && <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground text-xs">✕</button>}
+              </div>
+            )}
             <Button variant="outline" className="gap-2" disabled={loadingCsv}
               onClick={() => downloadCsv(downloadUrl, `monthly_report_${startMonth}_${endMonth}.csv`, setLoadingCsv)}>
               {loadingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -118,6 +131,8 @@ export default function MonthlyReportPage() {
         {isLoading ? (
           <div className="space-y-4">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : commodities.length > 0 ? (
+          <>
+          {search && <p className="text-sm text-muted-foreground">Showing {commodities.length} of {allCommodities.length} commodities matching "<strong>{search}</strong>"</p>}
           <div className="space-y-6">
             {commodities.map((commodity: any) => {
               return (
@@ -203,6 +218,7 @@ export default function MonthlyReportPage() {
               );
             })}
           </div>
+          </>
         ) : report !== undefined ? (
           <div className="h-64 flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed rounded-lg">
             <BarChart3 className="h-12 w-12 mb-4 opacity-20" />

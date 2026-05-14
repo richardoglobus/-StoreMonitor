@@ -576,6 +576,26 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplier, itemId, quantity, invoiceNo: row.invoiceNo });
   res.status(201).json(row);
 });
+
+app.patch("/api/purchases/:id", requirePermission("managePurchases"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("purchases").find({ id });
+  if (!row.value()) return res.status(404).json({ error: "Purchase not found" });
+  const { supplier, invoiceNo, quantity, unitPrice, purchasedAt, batchNo, expiryDate, note } = req.body;
+  const updates = {};
+  if (supplier !== undefined) updates.supplier = String(supplier).trim().toUpperCase();
+  if (invoiceNo !== undefined) updates.invoiceNo = invoiceNo || null;
+  if (quantity !== undefined) updates.quantity = Number(quantity);
+  if (unitPrice !== undefined) updates.unitPrice = Number(unitPrice);
+  if (purchasedAt !== undefined) updates.purchasedAt = purchasedAt;
+  if (batchNo !== undefined) updates.batchNo = batchNo || null;
+  if (expiryDate !== undefined) updates.expiryDate = expiryDate || null;
+  if (note !== undefined) updates.note = note || null;
+  row.assign(updates).write();
+  logActivity(req, "UPDATE_PURCHASE", "PURCHASE", id, updates);
+  res.json(row.value());
+});
+
 app.delete("/api/purchases/:id",requirePermission("deleteTransactions"),(req,res)=>{ const id=Number(req.params.id); db.get("purchases").remove({id}).write(); logActivity(req, "DELETE_PURCHASE", "PURCHASE", id, null); res.status(204).send(); });
 
 // DASHBOARD
@@ -1386,7 +1406,7 @@ app.post("/api/auth/forgot-password",(req,res)=>{
   const expires=new Date(Date.now()+3600000).toISOString(); // 1 hour
   db.get("users").find({username}).assign({resetToken:token,resetExpires:expires}).write();
   // In a real system, email the token. Here we return it so admin can relay it.
-  res.json({success:true,message:"Password reset token generated. Contact your system administrator with your username to get the reset token.",token,note:"Admin: use PATCH /api/auth/reset-password to reset"});
+  res.json({success:true,message:"Token generated.",resetToken:token,username,expiresIn:"1 hour"});
 });
 
 app.patch("/api/auth/reset-password",(req,res)=>{

@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, ShoppingCart, Download, FileSpreadsheet, Search, Loader2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, Download, FileSpreadsheet, Search, Loader2, AlertTriangle, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,9 @@ export default function Purchases() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [itemSearch, setItemSearch] = useState("");
   const [loadingCsv, setLoadingCsv] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [editLoading, setEditLoading] = useState(false);
   const [loadingXlsx, setLoadingXlsx] = useState(false);
 
   const { data: items } = useListItems({ query: { queryKey: getListItemsQueryKey() } });
@@ -108,6 +111,39 @@ export default function Purchases() {
       expiryDate: form.expiryDate || undefined,
       note: form.note || undefined,
     } as any });
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm) return;
+    setEditLoading(true);
+    try {
+      const res = await fetch(`/api/purchases/${editForm.id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplier: editForm.supplier, invoiceNo: editForm.invoiceNo,
+          quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice),
+          purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo,
+          expiryDate: editForm.expiryDate, note: editForm.note,
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || "Update failed"); return; }
+      toast.success("Purchase updated");
+      queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) });
+      setEditDialogOpen(false); setEditForm(null);
+    } catch { toast.error("Update failed"); }
+    finally { setEditLoading(false); }
+  };
+
+  const openEdit = (p: any) => {
+    setEditForm({
+      id: p.id, supplier: p.supplier || "", invoiceNo: p.invoiceNo || "",
+      quantity: p.quantity, unitPrice: p.unitPrice, purchasedAt: p.purchasedAt,
+      batchNo: (p as any).batchNo || "", expiryDate: (p as any).expiryDate || "",
+      note: p.note || "", itemDescription: p.item?.description || "",
+    });
+    setEditDialogOpen(true);
   };
 
   const fmt = (v: any) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES" }).format(Number(v));
@@ -191,7 +227,8 @@ export default function Purchases() {
                     </div>
                     <div className="space-y-2">
                       <Label>Purchase Date <span className="text-destructive">*</span></Label>
-                      <Input type="date" value={form.purchasedAt} onChange={e => setForm({...form, purchasedAt: e.target.value})} required/>
+                      <input type="date" value={form.purchasedAt} onChange={e => setForm({...form, purchasedAt: e.target.value})} required
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
                     </div>
                   </div>
 
@@ -224,7 +261,8 @@ export default function Purchases() {
                     </div>
                     <div className="space-y-2">
                       <Label>Expiry Date</Label>
-                      <Input type="date" value={form.expiryDate} onChange={e => setForm({...form, expiryDate: e.target.value})}/>
+                      <input type="date" value={form.expiryDate} onChange={e => setForm({...form, expiryDate: e.target.value})}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
                       {form.expiryDate && differenceInDays(parseISO(form.expiryDate), new Date()) < 90 && (
                         <p className="text-xs text-amber-600 font-medium">⚠ This item expires soon</p>
                       )}
@@ -290,14 +328,20 @@ export default function Purchases() {
                     <TableCell className="text-right font-mono text-sm font-semibold text-primary">{fmt(Number(p.quantity) * Number(p.unitPrice))}</TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground">{(p as any).batchNo || "—"}</TableCell>
                     <TableCell>{expiryBadge((p as any).expiryDate)}</TableCell>
-                    {canDelete && (
-                      <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => { if (confirm("Delete this purchase?")) deletePurchase.mutate({ purchaseId: p.id }); }}>
-                          <Trash2 className="h-4 w-4"/>
-                        </Button>
+                    <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => openEdit(p)}>
+                            <Pencil className="h-3.5 w-3.5"/>
+                          </Button>
+                          {canDelete && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => { if (confirm("Delete this purchase?")) deletePurchase.mutate({ purchaseId: p.id }); }}>
+                              <Trash2 className="h-3.5 w-3.5"/>
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
-                    )}
                   </TableRow>
                 )) : (
                   <TableRow>
@@ -312,6 +356,66 @@ export default function Purchases() {
           </div>
         </Card>
       </div>
+      {/* Edit Purchase Dialog */}
+      {editForm && (
+        <Dialog open={editDialogOpen} onOpenChange={v => { setEditDialogOpen(v); if (!v) setEditForm(null); }}>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle>Edit Purchase</DialogTitle>
+              <p className="text-sm text-muted-foreground">{editForm.itemDescription}</p>
+            </DialogHeader>
+            <form onSubmit={handleEdit}>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2 col-span-2">
+                    <Label>Supplier</Label>
+                    <Input value={editForm.supplier} onChange={e => setEditForm({...editForm, supplier: e.target.value.toUpperCase()})} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Invoice No</Label>
+                    <Input value={editForm.invoiceNo} onChange={e => setEditForm({...editForm, invoiceNo: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Purchase Date</Label>
+                    <input type="date" value={editForm.purchasedAt} onChange={e => setEditForm({...editForm, purchasedAt: e.target.value})} required
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Quantity</Label>
+                    <Input type="number" min="1" value={editForm.quantity} onChange={e => setEditForm({...editForm, quantity: e.target.value})} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Unit Price (KES)</Label>
+                    <Input type="number" step="0.01" min="0" value={editForm.unitPrice} onChange={e => setEditForm({...editForm, unitPrice: e.target.value})} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Batch No</Label>
+                    <Input value={editForm.batchNo} onChange={e => setEditForm({...editForm, batchNo: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Expiry Date</Label>
+                    <input type="date" value={editForm.expiryDate} onChange={e => setEditForm({...editForm, expiryDate: e.target.value})}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label>Note</Label>
+                    <Input value={editForm.note} onChange={e => setEditForm({...editForm, note: e.target.value})} />
+                  </div>
+                </div>
+                {editForm.quantity && editForm.unitPrice && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-md px-3 py-2 text-sm">
+                    Total: <span className="font-bold text-primary">{fmt(Number(editForm.quantity) * Number(editForm.unitPrice))}</span>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => { setEditDialogOpen(false); setEditForm(null); }}>Cancel</Button>
+                <Button type="submit" disabled={editLoading}>{editLoading ? "Saving…" : "Save Changes"}</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </Layout>
   );
 }
