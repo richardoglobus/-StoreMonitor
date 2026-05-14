@@ -79,7 +79,7 @@ function Field({ label, type="text", value, onChange, placeholder, icon:Icon, fo
 }
 
 // ── Form panels ───────────────────────────────────────────────────────────
-function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, resetTokenData, setResetTokenData }: any) {
+function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, resetTokenData, setResetTokenData }: any) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [p2,setP2]=useState("");
   const [name,setName]=useState(""); const [loading,setLoading]=useState(false);
   const [focused,setFocused]=useState<string|null>(null);
@@ -110,7 +110,7 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
 
   // ── Reset token panel ──────────────────────────────────────────────────
   if(panel==="reset_token") return (
-    <div style={{animation:"fadeUp 0.4s ease",display:"flex",flexDirection:"column",gap:16}}>
+    <div key="reset_token" style={{animation:"fadeUp 0.4s ease",display:"flex",flexDirection:"column",gap:16}}>
       <div style={{background:"rgba(16,185,129,0.1)",border:"1px solid rgba(16,185,129,0.3)",borderRadius:12,padding:"14px 16px"}}>
         <p style={{color:"#10b981",fontWeight:700,fontSize:13,marginBottom:8}}>✅ Reset token generated!</p>
         <p style={{color:textMuted,fontSize:12,marginBottom:12,lineHeight:1.5}}>
@@ -133,26 +133,29 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
   );
 
   // ── Login panel ────────────────────────────────────────────────────────
+  // key="login" forces React to remount this form when switching panels,
+  // so the slideRight animation fires fresh every time we return to login.
   if(panel==="login") return (
-    <form onSubmit={handleLogin} style={{display:"flex",flexDirection:"column",gap:14,animation:"slideRight 0.45s cubic-bezier(0.34,1.56,0.64,1)"}}>
+    <form key="login" onSubmit={handleLogin} style={{display:"flex",flexDirection:"column",gap:14,animation:"slideRight 0.45s cubic-bezier(0.34,1.56,0.64,1)"}}>
       <Field label="Username" value={u} onChange={setU} placeholder="Enter username" icon={User} {...f("u")} {...shared}/>
       <Field label="Password" type="password" value={p} onChange={setP} placeholder="Enter password" icon={Lock} {...f("p")} {...shared}/>
       <button type="button" onClick={()=>setPanel("forgot")} style={{...linkStyle,textAlign:"right",marginTop:-6}}>Forgot password?</button>
       <button type="submit" className="login-btn" disabled={loading||!u||!p} style={btnStyle}>
         {loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Signing in…</>:"Sign In →"}
       </button>
-      {allowSignup && (
-        <p style={{textAlign:"center",color:textMuted,fontSize:13,marginTop:4}}>
-          Don't have an account?{" "}
-          <button type="button" onClick={()=>setPanel("signup")} style={linkStyle}>Sign up</button>
-        </p>
-      )}
+      {/* Always show signup link — server will reject if self-registration is disabled */}
+      <p style={{textAlign:"center",color:textMuted,fontSize:13,marginTop:4}}>
+        Don't have an account?{" "}
+        <button type="button" onClick={()=>setPanel("signup")} style={linkStyle}>Sign up</button>
+      </p>
     </form>
   );
 
   // ── Signup panel ───────────────────────────────────────────────────────
+  // key="signup" ensures this form is freshly mounted (not reused from login),
+  // so the slideLeft animation triggers correctly.
   if(panel==="signup") return (
-    <form onSubmit={handleSignup} style={{display:"flex",flexDirection:"column",gap:12,animation:"slideLeft 0.45s cubic-bezier(0.34,1.56,0.64,1)"}}>
+    <form key="signup" onSubmit={handleSignup} style={{display:"flex",flexDirection:"column",gap:12,animation:"slideLeft 0.45s cubic-bezier(0.34,1.56,0.64,1)"}}>
       <Field label="Full Name" value={name} onChange={setName} placeholder="e.g. John Kamau" icon={User} {...f("n")} {...shared}/>
       <Field label="Username" value={u} onChange={setU} placeholder="Choose a username" icon={User} {...f("u")} {...shared}/>
       <Field label="Password" type="password" value={p} onChange={setP} placeholder="Min. 6 characters" icon={Lock} {...f("p")} {...shared}/>
@@ -170,7 +173,7 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
 
   // ── Forgot panel ───────────────────────────────────────────────────────
   return (
-    <form onSubmit={handleForgot} style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
+    <form key="forgot" onSubmit={handleForgot} style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
       <button type="button" onClick={()=>setPanel("login")} style={{...linkStyle,display:"flex",alignItems:"center",gap:4,fontSize:13}}>
         <ArrowLeft size={14}/> Back to login
       </button>
@@ -222,17 +225,38 @@ export default function LoginPage(){
   const [effect,setEffect]=useState<Effect>("split");
   const [shake,setShake]=useState(false);
   const [hospitalName,setHospitalName]=useState("Mukurweini Hospital Stores");
-  const [allowSignup,setAllowSignup]=useState(false);
   const [effectIdx,setEffectIdx]=useState(0);
   const [resetTokenData,setResetTokenData]=useState<any>(null);
   const effects:Effect[]=["split","particles","glass","wave","gradient"];
   const LogoEmoji=LOGOS[appLogo as keyof typeof LOGOS]?.emoji||"🏥";
 
+  // Track whether the panel is "signup" for layout mirroring
+  const isSignup = panel === "signup";
+
+  // Animate panels on initial mount
+  const [mounted,setMounted]=useState(false);
+  useEffect(()=>{setTimeout(()=>setMounted(true),80);},[]);
+
+  // Re-trigger the welcome-panel slide animation whenever we switch to/from signup.
+  // We do this by briefly resetting a secondary "ready" flag, which forces the
+  // welcome panel's opacity/transform to reset before smoothly animating back in.
+  const [welcomeReady, setWelcomeReady] = useState(true);
+  const prevIsSignup = useRef(isSignup);
+  useEffect(()=>{
+    if(prevIsSignup.current !== isSignup){
+      prevIsSignup.current = isSignup;
+      setWelcomeReady(false);
+      const t = setTimeout(()=>setWelcomeReady(true), 30);
+      return ()=>clearTimeout(t);
+    }
+  },[isSignup]);
+
   useEffect(()=>{
     fetch("/api/settings/public").then(r=>r.json()).then(s=>{
       if(s.hospitalName) setHospitalName(s.hospitalName);
       if(s.loginEffect) setEffect(s.loginEffect as Effect);
-      if(s.allowSelfRegistration) setAllowSignup(s.allowSelfRegistration);
+      // Note: allowSelfRegistration setting is read but does NOT hide the signup link.
+      // The signup link is always visible; the server enforces registration policy.
     }).catch(()=>{});
   },[]);
 
@@ -254,10 +278,6 @@ export default function LoginPage(){
   const t=EFFECT_THEMES[effect];
   const meta=PANEL_META[panel]||PANEL_META.login;
   const welcome=WELCOME_META[panel]||WELCOME_META.login;
-  const isSignup=panel==="signup";
-
-  const [mounted,setMounted]=useState(false);
-  useEffect(()=>{setTimeout(()=>setMounted(true),80);},[]);
 
   return (
     <div style={{position:"relative",minHeight:"100vh",overflow:"hidden",background:t.bg}}>
@@ -271,22 +291,49 @@ export default function LoginPage(){
 
       {/* Main card */}
       <div style={{position:"relative",zIndex:10,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-        <div style={{width:"100%",maxWidth:860,borderRadius:22,overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,0.6)",display:"flex",flexDirection:isSignup?"row-reverse":"row",minHeight:520,animation:shake?"shake 0.5s ease":undefined,transition:"all 0.5s"}}>
+        <div style={{
+          width:"100%",maxWidth:860,borderRadius:22,overflow:"hidden",
+          boxShadow:"0 32px 80px rgba(0,0,0,0.6)",
+          // Use a fixed row direction — the form slides itself via CSS animation.
+          // Removing flexDirection flip prevents the jarring instant layout swap.
+          display:"flex",flexDirection:"row",minHeight:520,
+          animation:shake?"shake 0.5s ease":undefined,
+        }}>
 
-          {/* Form panel */}
-          <div style={{flex:1,background:t.formBg,padding:"44px 40px",display:"flex",flexDirection:"column",justifyContent:"center",backdropFilter:"blur(16px)",border:`1px solid ${t.inputBorder}`,opacity:mounted?1:0,transform:mounted?"translateX(0)":isSignup?"translateX(60px)":"translateX(-60px)",transition:"all 0.65s cubic-bezier(0.34,1.56,0.64,1)"}}>
+          {/* Form panel — always on the left */}
+          <div style={{
+            flex:1,background:t.formBg,padding:"44px 40px",
+            display:"flex",flexDirection:"column",justifyContent:"center",
+            backdropFilter:"blur(16px)",border:`1px solid ${t.inputBorder}`,
+            opacity:mounted?1:0,
+            transform:mounted?"translateX(0)":"translateX(-60px)",
+            transition:"opacity 0.65s cubic-bezier(0.34,1.56,0.64,1), transform 0.65s cubic-bezier(0.34,1.56,0.64,1)",
+          }}>
             <div style={{marginBottom:28}}>
               <div style={{fontSize:32,marginBottom:6}}>{LogoEmoji}</div>
               <h2 style={{color:"#fff",fontSize:24,fontWeight:800,margin:0}}>{meta.title}</h2>
               <p style={{color:t.textMuted,fontSize:13,marginTop:4}}>{meta.sub}</p>
             </div>
-            <FormContent panel={panel} setPanel={setPanel} onLogin={onLogin} onSignup={allowSignup?onSignup:null}
+            {/* panel prop change causes FormContent to return a different keyed <form>,
+                which React unmounts+remounts — triggering slideLeft/slideRight animations. */}
+            <FormContent
+              panel={panel} setPanel={setPanel}
+              onLogin={onLogin} onSignup={onSignup}
               accentColor={t.accentColor} inputBg={t.inputBg} inputBorder={t.inputBorder}
-              textMuted={t.textMuted} allowSignup={allowSignup} resetTokenData={resetTokenData} setResetTokenData={setResetTokenData}/>
+              textMuted={t.textMuted}
+              resetTokenData={resetTokenData} setResetTokenData={setResetTokenData}
+            />
           </div>
 
-          {/* Welcome panel */}
-          <div style={{width:290,background:t.accentGrad,padding:"44px 30px",display:"flex",flexDirection:"column",justifyContent:"center",position:"relative",overflow:"hidden",opacity:mounted?1:0,transform:mounted?"translateX(0)":isSignup?"translateX(-60px)":"translateX(60px)",transition:"all 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.08s"}}>
+          {/* Welcome panel — always on the right */}
+          <div style={{
+            width:290,background:t.accentGrad,padding:"44px 30px",
+            display:"flex",flexDirection:"column",justifyContent:"center",
+            position:"relative",overflow:"hidden",
+            opacity:mounted && welcomeReady?1:0,
+            transform:mounted && welcomeReady?"translateX(0)":"translateX(60px)",
+            transition:"opacity 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.08s, transform 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.08s",
+          }}>
             {t.particleColor&&<div style={{position:"absolute",inset:0}}><ParticleCanvas color={t.particleColor}/></div>}
             <div style={{position:"absolute",top:-70,right:-70,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,0.07)"}}/>
             <div style={{position:"absolute",bottom:-50,left:-50,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,0.05)"}}/>
@@ -298,6 +345,7 @@ export default function LoginPage(){
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
