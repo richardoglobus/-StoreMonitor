@@ -44,7 +44,7 @@ function expiryBadge(expiryDate: string | null | undefined) {
   return <Badge variant="outline" className="text-xs text-green-600 border-green-400">{format(parseISO(expiryDate),"dd MMM yyyy")}</Badge>;
 }
 
-const emptyLine = () => ({ itemId: "", quantity: "", unitPrice: "", batchNo: "", expiryDate: "", note: "", search: "" });
+const emptyLine = () => ({ itemId: "", quantity: "", unitPrice: "", totalPrice: "", batchNo: "", expiryDate: "", note: "", search: "" });
 
 const dateInputCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
@@ -87,6 +87,23 @@ export default function Purchases() {
   const updateLine = (idx: number, field: string, value: string) => {
     const next = [...lines];
     (next[idx] as any)[field] = value;
+    const line = next[idx] as any;
+    // Bidirectional price calculation
+    if (field === "unitPrice" && line.quantity) {
+      const total = Number(value) * Number(line.quantity);
+      line.totalPrice = total > 0 ? total.toFixed(2) : "";
+    } else if (field === "totalPrice" && line.quantity) {
+      const unit = Number(value) / Number(line.quantity);
+      line.unitPrice = unit > 0 ? unit.toFixed(4) : "";
+    } else if (field === "quantity") {
+      if (line.unitPrice) {
+        const total = Number(line.unitPrice) * Number(value);
+        line.totalPrice = total > 0 ? total.toFixed(2) : "";
+      } else if (line.totalPrice) {
+        const unit = Number(line.totalPrice) / Number(value);
+        line.unitPrice = unit > 0 ? unit.toFixed(4) : "";
+      }
+    }
     setLines(next);
   };
 
@@ -231,12 +248,7 @@ export default function Purchases() {
 
                 {/* Commodity lines */}
                 <div className="py-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">Commodities</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setLines(l => [...l, emptyLine()])}>
-                      <Plus className="h-4 w-4 mr-1"/>Add Item
-                    </Button>
-                  </div>
+                  <Label className="text-base font-semibold">Commodities</Label>
 
                   {lines.map((line, idx) => (
                     <div key={idx} className="border rounded-lg p-3 bg-muted/20 space-y-3">
@@ -270,38 +282,46 @@ export default function Purchases() {
                         </div>
                         {/* Unit Price */}
                         <div className="col-span-4 sm:col-span-2 space-y-1">
-                          <Label className="text-xs">Unit Price <span className="text-destructive">*</span></Label>
-                          <Input type="number" step="0.01" min="0" className="h-8 text-sm" value={line.unitPrice} onChange={e => updateLine(idx,"unitPrice",e.target.value)} required/>
+                          <Label className="text-xs">Unit Price</Label>
+                          <Input type="number" step="0.0001" min="0" className="h-8 text-sm" placeholder="Auto" value={line.unitPrice} onChange={e => updateLine(idx,"unitPrice",e.target.value)}/>
                         </div>
-                        {/* Batch */}
+                        {/* Total Price */}
                         <div className="col-span-4 sm:col-span-2 space-y-1">
-                          <Label className="text-xs">Batch No</Label>
-                          <Input className="h-8 text-sm" placeholder="Optional" value={line.batchNo} onChange={e => updateLine(idx,"batchNo",e.target.value)}/>
+                          <Label className="text-xs">Total Price</Label>
+                          <Input type="number" step="0.01" min="0" className="h-8 text-sm" placeholder="Auto" value={(line as any).totalPrice} onChange={e => updateLine(idx,"totalPrice",e.target.value)}/>
                         </div>
                         {/* Remove */}
-                        <div className="col-span-12 sm:col-span-1 flex justify-end sm:justify-center items-end">
+                        <div className="col-span-12 sm:col-span-4 flex justify-end items-end">
                           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setLines(l => l.filter((_,i) => i !== idx))} disabled={lines.length === 1}>
                             <X className="h-4 w-4"/>
                           </Button>
                         </div>
-                        {/* Expiry + Note (second row) */}
-                        <div className="col-span-6 space-y-1">
+                        {/* Row 2: batch + expiry + note */}
+                        <div className="col-span-4 space-y-1">
+                          <Label className="text-xs">Batch No</Label>
+                          <Input className="h-8 text-sm" placeholder="Optional" value={line.batchNo} onChange={e => updateLine(idx,"batchNo",e.target.value)}/>
+                        </div>
+                        <div className="col-span-4 space-y-1">
                           <Label className="text-xs">Expiry Date</Label>
                           <input type="date" value={line.expiryDate} onChange={e => updateLine(idx,"expiryDate",e.target.value)} className={`${dateInputCls} h-8 text-sm`}/>
                         </div>
-                        <div className="col-span-6 space-y-1">
+                        <div className="col-span-4 space-y-1">
                           <Label className="text-xs">Note</Label>
                           <Input className="h-8 text-sm" placeholder="Optional" value={line.note} onChange={e => updateLine(idx,"note",e.target.value)}/>
                         </div>
                       </div>
-                      {/* Line total */}
                       {line.quantity && line.unitPrice && (
                         <p className="text-xs text-right text-muted-foreground">
-                          Line total: <span className="font-semibold text-primary">{fmt(Number(line.quantity)*Number(line.unitPrice))}</span>
+                          ✓ <span className="font-semibold text-primary">{fmt(Number(line.quantity)*Number(line.unitPrice))}</span> — Unit: {fmt(line.unitPrice)}
                         </p>
                       )}
                     </div>
                   ))}
+
+                  {/* Add Item button - below last entry */}
+                  <Button type="button" variant="outline" size="sm" className="w-full border-dashed gap-2" onClick={() => setLines(l => [...l, emptyLine()])}>
+                    <Plus className="h-4 w-4"/>Add Another Item
+                  </Button>
 
                   {/* Grand total */}
                   {lineTotal > 0 && (

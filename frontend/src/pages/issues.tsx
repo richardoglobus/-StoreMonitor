@@ -263,7 +263,7 @@ export default function Issues() {
                   </div>
                   <div className="space-y-2">
                     <Label>Date</Label>
-                    <Input type="date" value={voucherData.issuedAt} onChange={e => setVoucherData({...voucherData, issuedAt: e.target.value})} required />
+                    <input type="date" value={voucherData.issuedAt} onChange={e => setVoucherData({...voucherData, issuedAt: e.target.value})} required className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
                   </div>
 
                   <div className="space-y-2">
@@ -273,12 +273,7 @@ export default function Issues() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">Items to Issue</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setVoucherItems(v => [...v, emptyRow()])}>
-                      <Plus className="h-4 w-4 mr-1" />Add Item
-                    </Button>
-                  </div>
+                  <Label className="text-base font-semibold">Items to Issue</Label>
                   {voucherItems.map((vItem, index) => (
                     <VoucherItemRow
                       key={index}
@@ -291,6 +286,10 @@ export default function Issues() {
                     />
                   ))}
                 </div>
+
+                  <Button type="button" variant="outline" size="sm" className="w-full border-dashed gap-2 mt-1" onClick={() => setVoucherItems(v => [...v, emptyRow()])}>
+                    <Plus className="h-4 w-4" />Add Another Item
+                  </Button>
 
                 <div className="space-y-2">
                   <Label>General Note (Optional)</Label>
