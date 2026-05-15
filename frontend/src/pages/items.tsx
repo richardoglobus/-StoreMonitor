@@ -73,6 +73,7 @@ export default function Items() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const canManageCatalog = !!user?.permissions?.manageCatalog;
+  const canEditCatalog = !!user?.permissions?.editCatalog;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editItemId, setEditItemId] = useState<number | null>(null);
@@ -257,7 +258,7 @@ export default function Items() {
                     <TableCell className="text-right font-mono text-xs text-muted-foreground">{item.lowStockThreshold!=null?item.lowStockThreshold:10}</TableCell>
                     {canManageCatalog&&(
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={()=>openEditDialog(item)}><Pencil className="h-4 w-4"/></Button>
+                        {canEditCatalog && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={()=>openEditDialog(item)}><Pencil className="h-4 w-4"/></Button>}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={()=>handleDelete(item.id)}><Trash2 className="h-4 w-4"/></Button>
                       </TableCell>
                     )}

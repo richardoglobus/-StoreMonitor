@@ -446,7 +446,7 @@ app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
   logActivity(req, "CREATE_ITEM", "ITEM", row.id, { description: row.description });
   res.status(201).json(row);
 });
-app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
+app.patch("/api/items/:id",requirePermission("editCatalog"),(req,res)=>{
   const id=Number(req.params.id);
   const row=db.get("items").find({id});
   if(!row.value()) return res.status(404).json({error:"Not found"});
@@ -554,7 +554,7 @@ app.post("/api/issues/voucher",requirePermission("issueItems"),(req,res)=>{
   res.status(201).json(inserted);
 });
 
-app.patch("/api/issues/:id", requirePermission("manageUsers"), (req, res) => {
+app.patch("/api/issues/:id", requirePermission("editIssues"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("issues").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Issue not found" });
@@ -605,7 +605,7 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   res.status(201).json(row);
 });
 
-app.patch("/api/purchases/:id", requirePermission("managePurchases"), (req, res) => {
+app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("purchases").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Purchase not found" });
