@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, Plus, Trash2, X, Search } from "lucide-react";
+import { Download, Plus, Trash2, X, Search , Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -157,6 +157,9 @@ export default function Issues() {
   const canDeleteTransactions = !!user?.permissions?.deleteTransactions;
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editIssueOpen, setEditIssueOpen] = useState(false);
+  const [editIssue, setEditIssue] = useState<any>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   const [voucherData, setVoucherData] = useState({
     departmentId: "", issuedAt: format(new Date(), "yyyy-MM-dd"),
@@ -217,6 +220,44 @@ export default function Issues() {
         items: voucherItems.map(i => ({ itemId: Number(i.itemId), quantity: Number(i.quantity), folioNo: i.folioNo.trim(), note: i.note || undefined }))
       }
     });
+  };
+
+  const handleEditIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editIssue) return;
+    setEditLoading(true);
+    try {
+      const res = await fetch(`/api/issues/${editIssue.id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quantity: Number(editIssue.quantity),
+          folioNo: editIssue.folioNo,
+          s11No: editIssue.s11No,
+          issuedAt: editIssue.issuedAt,
+          note: editIssue.note,
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || "Update failed"); return; }
+      toast.success("Issue updated");
+      queryClient.invalidateQueries({ queryKey: getListIssuesQueryKey(queryParams) });
+      setEditIssueOpen(false); setEditIssue(null);
+    } catch { toast.error("Update failed"); }
+    finally { setEditLoading(false); }
+  };
+
+  const openEditIssue = (issue: any) => {
+    setEditIssue({
+      id: issue.id,
+      quantity: issue.quantity,
+      folioNo: issue.folioNo || "",
+      s11No: issue.s11No || "",
+      issuedAt: issue.issuedAt,
+      note: issue.note || "",
+      itemDescription: issue.item?.description || "",
+      departmentName: issue.department?.name || "",
+    });
+    setEditIssueOpen(true);
   };
 
   const downloadUrl = `/api/export/issues.csv?month=${month}${departmentIdFilter !== "all" ? `&departmentId=${departmentIdFilter}` : ""}`;
@@ -374,7 +415,13 @@ export default function Issues() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        {canDeleteTransactions && (
+                        {user?.permissions?.editIssues && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => openEditIssue(issue)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {canDeleteTransactions && (
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
                             onClick={() => { if (confirm("Delete this issue?")) deleteIssue.mutate({ issueId: issue.id }); }}
                             disabled={deleteIssue.isPending}>
@@ -396,6 +443,58 @@ export default function Issues() {
           </div>
         </Card>
       </div>
+      {/* Edit Issue Dialog — admin only */}
+      {editIssue && (
+        <Dialog open={editIssueOpen} onOpenChange={v => { setEditIssueOpen(v); if (!v) setEditIssue(null); }}>
+          <DialogContent className="sm:max-w-[440px]">
+            <DialogHeader>
+              <DialogTitle>Edit Issue</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                {editIssue.itemDescription} → {editIssue.departmentName}
+              </p>
+            </DialogHeader>
+            <form onSubmit={handleEditIssue}>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Issue Date</Label>
+                    <input type="date" value={editIssue.issuedAt}
+                      onChange={e => setEditIssue({...editIssue, issuedAt: e.target.value})}
+                      required className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Quantity</Label>
+                    <Input type="number" min="1" value={editIssue.quantity}
+                      onChange={e => setEditIssue({...editIssue, quantity: e.target.value})} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Folio No</Label>
+                    <Input value={editIssue.folioNo}
+                      onChange={e => setEditIssue({...editIssue, folioNo: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>S11 No</Label>
+                    <Input value={editIssue.s11No}
+                      onChange={e => setEditIssue({...editIssue, s11No: e.target.value})} />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label>Note</Label>
+                    <Input value={editIssue.note}
+                      onChange={e => setEditIssue({...editIssue, note: e.target.value})}
+                      placeholder="Optional note" />
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => { setEditIssueOpen(false); setEditIssue(null); }}>Cancel</Button>
+                <Button type="submit" disabled={editLoading}>
+                  {editLoading ? "Saving…" : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </Layout>
   );
 }

@@ -120,6 +120,9 @@ const ALL_PERMISSIONS = {
   viewReports: true,
   exportData: true,
   deleteTransactions: true,
+  editCatalog: true,
+  editPurchases: true,
+  editIssues: true,
   viewActivityLogs: true,
   manageUsers: true
 };
@@ -137,6 +140,9 @@ function getDefaultPermissions(role) {
       viewReports: true,
       exportData: true,
       deleteTransactions: true,
+      editCatalog: true,
+      editPurchases: true,
+      editIssues: true,
       viewActivityLogs: false,
       manageUsers: false
     };
@@ -147,6 +153,9 @@ function getDefaultPermissions(role) {
     manageCatalog: false,
     manageDepartments: false,
     manageInventory: false,
+    editCatalog: false,
+    editPurchases: false,
+    editIssues: false,
     managePurchases: false,
     viewReports: false,
     exportData: false,
@@ -544,6 +553,25 @@ app.post("/api/issues/voucher",requirePermission("issueItems"),(req,res)=>{
   logActivity(req, "CREATE_ISSUE_VOUCHER", "ISSUE", null, { departmentId, itemCount: items.length, voucherId });
   res.status(201).json(inserted);
 });
+
+app.patch("/api/issues/:id", requirePermission("manageUsers"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("issues").find({ id });
+  if (!row.value()) return res.status(404).json({ error: "Issue not found" });
+  const { quantity, folioNo, s11No, issuedAt, note, departmentId, itemId } = req.body;
+  const updates = {};
+  if (quantity !== undefined) updates.quantity = Number(quantity);
+  if (folioNo !== undefined) updates.folioNo = folioNo || null;
+  if (s11No !== undefined) updates.s11No = s11No || null;
+  if (issuedAt !== undefined) updates.issuedAt = issuedAt;
+  if (note !== undefined) updates.note = note || null;
+  if (departmentId !== undefined) updates.departmentId = Number(departmentId);
+  if (itemId !== undefined) updates.itemId = Number(itemId);
+  row.assign(updates).write();
+  logActivity(req, "UPDATE_ISSUE", "ISSUE", id, updates);
+  res.json(row.value());
+});
+
 app.delete("/api/issues/:id",requirePermission("deleteTransactions"),(req,res)=>{ const id=Number(req.params.id); db.get("issues").remove({id}).write(); logActivity(req, "DELETE_ISSUE", "ISSUE", id, null); res.status(204).send(); });
 
 // PURCHASES
