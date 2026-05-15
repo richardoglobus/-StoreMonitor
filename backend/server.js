@@ -172,12 +172,15 @@ function normalizePermissions(role, permissions) {
     viewDashboard: permissions.viewDashboard !== undefined ? !!permissions.viewDashboard : defaults.viewDashboard,
     issueItems: permissions.issueItems !== undefined ? !!permissions.issueItems : defaults.issueItems,
     manageCatalog: permissions.manageCatalog !== undefined ? !!permissions.manageCatalog : defaults.manageCatalog,
+    editCatalog: permissions.editCatalog !== undefined ? !!permissions.editCatalog : defaults.editCatalog,
     manageDepartments: permissions.manageDepartments !== undefined ? !!permissions.manageDepartments : defaults.manageDepartments,
     manageInventory: permissions.manageInventory !== undefined ? !!permissions.manageInventory : defaults.manageInventory,
     managePurchases: permissions.managePurchases !== undefined ? !!permissions.managePurchases : defaults.managePurchases,
+    editPurchases: permissions.editPurchases !== undefined ? !!permissions.editPurchases : defaults.editPurchases,
     viewReports: permissions.viewReports !== undefined ? !!permissions.viewReports : defaults.viewReports,
     exportData: permissions.exportData !== undefined ? !!permissions.exportData : defaults.exportData,
     deleteTransactions: permissions.deleteTransactions !== undefined ? !!permissions.deleteTransactions : defaults.deleteTransactions,
+    editIssues: permissions.editIssues !== undefined ? !!permissions.editIssues : defaults.editIssues,
     viewActivityLogs: permissions.viewActivityLogs !== undefined ? !!permissions.viewActivityLogs : defaults.viewActivityLogs,
     manageUsers: permissions.manageUsers !== undefined ? !!permissions.manageUsers : defaults.manageUsers
   };
