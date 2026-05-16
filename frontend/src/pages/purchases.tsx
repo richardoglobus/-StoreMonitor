@@ -55,7 +55,7 @@ export default function Purchases() {
   if (!user?.permissions?.managePurchases) { setLocation("/"); return null; }
 
   const canDelete = !!user?.permissions?.deleteTransactions;
-  const canEditPurchases = !!user?.permissions?.editPurchases;
+  const canEdit = !!user?.permissions?.editPurchases;
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());
   const [search, setSearch] = useState("");
@@ -378,7 +378,7 @@ export default function Purchases() {
                     <TableCell>{expiryBadge((p as any).expiryDate)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {canEditPurchases && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5"/></Button>}
+                        {canEdit && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5"/></Button>}
                         {canDelete && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => { if(confirm("Delete this purchase?")) deletePurchase.mutate({purchaseId:p.id}); }}><Trash2 className="h-3.5 w-3.5"/></Button>}
                       </div>
                     </TableCell>

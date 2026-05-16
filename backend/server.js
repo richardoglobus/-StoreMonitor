@@ -172,15 +172,12 @@ function normalizePermissions(role, permissions) {
     viewDashboard: permissions.viewDashboard !== undefined ? !!permissions.viewDashboard : defaults.viewDashboard,
     issueItems: permissions.issueItems !== undefined ? !!permissions.issueItems : defaults.issueItems,
     manageCatalog: permissions.manageCatalog !== undefined ? !!permissions.manageCatalog : defaults.manageCatalog,
-    editCatalog: permissions.editCatalog !== undefined ? !!permissions.editCatalog : defaults.editCatalog,
     manageDepartments: permissions.manageDepartments !== undefined ? !!permissions.manageDepartments : defaults.manageDepartments,
     manageInventory: permissions.manageInventory !== undefined ? !!permissions.manageInventory : defaults.manageInventory,
     managePurchases: permissions.managePurchases !== undefined ? !!permissions.managePurchases : defaults.managePurchases,
-    editPurchases: permissions.editPurchases !== undefined ? !!permissions.editPurchases : defaults.editPurchases,
     viewReports: permissions.viewReports !== undefined ? !!permissions.viewReports : defaults.viewReports,
     exportData: permissions.exportData !== undefined ? !!permissions.exportData : defaults.exportData,
     deleteTransactions: permissions.deleteTransactions !== undefined ? !!permissions.deleteTransactions : defaults.deleteTransactions,
-    editIssues: permissions.editIssues !== undefined ? !!permissions.editIssues : defaults.editIssues,
     viewActivityLogs: permissions.viewActivityLogs !== undefined ? !!permissions.viewActivityLogs : defaults.viewActivityLogs,
     manageUsers: permissions.manageUsers !== undefined ? !!permissions.manageUsers : defaults.manageUsers
   };
@@ -449,7 +446,7 @@ app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
   logActivity(req, "CREATE_ITEM", "ITEM", row.id, { description: row.description });
   res.status(201).json(row);
 });
-app.patch("/api/items/:id",requirePermission("editCatalog"),(req,res)=>{
+app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
   const id=Number(req.params.id);
   const row=db.get("items").find({id});
   if(!row.value()) return res.status(404).json({error:"Not found"});
@@ -557,7 +554,7 @@ app.post("/api/issues/voucher",requirePermission("issueItems"),(req,res)=>{
   res.status(201).json(inserted);
 });
 
-app.patch("/api/issues/:id", requirePermission("editIssues"), (req, res) => {
+app.patch("/api/issues/:id", requirePermission("manageUsers"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("issues").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Issue not found" });
@@ -608,7 +605,7 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   res.status(201).json(row);
 });
 
-app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) => {
+app.patch("/api/purchases/:id", requirePermission("managePurchases"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("purchases").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Purchase not found" });

@@ -28,14 +28,14 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
       viewDashboard: true,
       issueItems: true,
       manageCatalog: true,
-      editCatalog: true,
       manageDepartments: true,
       manageInventory: true,
       managePurchases: true,
-      editPurchases: true,
       viewReports: true,
       exportData: true,
       deleteTransactions: true,
+      editCatalog: true,
+      editPurchases: true,
       editIssues: true,
       viewActivityLogs: true,
       manageUsers: true,
@@ -46,14 +46,14 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
       viewDashboard: true,
       issueItems: true,
       manageCatalog: true,
-      editCatalog: true,
       manageDepartments: true,
       manageInventory: true,
       managePurchases: true,
-      editPurchases: true,
       viewReports: true,
       exportData: true,
       deleteTransactions: true,
+      editCatalog: true,
+      editPurchases: true,
       editIssues: true,
       viewActivityLogs: false,
       manageUsers: false,
@@ -63,79 +63,36 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
     viewDashboard: true,
     issueItems: true,
     manageCatalog: false,
-    editCatalog: false,
     manageDepartments: false,
     manageInventory: false,
     managePurchases: false,
-    editPurchases: false,
     viewReports: false,
     exportData: false,
     deleteTransactions: false,
+    editCatalog: false,
+    editPurchases: false,
     editIssues: false,
     viewActivityLogs: false,
     manageUsers: false,
   };
 };
 
-// Human-readable labels and grouping for the permissions UI
-const PERMISSION_META: Record<string, { label: string; description: string; group: string }> = {
-  viewDashboard:      { label: "View Dashboard",        description: "See the main dashboard and stats",          group: "General" },
-  issueItems:         { label: "Issue Items",            description: "Create issue vouchers for departments",     group: "Issues" },
-  editIssues:         { label: "Edit Issues",            description: "Edit existing issue log entries",           group: "Issues" },
-  deleteTransactions: { label: "Delete Transactions",    description: "Delete issue and purchase records",         group: "Issues" },
-  manageCatalog:      { label: "Manage Catalog",         description: "Add & delete items from the catalog",       group: "Catalog" },
-  editCatalog:        { label: "Edit Catalog Items",     description: "Edit existing catalog item details",        group: "Catalog" },
-  managePurchases:    { label: "Manage Purchases",       description: "Record and view purchase entries",          group: "Purchases" },
-  editPurchases:      { label: "Edit Purchases",         description: "Edit existing purchase records",            group: "Purchases" },
-  manageDepartments:  { label: "Manage Departments",     description: "Add and edit hospital departments",         group: "Admin" },
-  manageInventory:    { label: "Manage Inventory",       description: "Adjust inventory counts & receipts",        group: "Admin" },
-  viewReports:        { label: "View Reports",           description: "Access monthly reports & stock valuation",  group: "Reports" },
-  exportData:         { label: "Export Data",            description: "Download CSV and Excel exports",            group: "Reports" },
-  viewActivityLogs:   { label: "View Activity Logs",     description: "See the full system audit trail",           group: "Admin" },
-  manageUsers:        { label: "Manage Users & Settings", description: "Create/edit users, change settings",       group: "Admin" },
+const PERMISSION_LABELS: Record<string, string> = {
+  viewDashboard: "View Dashboard",
+  issueItems: "Issue Items",
+  manageCatalog: "Manage Catalog (Add/Delete)",
+  editCatalog: "Edit Catalog Items",
+  manageDepartments: "Manage Departments",
+  manageInventory: "Manage Inventory",
+  managePurchases: "Manage Purchases (Add/Delete)",
+  editPurchases: "Edit Purchases",
+  viewReports: "View Reports",
+  exportData: "Export Data",
+  deleteTransactions: "Delete Transactions",
+  editIssues: "Edit Issues (Admin)",
+  viewActivityLogs: "View Activity Logs",
+  manageUsers: "Manage Users & Settings",
 };
-
-const PERMISSION_GROUPS = ["General", "Issues", "Catalog", "Purchases", "Reports", "Admin"];
-
-function PermissionsEditor({ permissions, onChange, disabled }: {
-  permissions: Record<string, boolean>;
-  onChange: (key: string, value: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="space-y-4">
-      {PERMISSION_GROUPS.map(group => {
-        const keys = Object.keys(PERMISSION_META).filter(k => PERMISSION_META[k].group === group && k in permissions);
-        if (keys.length === 0) return null;
-        return (
-          <div key={group}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{group}</p>
-            <div className="space-y-2">
-              {keys.map(key => {
-                const meta = PERMISSION_META[key];
-                return (
-                  <label key={key} className={`flex items-start gap-3 p-2 rounded-md border transition-colors cursor-pointer ${permissions[key] ? "bg-primary/5 border-primary/30" : "bg-muted/20 border-transparent"} ${disabled ? "opacity-60 cursor-not-allowed" : "hover:bg-muted/40"}`}>
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 accent-primary"
-                      checked={!!permissions[key]}
-                      disabled={disabled}
-                      onChange={e => onChange(key, e.target.checked)}
-                    />
-                    <div>
-                      <p className="text-sm font-medium leading-none">{meta.label}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{meta.description}</p>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 export default function UserManagement() {
   const queryClient = useQueryClient();
@@ -292,11 +249,13 @@ export default function UserManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label>Access Rights</Label>
-                  <div className="max-h-80 overflow-y-auto pr-1">
-                    <PermissionsEditor
-                      permissions={formData.permissions}
-                      onChange={(key, val) => setFormData({...formData, permissions: { ...formData.permissions, [key]: val }})}
-                    />
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {Object.entries(formData.permissions).map(([key, value]) => (
+                      <label key={key} className="flex items-center gap-2">
+                        <input type="checkbox" checked={!!value} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
+                        <span>{key}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
                 <DialogFooter>
@@ -399,14 +358,14 @@ export default function UserManagement() {
               </div>
               <div className="space-y-2">
                 <Label>Access Rights</Label>
-                <div className="max-h-80 overflow-y-auto pr-1">
-                  <PermissionsEditor
-                    permissions={formData.permissions}
-                    onChange={(key, val) => setFormData({...formData, permissions: { ...formData.permissions, [key]: val }})}
-                    disabled={editingUser?.id === currentUser?.id}
-                  />
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  {Object.entries(formData.permissions).map(([key, value]) => (
+                    <label key={key} className="flex items-center gap-2">
+                      <input type="checkbox" checked={!!value} disabled={editingUser?.id === currentUser?.id} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
+                      <span>{key}</span>
+                    </label>
+                  ))}
                 </div>
-                {editingUser?.id === currentUser?.id && <p className="text-[10px] text-muted-foreground">You cannot change your own permissions</p>}
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
