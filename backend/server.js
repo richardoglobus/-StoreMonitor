@@ -178,6 +178,9 @@ function normalizePermissions(role, permissions) {
     viewReports: permissions.viewReports !== undefined ? !!permissions.viewReports : defaults.viewReports,
     exportData: permissions.exportData !== undefined ? !!permissions.exportData : defaults.exportData,
     deleteTransactions: permissions.deleteTransactions !== undefined ? !!permissions.deleteTransactions : defaults.deleteTransactions,
+    editCatalog: permissions.editCatalog !== undefined ? !!permissions.editCatalog : defaults.editCatalog,
+    editPurchases: permissions.editPurchases !== undefined ? !!permissions.editPurchases : defaults.editPurchases,
+    editIssues: permissions.editIssues !== undefined ? !!permissions.editIssues : defaults.editIssues,
     viewActivityLogs: permissions.viewActivityLogs !== undefined ? !!permissions.viewActivityLogs : defaults.viewActivityLogs,
     manageUsers: permissions.manageUsers !== undefined ? !!permissions.manageUsers : defaults.manageUsers
   };
