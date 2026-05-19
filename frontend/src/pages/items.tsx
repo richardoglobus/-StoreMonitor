@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PackageSearch, Plus, Search, Pencil, Trash2, AlertCircle } from "lucide-react";
+import { PackageSearch, Plus, Search, Pencil, Trash2, AlertCircle, Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -145,7 +145,11 @@ export default function Items() {
 
   const filteredItems = items?.filter(item => item.description.toLowerCase().includes(search.toLowerCase()));
 
+  // Items where issued > physical + purchased (impossible/data integrity issue)
+  const negativeStockItems = (items ?? []).filter(i => i.stockBalance < 0);
+
   const getStockColorClass = (balance: number) => {
+    if (balance < 0) return "text-white font-bold";
     if (balance <= 0) return "text-destructive font-bold";
     if (balance <= 10) return "text-orange-500 font-bold";
     return "text-green-600 font-bold";
@@ -217,6 +221,36 @@ export default function Items() {
           )}
         </div>
 
+        {/* Emergency: negative stock banner */}
+        {negativeStockItems.length > 0 && (
+          <div className="border-2 border-red-500 bg-red-50 dark:bg-red-950/40 rounded-lg p-4 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-red-600"/>
+              </span>
+              <span className="font-bold text-red-700 dark:text-red-400 text-sm uppercase tracking-wide flex items-center gap-1">
+                <Zap className="h-4 w-4"/>STOCK INTEGRITY EMERGENCY — {negativeStockItems.length} item{negativeStockItems.length>1?"s":""} over-issued
+              </span>
+            </div>
+            <p className="text-xs text-red-700 dark:text-red-400">
+              These items have been issued more than what is physically in stock (Physical + Purchased). 
+              This is a data integrity problem — verify issue vouchers and physical counts immediately.
+            </p>
+            <div className="flex flex-col gap-1">
+              {negativeStockItems.map(item => (
+                <div key={item.id} className="flex items-center justify-between bg-red-100 dark:bg-red-900/30 rounded px-3 py-1.5 text-xs font-mono">
+                  <span className="font-bold text-red-800 dark:text-red-300">{item.description}</span>
+                  <span className="text-red-700 dark:text-red-400">
+                    Phys {item.quantity??0} + Purch {item.purchasedTotal} = {(item.quantity??0)+item.purchasedTotal} &nbsp;|&nbsp; Issued {item.issuedTotal} &nbsp;→&nbsp;
+                    <span className="font-black text-red-900 dark:text-red-200">Balance: {item.stockBalance}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="bg-card border rounded-lg overflow-hidden flex flex-col">
           <div className="p-4 border-b flex items-center gap-2 bg-muted/30">
             <Search className="h-4 w-4 text-muted-foreground"/>
@@ -247,23 +281,34 @@ export default function Items() {
                     <TableCell><Skeleton className="h-4 w-16 ml-auto"/></TableCell>
                     {canManageCatalog&&<TableCell><Skeleton className="h-4 w-12 ml-auto"/></TableCell>}
                   </TableRow>
-                )) : filteredItems&&filteredItems.length>0 ? filteredItems.map(item=>(
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.description}</TableCell>
-                    <TableCell className="text-center"><Badge variant="secondary" className="font-normal">{item.unit}</Badge></TableCell>
-                    <TableCell className="text-right font-mono">{item.quantity??0}</TableCell>
-                    <TableCell className="text-right font-mono">{item.purchasedTotal}</TableCell>
-                    <TableCell className="text-right font-mono">{item.issuedTotal}</TableCell>
-                    <TableCell className={`text-right font-mono ${getStockColorClass(item.stockBalance)}`}>{item.stockBalance<=0?"OUT":item.stockBalance}</TableCell>
-                    <TableCell className="text-right font-mono text-xs text-muted-foreground">{item.lowStockThreshold!=null?item.lowStockThreshold:10}</TableCell>
+                )) : filteredItems&&filteredItems.length>0 ? filteredItems.map(item=>{
+                  const isNegative = item.stockBalance < 0;
+                  return (
+                  <TableRow key={item.id} className={isNegative ? "bg-red-600 dark:bg-red-800 hover:bg-red-500 dark:hover:bg-red-700" : ""}>
+                    <TableCell className={`font-medium ${isNegative?"text-white":""}`}>
+                      {isNegative && <Zap className="h-3.5 w-3.5 inline mr-1 text-yellow-300 animate-pulse"/>}
+                      {item.description}
+                      {isNegative && <span className="ml-2 text-[10px] font-black bg-yellow-400 text-red-900 px-1.5 py-0.5 rounded uppercase tracking-widest">EMERGENCY</span>}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={isNegative?"destructive":"secondary"} className={`font-normal ${isNegative?"bg-red-900 text-white border-red-700":""}`}>{item.unit}</Badge>
+                    </TableCell>
+                    <TableCell className={`text-right font-mono ${isNegative?"text-red-100":""}`}>{item.quantity??0}</TableCell>
+                    <TableCell className={`text-right font-mono ${isNegative?"text-red-100":""}`}>{item.purchasedTotal}</TableCell>
+                    <TableCell className={`text-right font-mono ${isNegative?"text-yellow-200 font-bold":""}`}>{item.issuedTotal}</TableCell>
+                    <TableCell className={`text-right font-mono ${isNegative?"text-yellow-300 font-black text-base":""}${!isNegative?" "+getStockColorClass(item.stockBalance):""}`}>
+                      {isNegative ? item.stockBalance : item.stockBalance<=0 ? "OUT" : item.stockBalance}
+                    </TableCell>
+                    <TableCell className={`text-right font-mono text-xs ${isNegative?"text-red-200":"text-muted-foreground"}`}>{item.lowStockThreshold!=null?item.lowStockThreshold:10}</TableCell>
                     {canManageCatalog&&(
                       <TableCell className="text-right">
-                        {canEditCatalog && <Button variant="ghost" size="icon" className="h-8 w-8" onClick={()=>openEditDialog(item)}><Pencil className="h-4 w-4"/></Button>}
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={()=>handleDelete(item.id)}><Trash2 className="h-4 w-4"/></Button>
+                        {canEditCatalog && <Button variant="ghost" size="icon" className={`h-8 w-8 ${isNegative?"text-white hover:bg-red-500":""}`} onClick={()=>openEditDialog(item)}><Pencil className="h-4 w-4"/></Button>}
+                        <Button variant="ghost" size="icon" className={`h-8 w-8 ${isNegative?"text-red-200 hover:text-white hover:bg-red-500":"text-muted-foreground hover:text-destructive"}`} onClick={()=>handleDelete(item.id)}><Trash2 className="h-4 w-4"/></Button>
                       </TableCell>
                     )}
                   </TableRow>
-                )) : (
+                  );
+                }) : (
                   <TableRow>
                     <TableCell colSpan={canManageCatalog?7:6} className="h-32 text-center text-muted-foreground">
                       <PackageSearch className="h-8 w-8 mx-auto mb-2 opacity-50"/>
