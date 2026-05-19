@@ -441,6 +441,19 @@ app.get("/api/departments/:id",(req,res)=>{
   const row=db.get("departments").find({id:Number(req.params.id)}).value();
   if(!row) return res.status(404).json({error:"Not found"}); res.json(row);
 });
+app.patch("/api/departments/:id",requirePermission("manageDepartments"),(req,res)=>{
+  const id=Number(req.params.id);
+  const {name}=req.body;
+  if(!name||!name.trim()) return res.status(400).json({error:"Name required"});
+  const trimmed=name.trim().toUpperCase();
+  const existing=db.get("departments").find({id}).value();
+  if(!existing) return res.status(404).json({error:"Not found"});
+  const conflict=db.get("departments").find({name:trimmed}).value();
+  if(conflict && conflict.id!==id) return res.status(400).json({error:"A department with that name already exists"});
+  db.get("departments").find({id}).assign({name:trimmed,slug:slugify(trimmed)}).write();
+  logActivity(req,"RENAME_DEPARTMENT","DEPARTMENT",id,{from:existing.name,to:trimmed});
+  res.json(db.get("departments").find({id}).value());
+});
 
 // ITEMS
 app.get("/api/items",(_,res)=>res.json(db.get("items").orderBy("description","asc").value()));

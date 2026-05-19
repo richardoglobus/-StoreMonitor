@@ -4,14 +4,14 @@ import { Layout } from "@/components/layout";
 import { DateRangePicker, dateToMonth, todayStr, firstOfMonth } from "@/components/date-range-picker";
 import {
   useGetDashboardSummary, useGetRecentIssues, useGetLowStock,
-  useGetDepartmentUsage, useGetTopUsedItems, useListActivity,
+  useGetDepartmentUsage, useGetTopUsedItems, useListActivity, useListItemStock,
   getGetDashboardSummaryQueryKey, getGetRecentIssuesQueryKey,
   getGetLowStockQueryKey, getGetDepartmentUsageQueryKey,
-  getGetTopUsedItemsQueryKey, getListActivityQueryKey,
+  getGetTopUsedItemsQueryKey, getListActivityQueryKey, getListItemStockQueryKey,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown, Zap } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Cell } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +81,8 @@ export default function Dashboard() {
   const { data: activityLog, isLoading: isLoadingActivity } = useListActivity(
     { limit: activityLimit }, { query: { enabled: canViewActivity, queryKey: getListActivityQueryKey({ limit: activityLimit }) } }
   );
+  const { data: allItems } = useListItemStock({ query: { queryKey: getListItemStockQueryKey(), refetchInterval: 30_000 } });
+  const negativeStock = (allItems ?? []).filter(i => i.stockBalance < 0);
 
   // Deduplicate low stock — one entry per item, worst balance wins
   const lowStock = (() => {
@@ -119,6 +121,69 @@ export default function Dashboard() {
           <StatCard title="Low Stock Items" value={isLoadingLowStock ? "…" : lowStock.length} icon={AlertTriangle} loading={false} description={`${lowStock.filter(i=>i.balance<=0).length} out of stock, ${lowStock.filter(i=>i.balance>0).length} low`} critical={lowStock.length>0}/>
           <StatCard title="Next Issue Day" value={summary?.nextIssueWeekday??"-"} icon={Calendar} loading={isLoadingSummary} description={summary?.nextIssueDate?format(new Date(summary.nextIssueDate),"EEE, MMM d yyyy"):"No scheduled issues"}/>
         </div>
+
+        {/* ── STOCK INTEGRITY EMERGENCY ── */}
+        {negativeStock.length > 0 && (
+          <div className="border-2 border-red-500 rounded-xl overflow-hidden shadow-lg">
+            {/* Header bar */}
+            <div className="bg-red-600 dark:bg-red-700 px-4 py-3 flex items-center gap-3">
+              <span className="relative flex h-4 w-4 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-60"/>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-white"/>
+              </span>
+              <Zap className="h-5 w-5 text-yellow-300 shrink-0"/>
+              <span className="font-black text-white text-sm uppercase tracking-widest">
+                Stock Integrity Emergency — {negativeStock.length} item{negativeStock.length>1?"s":""} over-issued
+              </span>
+            </div>
+            {/* Body */}
+            <div className="bg-red-50 dark:bg-red-950/50 p-4 space-y-3">
+              <p className="text-sm text-red-800 dark:text-red-300">
+                The following items have been issued more than their total available stock
+                (Physical Qty + Purchased). This means negative balance — a data integrity problem.
+                Verify the issue vouchers and physical counts immediately.
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-red-300 dark:border-red-800">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300 text-xs uppercase">
+                      <th className="text-left px-3 py-2 font-semibold">Item</th>
+                      <th className="text-right px-3 py-2 font-semibold">Physical</th>
+                      <th className="text-right px-3 py-2 font-semibold">Purchased</th>
+                      <th className="text-right px-3 py-2 font-semibold">Available</th>
+                      <th className="text-right px-3 py-2 font-semibold">Issued</th>
+                      <th className="text-right px-3 py-2 font-semibold">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {negativeStock.map((item,i)=>{
+                      const available = (item.quantity??0) + item.purchasedTotal;
+                      return (
+                        <tr key={item.id} className={i%2===0?"bg-white dark:bg-red-950/30":"bg-red-50 dark:bg-red-950/50"}>
+                          <td className="px-3 py-2 font-semibold text-red-900 dark:text-red-200 flex items-center gap-1.5">
+                            <Zap className="h-3 w-3 text-yellow-500 shrink-0"/>
+                            {item.description}
+                            <Badge className="ml-1 text-[9px] px-1 py-0 bg-yellow-400 text-red-900 border-0 font-black">EMERGENCY</Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono text-red-700 dark:text-red-400">{item.quantity??0}</td>
+                          <td className="px-3 py-2 text-right font-mono text-red-700 dark:text-red-400">{item.purchasedTotal}</td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-red-800 dark:text-red-300">{available}</td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-orange-700 dark:text-orange-400">{item.issuedTotal}</td>
+                          <td className="px-3 py-2 text-right font-black text-white">
+                            <span className="bg-red-600 rounded px-2 py-0.5">{item.stockBalance}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-red-700 dark:text-red-400 italic">
+                Go to <strong>Catalog</strong> to see these items highlighted, or <strong>Issues Log</strong> to review recent transactions.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="col-span-1 lg:col-span-2">
