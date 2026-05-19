@@ -156,6 +156,7 @@ export default function Issues() {
   const [to, setTo] = useState(todayStr());
   const canDeleteTransactions = !!user?.permissions?.deleteTransactions;
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editIssueOpen, setEditIssueOpen] = useState(false);
   const [editIssue, setEditIssue] = useState<any>(null);
@@ -262,6 +263,19 @@ export default function Issues() {
 
   const downloadUrl = `/api/export/issues.csv?month=${month}${departmentIdFilter !== "all" ? `&departmentId=${departmentIdFilter}` : ""}`;
 
+  const filteredIssues = search.trim()
+    ? (issues ?? []).filter(i => {
+        const q = search.toLowerCase();
+        return (
+          i.item?.description?.toLowerCase().includes(q) ||
+          i.department?.name?.toLowerCase().includes(q) ||
+          i.folioNo?.toLowerCase().includes(q) ||
+          i.s11No?.toLowerCase().includes(q) ||
+          i.voucherId?.toLowerCase().includes(q)
+        );
+      })
+    : (issues ?? []);
+
   return (
     <Layout>
       <div className="flex flex-col gap-6">
@@ -360,6 +374,25 @@ export default function Issues() {
         </div>
 
         <Card>
+          <div className="p-3 border-b flex items-center gap-2 bg-muted/20">
+            <Search className="h-4 w-4 text-muted-foreground shrink-0"/>
+            <Input
+              placeholder="Search by item, department, folio, S11 or voucher…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="h-8 bg-background max-w-sm"
+            />
+            {search && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setSearch("")}>
+                <X className="h-4 w-4"/>
+              </Button>
+            )}
+            {search && (
+              <span className="text-xs text-muted-foreground ml-1">
+                {filteredIssues.length} result{filteredIssues.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -384,7 +417,7 @@ export default function Issues() {
                     <TableCell><Skeleton className="h-4 w-24 mx-auto" /></TableCell>
                     <TableCell></TableCell>
                   </TableRow>
-                )) : issues && issues.length > 0 ? issues.map(issue => {
+                )) : filteredIssues.length > 0 ? filteredIssues.map(issue => {
                   const dayLabel = getWeekdayLabel(issue.issuedAt);
                   return (
                     <TableRow key={issue.id}>
@@ -434,7 +467,7 @@ export default function Issues() {
                 }) : (
                   <TableRow>
                     <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                      No issues found for the selected criteria
+                      {search ? `No issues match "${search}"` : "No issues found for the selected criteria"}
                     </TableCell>
                   </TableRow>
                 )}
