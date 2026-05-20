@@ -3,8 +3,10 @@ import type { UseQueryOptions, UseMutationOptions } from "@tanstack/react-query"
 
 // ─── Base fetch ────────────────────────────────────────────────────────────────
 
+const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
+
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, { credentials: "include", ...options });
+  const res = await fetch(`${API_BASE}${url}`, { credentials: "include", ...options });
   if (res.status === 204) return undefined as T;
   const data = await res.json();
   if (!res.ok) throw data;

@@ -1,13 +1,21 @@
 services:
   - type: web
-    name: mukurweini-hospital-stores-app
+    name: storemonitor-backend
     env: node
     plan: free
-    autoDeploy: true
-    buildCommand: cd frontend && npm ci && npm run build && cd ../backend && npm ci
-    startCommand: cd backend && node server.js
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    disk:
+      name: store-data
+      mountPath: /app/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATA_PATH
+        value: /app/data/store.json
       - key: SESSION_SECRET
         generateValue: true
+      - key: FRONTEND_URL
+        sync: false        # you fill this in Render dashboard after Vercel deploys

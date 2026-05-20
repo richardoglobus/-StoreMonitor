@@ -345,15 +345,28 @@ function csvEscape(v) {
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(cors({credentials:true,origin:true}));
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173").split(",").map(s=>s.trim());
+app.use(cors({
+  credentials: true,
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) return cb(null, true);
+    cb(new Error("Not allowed by CORS"));
+  }
+}));
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
 const sessionsDir = path.join(path.dirname(process.env.DATA_PATH || path.join(__dirname, "store.json")), "sessions");
+const isProd = process.env.NODE_ENV === "production";
 app.use(session({
   store: new FileStore({ path: sessionsDir, ttl: 86400 * 30, retries: 1, logFn: ()=>{} }),
-  secret: process.env.SESSION_SECRET||"dev-secret-store-2024",
+  secret: process.env.SESSION_SECRET || "dev-secret-store-2024",
   resave: false, saveUninitialized: false, rolling: true,
-  cookie: { httpOnly:true, sameSite:"lax", secure: process.env.NODE_ENV==="production", maxAge: 86400000*30 }
+  cookie: {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",   // "none" required for cross-origin cookies
+    maxAge: 86400000 * 30
+  }
 }));
 
 function requireAuth(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); next(); }
