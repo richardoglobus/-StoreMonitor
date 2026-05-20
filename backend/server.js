@@ -3,6 +3,7 @@
 const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
+const FileStore = require("session-file-store")(session);
 const bcrypt = require("bcryptjs");
 const low = require("lowdb");
 const FileSync = require("lowdb/adapters/FileSync");
@@ -347,14 +348,27 @@ app.set("trust proxy", 1);
 app.use(cors({credentials:true,origin:true}));
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
+const sessionsDir = path.join(path.dirname(process.env.DATA_PATH || path.join(__dirname, "store.json")), "sessions");
 app.use(session({
+  store: new FileStore({ path: sessionsDir, ttl: 86400 * 30, retries: 1, logFn: ()=>{} }),
   secret: process.env.SESSION_SECRET||"dev-secret-store-2024",
-  resave:false,saveUninitialized:false,rolling:true,
-  cookie:{httpOnly:true,sameSite:"lax",secure:process.env.NODE_ENV==="production",maxAge:86400000*30}
+  resave: false, saveUninitialized: false, rolling: true,
+  cookie: { httpOnly:true, sameSite:"lax", secure: process.env.NODE_ENV==="production", maxAge: 86400000*30 }
 }));
 
 function requireAuth(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); next(); }
 function requireAdmin(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); if(req.session.role!=="admin") return res.status(403).json({error:"Forbidden"}); next(); }
+function requirePermission(perm){
+  return (req,res,next)=>{
+    if(!req.session.userId) return res.status(401).json({error:"Unauthorized"});
+    // Always re-read from DB so permission changes take effect without re-login
+    const user = db.get("users").find({id: req.session.userId}).value();
+    if(!user) return res.status(401).json({error:"Unauthorized"});
+    const perms = normalizePermissions(user.role, user.permissions);
+    if(user.role==="admin" || perms[perm]) return next();
+    return res.status(403).json({error:"Forbidden"});
+  };
+}
 function requirePermission(permission) {
   return (req, res, next) => {
     if (!req.session.userId) return res.status(401).json({ error: "Unauthorized" });
@@ -387,7 +401,8 @@ app.get("/api/auth/me",(req,res)=>{
   if(!req.session.userId) return res.status(401).json({error:"Unauthorized"});
   const user=db.get("users").find({id:req.session.userId}).value();
   if(!user) return res.status(401).json({error:"Unauthorized"});
-  res.json({id:user.id,username:user.username,fullName:user.fullName,role:user.role,permissions:normalizePermissions(user.role, user.permissions)});
+  const freshPerms = normalizePermissions(user.role, user.permissions);
+  res.json({id:user.id,username:user.username,fullName:user.fullName,role:user.role,permissions:freshPerms});
 });
 app.get("/api/auth/users",requirePermission("manageUsers"),(_,res)=>{ res.json(db.get("users").orderBy("username","asc").value().map(u=>({id:u.id,username:u.username,fullName:u.fullName,role:u.role,permissions:normalizePermissions(u.role, u.permissions)}))); });
 app.post("/api/auth/users",requireAdmin,(req,res)=>{
