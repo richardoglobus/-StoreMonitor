@@ -241,57 +241,59 @@ function logActivity(req, action, entityType, entityId, details = null) {
   }).write();
 }
 
-if (db.get("departments").value().length === 0) {
-  for (const name of DEPARTMENTS) {
-    db.get("departments").push({ id: nextId("departments"), name, slug: slugify(name) }).write();
+function seedAdmin() {
+  if (db.get("departments").value().length === 0) {
+    for (const name of DEPARTMENTS) {
+      db.get("departments").push({ id: nextId("departments"), name, slug: slugify(name) }).write();
+    }
+    console.log("Seeded departments");
   }
-  console.log("Seeded departments");
-}
-if (db.get("items").value().length === 0) {
-  for (const [description, unit] of ITEMS) {
-    db.get("items").push({ id: nextId("items"), description, unit: UNIT_FULL_NAMES[unit] || unit, quantity: 0 }).write();
+  if (db.get("items").value().length === 0) {
+    for (const [description, unit] of ITEMS) {
+      db.get("items").push({ id: nextId("items"), description, unit: UNIT_FULL_NAMES[unit] || unit, quantity: 0 }).write();
+    }
+    console.log("Seeded items");
   }
-  console.log("Seeded items");
-}
-if (db.get("users").value().length === 0) {
-  const hash = bcrypt.hashSync("admin123", 10);
-  db.get("users").push({
-    id: nextId("users"),
-    username: "admin",
-    passwordHash: hash,
-    fullName: "Administrator",
-    role: "admin",
-    permissions: getDefaultPermissions("admin")
-  }).write();
-  console.log("Created admin user: admin / admin123");
-}
-
-// Migrate existing users — add new permissions if missing
-for (const user of db.get("users").value()) {
-  const perms = user.permissions || {};
-  const updates = {};
-  if (perms.editCatalog === undefined) updates["permissions.editCatalog"] = user.role === "admin" || user.role === "manager";
-  if (perms.editPurchases === undefined) updates["permissions.editPurchases"] = user.role === "admin" || user.role === "manager";
-  if (perms.editIssues === undefined) updates["permissions.editIssues"] = user.role === "admin" || user.role === "manager";
-  if (Object.keys(updates).length) {
-    const newPerms = {
-      ...perms,
-      editCatalog: perms.editCatalog !== undefined ? perms.editCatalog : (user.role === "admin" || user.role === "manager"),
-      editPurchases: perms.editPurchases !== undefined ? perms.editPurchases : (user.role === "admin" || user.role === "manager"),
-      editIssues: perms.editIssues !== undefined ? perms.editIssues : (user.role === "admin" || user.role === "manager"),
-    };
-    db.get("users").find({ id: user.id }).assign({ permissions: newPerms }).write();
+  if (db.get("users").value().length === 0) {
+    const hash = bcrypt.hashSync("admin123", 10);
+    db.get("users").push({
+      id: nextId("users"),
+      username: "admin",
+      passwordHash: hash,
+      fullName: "Administrator",
+      role: "admin",
+      permissions: getDefaultPermissions("admin")
+    }).write();
+    console.log("Created admin user: admin / admin123");
   }
 }
 
-for (const item of db.get("items").value()) {
-  const updates = {};
-  if (item.quantity === undefined) updates.quantity = 0;
-  if (item.unit && UNIT_FULL_NAMES[item.unit]) updates.unit = UNIT_FULL_NAMES[item.unit];
-  if (Object.keys(updates).length) db.get("items").find({ id: item.id }).assign(updates).write();
-}
-for (const user of db.get("users").value()) {
-  db.get("users").find({ id: user.id }).assign({ permissions: normalizePermissions(user.role, user.permissions) }).write();
+function runMigrations() {
+  for (const user of db.get("users").value()) {
+    const perms = user.permissions || {};
+    const updates = {};
+    if (perms.editCatalog === undefined) updates["permissions.editCatalog"] = user.role === "admin" || user.role === "manager";
+    if (perms.editPurchases === undefined) updates["permissions.editPurchases"] = user.role === "admin" || user.role === "manager";
+    if (perms.editIssues === undefined) updates["permissions.editIssues"] = user.role === "admin" || user.role === "manager";
+    if (Object.keys(updates).length) {
+      const newPerms = {
+        ...perms,
+        editCatalog: perms.editCatalog !== undefined ? perms.editCatalog : (user.role === "admin" || user.role === "manager"),
+        editPurchases: perms.editPurchases !== undefined ? perms.editPurchases : (user.role === "admin" || user.role === "manager"),
+        editIssues: perms.editIssues !== undefined ? perms.editIssues : (user.role === "admin" || user.role === "manager"),
+      };
+      db.get("users").find({ id: user.id }).assign({ permissions: newPerms }).write();
+    }
+  }
+  for (const item of db.get("items").value()) {
+    const updates = {};
+    if (item.quantity === undefined) updates.quantity = 0;
+    if (item.unit && UNIT_FULL_NAMES[item.unit]) updates.unit = UNIT_FULL_NAMES[item.unit];
+    if (Object.keys(updates).length) db.get("items").find({ id: item.id }).assign(updates).write();
+  }
+  for (const user of db.get("users").value()) {
+    db.get("users").find({ id: user.id }).assign({ permissions: normalizePermissions(user.role, user.permissions) }).write();
+  }
 }
 
 function weekdayFor(dateStr) {
