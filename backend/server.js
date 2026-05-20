@@ -9,21 +9,53 @@ const low = require("lowdb");
 const FileSync = require("lowdb/adapters/FileSync");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
+const fs = require("fs");
+const { createClient } = require("@supabase/supabase-js");
 
-const adapter = new FileSync(process.env.DATA_PATH || path.join(__dirname, "store.json"));
-const db = low(adapter);
+// ── Supabase Storage sync ──────────────────────────────────────────────────
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const BUCKET = "store-data";
+const BACKUP_FILE = "store.json";
 
-db.defaults({
-  _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0 },
-  users: [],
-  departments: [],
-  items: [],
-  inventory: [],
-  receipts: [],
-  issues: [],
-  purchases: [],
-  activities: []
-}).write();
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  console.log("✓ Supabase storage client ready");
+}
+
+const dataPath = process.env.DATA_PATH || path.join(__dirname, "store.json");
+
+async function downloadFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET).download(BACKUP_FILE);
+    if (error) { console.log("No Supabase backup yet — starting fresh"); return; }
+    const text = await data.text();
+    fs.mkdirSync(path.dirname(dataPath), { recursive: true });
+    fs.writeFileSync(dataPath, text, "utf8");
+    console.log("✓ Store data restored from Supabase");
+  } catch (e) { console.error("Supabase download error:", e.message); }
+}
+
+async function syncToSupabase() {
+  if (!supabase) return;
+  try {
+    const content = fs.readFileSync(dataPath, "utf8");
+    const { error } = await supabase.storage.from(BUCKET).upload(BACKUP_FILE,
+      Buffer.from(content, "utf8"),
+      { contentType: "application/json", upsert: true }
+    );
+    if (error) console.error("Supabase sync failed:", error.message);
+  } catch (e) { console.error("Supabase sync error:", e.message); }
+}
+// ──────────────────────────────────────────────────────────────────────────
+
+// db is initialised in the async startup IIFE at the bottom of this file.
+// All route handlers close over `db` — by the time any request arrives,
+// app.listen() has already been called, which only happens after db is set.
+let db;
+const adapter = new FileSync(dataPath);
 
 function nextId(table) {
   const id = (db.get(`_seq.${table}`).value() || 0) + 1;
@@ -1566,8 +1598,40 @@ app.get("*", (req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`\n✅ Store Monitor API running → http://localhost:${PORT}`);
-  console.log(`   Login: admin / admin123`);
-  console.log(`   Data:  ${path.join(__dirname, "store.json")}\n`);
+
+// Async startup: download data from Supabase first, then init DB, then listen
+(async () => {
+  // 1. Restore data from Supabase (runs before any request is accepted)
+  await downloadFromSupabase();
+
+  // 2. Initialise lowdb now that the file is ready
+  db = low(adapter);
+  db.defaults({
+    _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0 },
+    users: [], departments: [], items: [], inventory: [],
+    receipts: [], issues: [], purchases: [], activities: []
+  }).write();
+
+  // 3. Patch adapter.write so every DB change is backed up to Supabase automatically
+  const _origWrite = adapter.write.bind(adapter);
+  adapter.write = function(data) {
+    const result = _origWrite(data);
+    syncToSupabase(); // async, non-blocking — runs in background
+    return result;
+  };
+
+  // 4. Run migrations & seed admin
+  runMigrations();
+  seedAdmin();
+
+  // 5. Start accepting requests
+  app.listen(PORT, () => {
+    console.log(`\n✅ Store Monitor API running → http://localhost:${PORT}`);
+    console.log(`   Login: admin / admin123`);
+    console.log(`   Data:  ${dataPath}`);
+    console.log(`   Supabase sync: ${supabase ? "enabled" : "disabled"}\n`);
+  });
+})().catch(e => {
+  console.error("❌ Server startup failed:", e);
+  process.exit(1);
 });
