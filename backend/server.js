@@ -390,15 +390,24 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
 const sessionsDir = path.join(path.dirname(process.env.DATA_PATH || path.join(__dirname, "store.json")), "sessions");
+try { fs.mkdirSync(sessionsDir, { recursive: true }); } catch(e) {}
+let sessionStore;
+try {
+  sessionStore = new FileStore({ path: sessionsDir, ttl: 86400*30, retries: 1, logFn: ()=>{} });
+  console.log("✓ File session store ready");
+} catch(e) {
+  console.error("File session store failed, using memory sessions:", e.message);
+  sessionStore = undefined;
+}
 const isProd = process.env.NODE_ENV === "production";
 app.use(session({
-  store: new FileStore({ path: sessionsDir, ttl: 86400 * 30, retries: 1, logFn: ()=>{} }),
+  store: sessionStore,
   secret: process.env.SESSION_SECRET || "dev-secret-store-2024",
   resave: false, saveUninitialized: false, rolling: true,
   cookie: {
     httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? "none" : "lax",   // "none" required for cross-origin cookies
+    sameSite: isProd ? "none" : "lax",
     maxAge: 86400000 * 30
   }
 }));
