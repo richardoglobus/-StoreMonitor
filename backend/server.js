@@ -60,9 +60,31 @@ db.defaults({
   receipts: [], issues: [], purchases: [], activities: []
 }).write();
 
-// DATA RECOVERY: print full store to logs on startup
+// DATA RECOVERY: try all known paths and print whichever has data
+const pathsToTry = [
+  "/app/data/store.json",
+  process.env.DATA_PATH,
+  path.join(__dirname, "store.json"),
+  path.join(__dirname, "..", "data", "store.json"),
+].filter(Boolean);
+
 console.log("==BACKUP_START==");
-console.log(JSON.stringify(db.getState()));
+let printed = false;
+for (const p of pathsToTry) {
+  try {
+    if (fs.existsSync(p)) {
+      const raw = fs.readFileSync(p, "utf8");
+      const parsed = JSON.parse(raw);
+      const hasData = (parsed.issues?.length > 0 || parsed.purchases?.length > 0 || parsed.users?.length > 1);
+      console.log("PATH:" + p + " issues:" + (parsed.issues?.length||0) + " purchases:" + (parsed.purchases?.length||0));
+      if (hasData && !printed) {
+        console.log(raw);
+        printed = true;
+      }
+    }
+  } catch(e) { console.log("PATH_ERROR:" + p + ":" + e.message); }
+}
+if (!printed) console.log("NO_DATA_FOUND");
 console.log("==BACKUP_END==");
 
 function nextId(table) {
