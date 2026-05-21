@@ -3,7 +3,6 @@
 const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
-const FileStore = require("session-file-store")(session);
 const bcrypt = require("bcryptjs");
 const low = require("lowdb");
 const FileSync = require("lowdb/adapters/FileSync");
@@ -26,6 +25,7 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 
 const dataPath = process.env.DATA_PATH || path.join(__dirname, "store.json");
 
+// Download on startup — called once before server starts (via spawn trick below)
 async function downloadFromSupabase() {
   if (!supabase) return;
   try {
@@ -51,11 +51,14 @@ async function syncToSupabase() {
 }
 // ──────────────────────────────────────────────────────────────────────────
 
-// db is initialised in the async startup IIFE at the bottom of this file.
-// All route handlers close over `db` — by the time any request arrives,
-// app.listen() has already been called, which only happens after db is set.
-let db;
 const adapter = new FileSync(dataPath);
+const db = low(adapter);
+
+db.defaults({
+  _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0 },
+  users: [], departments: [], items: [], inventory: [],
+  receipts: [], issues: [], purchases: [], activities: []
+}).write();
 
 function nextId(table) {
   const id = (db.get(`_seq.${table}`).value() || 0) + 1;
@@ -389,19 +392,8 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
-const sessionsDir = path.join(path.dirname(process.env.DATA_PATH || path.join(__dirname, "store.json")), "sessions");
-try { fs.mkdirSync(sessionsDir, { recursive: true }); } catch(e) {}
-let sessionStore;
-try {
-  sessionStore = new FileStore({ path: sessionsDir, ttl: 86400*30, retries: 1, logFn: ()=>{} });
-  console.log("✓ File session store ready");
-} catch(e) {
-  console.error("File session store failed, using memory sessions:", e.message);
-  sessionStore = undefined;
-}
 const isProd = process.env.NODE_ENV === "production";
 app.use(session({
-  store: sessionStore,
   secret: process.env.SESSION_SECRET || "dev-secret-store-2024",
   resave: false, saveUninitialized: false, rolling: true,
   cookie: {
@@ -1610,39 +1602,23 @@ app.get("*", (req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 
-// Async startup: download data from Supabase first, then init DB, then listen
-(async () => {
-  // 1. Restore data from Supabase (runs before any request is accepted)
-  await downloadFromSupabase();
+// Patch adapter so every write syncs to Supabase in background
+const _origWrite = adapter.write.bind(adapter);
+adapter.write = function(data) {
+  const result = _origWrite(data);
+  syncToSupabase();
+  return result;
+};
 
-  // 2. Initialise lowdb now that the file is ready
-  db = low(adapter);
-  db.defaults({
-    _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0 },
-    users: [], departments: [], items: [], inventory: [],
-    receipts: [], issues: [], purchases: [], activities: []
-  }).write();
-
-  // 3. Patch adapter.write so every DB change is backed up to Supabase automatically
-  const _origWrite = adapter.write.bind(adapter);
-  adapter.write = function(data) {
-    const result = _origWrite(data);
-    syncToSupabase(); // async, non-blocking — runs in background
-    return result;
-  };
-
-  // 4. Run migrations & seed admin
+// Download latest data from Supabase, then start server
+downloadFromSupabase().finally(() => {
+  // Re-read db after potential Supabase restore
+  db.read();
   runMigrations();
   seedAdmin();
-
-  // 5. Start accepting requests
   app.listen(PORT, () => {
     console.log(`\n✅ Store Monitor API running → http://localhost:${PORT}`);
-    console.log(`   Login: admin / admin123`);
-    console.log(`   Data:  ${dataPath}`);
+    console.log(`   Data: ${dataPath}`);
     console.log(`   Supabase sync: ${supabase ? "enabled" : "disabled"}\n`);
   });
-})().catch(e => {
-  console.error("❌ Server startup failed:", e);
-  process.exit(1);
 });
