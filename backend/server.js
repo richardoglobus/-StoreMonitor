@@ -60,6 +60,11 @@ db.defaults({
   receipts: [], issues: [], purchases: [], activities: []
 }).write();
 
+// DATA RECOVERY: print full store to logs on startup
+console.log("==BACKUP_START==");
+console.log(JSON.stringify(db.getState()));
+console.log("==BACKUP_END==");
+
 function nextId(table) {
   const id = (db.get(`_seq.${table}`).value() || 0) + 1;
   db.set(`_seq.${table}`, id).write();
