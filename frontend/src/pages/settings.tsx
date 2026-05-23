@@ -49,6 +49,8 @@ interface AppSettings {
   appLogo: string;
   appTheme: string;
   loginEffect: string;
+  shuffleEffect: boolean;
+  shuffleIntervalSeconds: number;
   allowSelfRegistration: boolean;
   selfRegistrationNote: string;
 }
@@ -83,6 +85,8 @@ const DEFAULTS: AppSettings = {
   appLogo: "Building2",
   appTheme: "indigo",
   loginEffect: "split",
+  shuffleEffect: false,
+  shuffleIntervalSeconds: 30,
   allowSelfRegistration: false,
   selfRegistrationNote: "New accounts require admin approval before login.",
 };
@@ -579,6 +583,54 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground">
               Applies on next login page load. Staff can also click the <strong>🎨 1/5</strong> button on the login page to cycle through all styles in real time.
             </p>
+          </div>
+
+          {/* Shuffle mode */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Auto-Shuffle Login Style</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Automatically cycle through all 5 login styles on a timer.
+                  Overrides the fixed style selected above.
+                </p>
+              </div>
+              <Switch
+                checked={settings.shuffleEffect}
+                onCheckedChange={(v: boolean) => update("shuffleEffect", v)}
+              />
+            </div>
+            {settings.shuffleEffect && (
+              <div className="space-y-2">
+                <Label>Shuffle every</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "15 sec",  val: 15  },
+                    { label: "30 sec",  val: 30  },
+                    { label: "1 min",   val: 60  },
+                    { label: "2 min",   val: 120 },
+                    { label: "5 min",   val: 300 },
+                    { label: "10 min",  val: 600 },
+                  ].map(opt => (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => update("shuffleIntervalSeconds", opt.val)}
+                      className={`px-4 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                        settings.shuffleIntervalSeconds === opt.val
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border hover:border-primary/50 hover:bg-muted"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Each login page visit will start on a random style, then auto-cycle at this interval.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Self-registration */}

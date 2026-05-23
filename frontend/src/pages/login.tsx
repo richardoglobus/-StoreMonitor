@@ -1,5 +1,5 @@
 import { API_BASE } from "@/lib/api";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Copy, CheckCircle, Download, X } from "lucide-react";
 import { toast } from "sonner";
@@ -347,10 +347,35 @@ export default function LoginPage(){
   useEffect(()=>{
     fetch(`${API_BASE}/api/settings/public`).then(r=>r.json()).then(s=>{
       if(s.hospitalName) setHospitalName(s.hospitalName);
-      if(s.loginEffect) setEffect(s.loginEffect as Effect);
       if(s.allowSelfRegistration) setAllowSignup(s.allowSelfRegistration);
+
+      if(s.shuffleEffect){
+        // Start on a random effect
+        const startIdx = Math.floor(Math.random() * effects.length);
+        setEffectIdx(startIdx);
+        setEffect(effects[startIdx]);
+        const interval = (s.shuffleIntervalSeconds || 30) * 1000;
+        let cur = startIdx;
+        shuffleRef.current = setInterval(() => {
+          cur = (cur + 1) % effects.length;
+          setEffectIdx(cur);
+          setEffect(effects[cur]);
+        }, interval);
+      } else {
+        if(s.loginEffect) setEffect(s.loginEffect as Effect);
+      }
     }).catch(()=>{});
+    return () => { if(shuffleRef.current) clearInterval(shuffleRef.current); };
   },[]);
+
+  const shuffleRef = useRef<ReturnType<typeof setInterval>|null>(null);
+
+  const nextEffect = useCallback((idx: number) => {
+    const next = (idx + 1) % effects.length;
+    setEffectIdx(next);
+    setEffect(effects[next]);
+    return next;
+  }, [effects]);
 
   const reshuffleEffect=()=>{ const next=(effectIdx+1)%effects.length; setEffectIdx(next); setEffect(effects[next]); };
 
