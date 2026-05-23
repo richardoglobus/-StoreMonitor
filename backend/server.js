@@ -1047,7 +1047,8 @@ app.get("/api/export/monthly-report.xlsx", requirePermission("exportData"), asyn
     }
     commodities.forEach((c, ci) => {
       const color = COLORS[ci % COLORS.length];
-      const sheetName = c.itemDescription.replace(/[\\/:*?\[\]]/g, "").slice(0, 28);
+      const rawName = c.itemDescription.replace(/[\/:*?\[\]\\]/g, '').trim().slice(0, 24);
+      const sheetName = rawName ? rawName + " (" + c.itemId + ")" : "Item " + c.itemId;
       const ws = wb.addWorksheet(sheetName);
 
       const titleRow = ws.addRow([c.itemDescription]);
