@@ -1,7 +1,7 @@
 import { API_BASE } from "@/lib/api";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Copy, CheckCircle } from "lucide-react";
+import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Copy, CheckCircle, Download, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme, LOGOS } from "@/lib/theme-context";
 
@@ -41,6 +41,82 @@ function ParticleCanvas({ color = "99,102,241" }: { color?: string }) {
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
   return <canvas ref={ref} style={{ position:"absolute", inset:0, width:"100%", height:"100%" }} />;
+}
+
+
+// ── PWA Install Banner ────────────────────────────────────────────────────
+function InstallBanner() {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    // Check if already installed (standalone mode)
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setInstalled(true);
+      return;
+    }
+    const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => setInstalled(true));
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setInstalled(true);
+    setDeferredPrompt(null);
+  };
+
+  if (installed || dismissed) return null;
+
+  // On iOS Safari — no beforeinstallprompt, show manual instructions
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      background: 'linear-gradient(135deg, #0f766e, #0d9488)',
+      padding: '12px 16px', display: 'flex', alignItems: 'center',
+      gap: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+      animation: 'fadeUp 0.4s ease'
+    }}>
+      <img src="/icons/icon-72x72.png" alt="App icon"
+        style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ color: '#fff', fontWeight: 700, fontSize: 13, margin: 0 }}>
+          Install Mukurweini Hospital Stores App
+        </p>
+        <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, margin: '2px 0 0' }}>
+          {isIOS && isSafari
+            ? 'Tap the Share button below, then "Add to Home Screen"'
+            : deferredPrompt
+              ? 'Install for quick access — works offline too'
+              : 'Open in Chrome or Edge to install this app'}
+        </p>
+      </div>
+      {deferredPrompt && (
+        <button onClick={handleInstall} style={{
+          background: '#fff', color: '#0f766e', border: 'none',
+          borderRadius: 8, padding: '8px 14px', fontWeight: 700,
+          fontSize: 12, cursor: 'pointer', display: 'flex',
+          alignItems: 'center', gap: 5, flexShrink: 0, whiteSpace: 'nowrap'
+        }}>
+          <Download size={13} /> Install
+        </button>
+      )}
+      <button onClick={() => setDismissed(true)} style={{
+        background: 'rgba(255,255,255,0.15)', border: 'none',
+        borderRadius: 6, padding: 6, cursor: 'pointer',
+        color: '#fff', display: 'flex', flexShrink: 0
+      }}>
+        <X size={14} />
+      </button>
+    </div>
+  );
 }
 
 const BASE_CSS = `
@@ -260,6 +336,7 @@ export default function LoginPage(){
 
   return (
     <div style={{position:"relative",minHeight:"100vh",overflow:"hidden",background:t.bg}}>
+      <InstallBanner />
       <style>{BASE_CSS+`@keyframes wave{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}} @keyframes blob{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-20px) scale(1.08)}} @keyframes blob2{0%,100%{transform:translate(0,0)}50%{transform:translate(-25px,30px)}}`}</style>
       <EffectBg effect={effect}/>
 
