@@ -2,7 +2,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, todayStr, firstOfMonth } from "@/components/date-range-picker";
-import { useGetMonthlyReport, getGetMonthlyReportQueryKey } from "@/lib/api";
+import { useGetMonthlyReport, getGetMonthlyReportQueryKey, API_BASE } from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -75,8 +75,8 @@ export default function MonthlyReportPage() {
   );
 
   const handleGenerate = () => setQueryDates({ from, to });
-  const downloadUrl = `/api/export/monthly-report.csv?startMonth=${startMonth}&endMonth=${endMonth}`;
-  const xlsxUrl = `/api/export/monthly-report.xlsx?startMonth=${startMonth}&endMonth=${endMonth}`;
+  const downloadUrl = `${API_BASE}/api/export/monthly-report.csv?startMonth=${startMonth}&endMonth=${endMonth}`;
+  const xlsxUrl = `${API_BASE}/api/export/monthly-report.xlsx?startMonth=${startMonth}&endMonth=${endMonth}`;
 
   return (
     <>

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, firstOfMonth, todayStr } from "@/components/date-range-picker";
+import { API_BASE } from "@/lib/api";
 import {
   useListPurchases, getListPurchasesQueryKey,
   useDeletePurchase,
@@ -119,7 +120,7 @@ export default function Purchases() {
     try {
       // Post each line as a separate purchase with shared header
       const results = await Promise.all(lines.map(line =>
-        fetch("/api/purchases", {
+        fetch(`${API_BASE}/api/purchases`, {
           method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -150,7 +151,7 @@ export default function Purchases() {
     e.preventDefault(); if (!editForm) return;
     setEditLoading(true);
     try {
-      const res = await fetch(`/api/purchases/${editForm.id}`, {
+      const res = await fetch(`${API_BASE}/api/purchases/${editForm.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ supplier: editForm.supplier, invoiceNo: editForm.invoiceNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
@@ -188,10 +189,10 @@ export default function Purchases() {
             <p className="text-muted-foreground">Track all incoming stock — one supplier can have multiple commodities per voucher.</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={loadingCsv} onClick={() => dl(`/api/export/purchases.csv?from=${from}&to=${to}`, `purchases_${from}_${to}.csv`, setLoadingCsv)}>
+            <Button variant="outline" size="sm" disabled={loadingCsv} onClick={() => dl(`${API_BASE}/api/export/purchases.csv?from=${from}&to=${to}`, `purchases_${from}_${to}.csv`, setLoadingCsv)}>
               {loadingCsv ? <Loader2 className="h-4 w-4 mr-1 animate-spin"/> : <Download className="h-4 w-4 mr-1"/>}CSV
             </Button>
-            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-1" disabled={loadingXlsx} onClick={() => dl(`/api/export/purchases.xlsx?from=${from}&to=${to}`, `purchases_${from}_${to}.xlsx`, setLoadingXlsx)}>
+            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white gap-1" disabled={loadingXlsx} onClick={() => dl(`${API_BASE}/api/export/purchases.xlsx?from=${from}&to=${to}`, `purchases_${from}_${to}.xlsx`, setLoadingXlsx)}>
               {loadingXlsx ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileSpreadsheet className="h-4 w-4"/>}Excel
             </Button>
           </div>

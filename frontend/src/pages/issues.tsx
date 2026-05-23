@@ -2,6 +2,7 @@ import { useState } from "react";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, firstOfMonth, todayStr } from "@/components/date-range-picker";
+import { API_BASE } from "@/lib/api";
 import {
   useListIssues, getListIssuesQueryKey,
   useListDepartments, getListDepartmentsQueryKey,
@@ -228,7 +229,7 @@ export default function Issues() {
     if (!editIssue) return;
     setEditLoading(true);
     try {
-      const res = await fetch(`/api/issues/${editIssue.id}`, {
+      const res = await fetch(`${API_BASE}/api/issues/${editIssue.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -261,7 +262,7 @@ export default function Issues() {
     setEditIssueOpen(true);
   };
 
-  const downloadUrl = `/api/export/issues.csv?month=${month}${departmentIdFilter !== "all" ? `&departmentId=${departmentIdFilter}` : ""}`;
+  const downloadUrl = `${API_BASE}/api/export/issues.csv?month=${month}${departmentIdFilter !== "all" ? `&departmentId=${departmentIdFilter}` : ""}`;
 
   const filteredIssues = search.trim()
     ? (issues ?? []).filter(i => {

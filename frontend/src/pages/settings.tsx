@@ -11,6 +11,7 @@ import { useTheme, THEMES, LOGOS, AppTheme, AppLogo } from "@/lib/theme-context"
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { API_BASE } from "@/lib/api";
 
 interface AppSettings {
   // Session & Security
@@ -129,13 +130,13 @@ export default function SettingsPage() {
 
   const loadUnits = () => {
     setUnitsLoading(true);
-    fetch("/api/catalog/units",{credentials:"include"})
+    fetch(`${API_BASE}/api/catalog/units`,{credentials:"include"})
       .then(r=>r.json()).then(setUnits).catch(()=>{}).finally(()=>setUnitsLoading(false));
   };
 
   const handleRenameUnit = async (oldUnit: string) => {
     if (!newUnitName.trim()) return;
-    const res = await fetch(`/api/catalog/units/${encodeURIComponent(oldUnit)}`,{
+    const res = await fetch(`${API_BASE}/api/catalog/units/${encodeURIComponent(oldUnit)}`,{
       method:"PATCH",credentials:"include",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({newUnit:newUnitName.trim().toUpperCase()})
@@ -149,7 +150,7 @@ export default function SettingsPage() {
 
   const handleDeleteUnit = async (unit: string, count: number) => {
     if (!confirm(`Delete unit "${unit}" from ${count} item(s)? Their unit will be cleared and must be reassigned.`)) return;
-    const res = await fetch(`/api/catalog/units/${encodeURIComponent(unit)}`,{method:"DELETE",credentials:"include"});
+    const res = await fetch(`${API_BASE}/api/catalog/units/${encodeURIComponent(unit)}`,{method:"DELETE",credentials:"include"});
     const data = await res.json();
     if (!res.ok){toast.error(data.error||"Delete failed");return;}
     toast.success(`Deleted unit "${unit}" from ${data.affectedItems} item(s). Please update those items in Catalog.`);
@@ -160,7 +161,7 @@ export default function SettingsPage() {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    fetch("/api/settings", { credentials: "include" })
+    fetch(`${API_BASE}/api/settings`, { credentials: "include" })
       .then(r => r.json())
       .then(data => { setSettings({ ...DEFAULTS, ...data }); setLoading(false); })
       .catch(() => { toast.error("Failed to load settings"); setLoading(false); });
@@ -184,7 +185,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/settings", {
+      const res = await fetch(`${API_BASE}/api/settings`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -204,7 +205,7 @@ export default function SettingsPage() {
 
   const handleBackup = async () => {
     try {
-      const res = await fetch("/api/admin/backup", { credentials: "include" });
+      const res = await fetch(`${API_BASE}/api/admin/backup`, { credentials: "include" });
       if (!res.ok) { toast.error("Backup failed"); return; }
       const blob = await res.blob();
       const a = document.createElement("a");
@@ -226,7 +227,7 @@ export default function SettingsPage() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const res = await fetch("/api/admin/restore", {
+      const res = await fetch(`${API_BASE}/api/admin/restore`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

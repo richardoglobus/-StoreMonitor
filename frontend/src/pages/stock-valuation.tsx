@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { API_BASE } from "@/lib/api";
 
 async function dl(url: string, filename: string, setLoading: (v: boolean) => void) {
   setLoading(true);
@@ -65,7 +66,7 @@ export default function StockValuationPage() {
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["stock-valuation", queryDate],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/stock-valuation?asAt=${queryDate}`, { credentials: "include" });
+      const res = await fetch(`${API_BASE}/api/reports/stock-valuation?asAt=${queryDate}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load");
       return res.json();
     },
@@ -94,7 +95,7 @@ export default function StockValuationPage() {
     OUT: data?.rows?.filter((r: any) => r.stockStatus === "OUT").length || 0,
   };
 
-  const xlsxUrl = `/api/export/stock-valuation.xlsx?asAt=${queryDate}`;
+  const xlsxUrl = `${API_BASE}/api/export/stock-valuation.xlsx?asAt=${queryDate}`;
 
   return (
     <Layout>

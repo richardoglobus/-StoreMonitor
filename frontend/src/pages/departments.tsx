@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import {
   useListDepartments,
   getListDepartmentsQueryKey,
-  useCreateDepartment,
+  useCreateDepartment, API_BASE,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ export default function Departments() {
     if (!renameValue.trim()) return;
     setRenameSaving(true);
     try {
-      const res = await fetch(`/api/departments/${deptId}`, {
+      const res = await fetch(`${API_BASE}/api/departments/${deptId}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

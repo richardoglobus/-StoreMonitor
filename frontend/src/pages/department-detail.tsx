@@ -10,7 +10,7 @@ import {
   useListIssues, getListIssuesQueryKey,
   useCreateIssue, useCreateReceipt, useUpsertInventory,
   useListDepartments, getListDepartmentsQueryKey,
-  ReceiptSource,
+  ReceiptSource, API_BASE,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -145,8 +145,8 @@ export default function DepartmentDetail() {
 
   const startMonth = from.slice(0, 7);
   const endMonth = to.slice(0, 7);
-  const xlsxUrl = `/api/export/all-departments.xlsx?startMonth=${startMonth}&endMonth=${endMonth}`;
-  const csvUrl = `/api/export/inventory.csv?departmentId=${departmentId}&month=${month}`;
+  const xlsxUrl = `${API_BASE}/api/export/all-departments.xlsx?startMonth=${startMonth}&endMonth=${endMonth}`;
+  const csvUrl = `${API_BASE}/api/export/inventory.csv?departmentId=${departmentId}&month=${month}`;
 
   return (
     <Layout>

@@ -1,3 +1,4 @@
+import { API_BASE } from "@/lib/api";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Copy, CheckCircle } from "lucide-react";
@@ -95,7 +96,7 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
   const handleForgot=async(e:React.FormEvent)=>{
     e.preventDefault();if(!u)return;setLoading(true);
     try{
-      const res=await fetch("/api/auth/forgot-password",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u})});
+      const res=await fetch(`${API_BASE}/api/auth/forgot-password`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u})});
       const data=await res.json();
       if(!res.ok)throw new Error(data.error);
       setResetTokenData(data);
@@ -227,7 +228,7 @@ export default function LoginPage(){
   const LogoEmoji=LOGOS[appLogo as keyof typeof LOGOS]?.emoji||"🏥";
 
   useEffect(()=>{
-    fetch("/api/settings/public").then(r=>r.json()).then(s=>{
+    fetch(`${API_BASE}/api/settings/public`).then(r=>r.json()).then(s=>{
       if(s.hospitalName) setHospitalName(s.hospitalName);
       if(s.loginEffect) setEffect(s.loginEffect as Effect);
       if(s.allowSelfRegistration) setAllowSignup(s.allowSelfRegistration);
@@ -242,7 +243,7 @@ export default function LoginPage(){
   };
 
   const onSignup=async(fullName:string,username:string,password:string)=>{
-    const res=await fetch("/api/auth/register",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,username,password})});
+    const res=await fetch(`${API_BASE}/api/auth/register`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,username,password})});
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||"Registration failed");
     toast.success("Account created! Wait for admin approval.");

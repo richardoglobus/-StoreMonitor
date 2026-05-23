@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, todayStr, firstOfMonth } from "@/components/date-range-picker";
-import { useListDepartments, getListDepartmentsQueryKey } from "@/lib/api";
+import { useListDepartments, getListDepartmentsQueryKey, API_BASE } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -44,10 +44,10 @@ export default function Exports() {
   const endMonth = to.slice(0, 7);
 
   const issuesUrl = departmentId !== "all"
-    ? `/api/export/issues.csv?month=${month}&departmentId=${departmentId}`
-    : `/api/export/issues.csv?month=${month}`;
-  const inventoryUrl = `/api/export/inventory.csv?departmentId=${departmentId}&month=${month}`;
-  const monthlyUrl = `/api/export/monthly-report.csv?startMonth=${month}&endMonth=${endMonth}`;
+    ? `${API_BASE}/api/export/issues.csv?month=${month}&departmentId=${departmentId}`
+    : `${API_BASE}/api/export/issues.csv?month=${month}`;
+  const inventoryUrl = `${API_BASE}/api/export/inventory.csv?departmentId=${departmentId}&month=${month}`;
+  const monthlyUrl = `${API_BASE}/api/export/monthly-report.csv?startMonth=${month}&endMonth=${endMonth}`;
 
   return (
     <Layout>
