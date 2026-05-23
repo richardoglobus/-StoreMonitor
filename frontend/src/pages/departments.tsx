@@ -10,8 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Plus, ChevronRight, Pencil, Check, X } from "lucide-react";
+import { Building2, Plus, ChevronRight, Pencil, Check, X, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -28,6 +29,8 @@ export default function Departments() {
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameSaving, setRenameSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const { data: departments, isLoading } = useListDepartments(
     { query: { queryKey: getListDepartmentsQueryKey() } }
@@ -83,13 +86,33 @@ export default function Departments() {
     finally { setRenameSaving(false); }
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/departments/${deleteTarget.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (res.status === 204) {
+        toast.success(`"${deleteTarget.name}" deleted`);
+        queryClient.invalidateQueries({ queryKey: getListDepartmentsQueryKey() });
+        setDeleteTarget(null);
+        return;
+      }
+      const data = await res.json();
+      toast.error(data.error || "Delete failed");
+    } catch { toast.error("Delete failed"); }
+    finally { setDeleteLoading(false); }
+  };
+
   return (
     <Layout>
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Departments</h1>
-            <p className="text-muted-foreground">Manage hospital wards and departments. Hover a card to rename it.</p>
+            <p className="text-muted-foreground">Manage hospital wards and departments. Hover a card to rename or delete it.</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -177,13 +200,22 @@ export default function Departments() {
                 )}
 
                 {renamingId !== dept.id && (
-                  <button
-                    title="Rename department"
-                    onClick={e=>startRename(e,dept)}
-                    className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-background border rounded p-1.5 shadow-sm hover:bg-muted"
-                  >
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground"/>
-                  </button>
+                  <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      title="Rename department"
+                      onClick={e=>startRename(e,dept)}
+                      className="bg-background border rounded p-1.5 shadow-sm hover:bg-muted"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-muted-foreground"/>
+                    </button>
+                    <button
+                      title="Delete department"
+                      onClick={e=>{ e.preventDefault(); e.stopPropagation(); setDeleteTarget({ id: dept.id, name: dept.name }); }}
+                      className="bg-background border border-destructive/30 rounded p-1.5 shadow-sm hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive"/>
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -197,6 +229,30 @@ export default function Departments() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the department. This action cannot be undone.
+              <br/><br/>
+              <strong>Note:</strong> Departments with existing inventory records, issues, or receipts cannot be deleted — you must remove those records first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoading ? "Deleting..." : "Delete Department"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

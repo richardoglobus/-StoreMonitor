@@ -528,6 +528,21 @@ app.patch("/api/departments/:id",requirePermission("manageDepartments"),(req,res
   res.json(db.get("departments").find({id}).value());
 });
 
+app.delete("/api/departments/:id", requirePermission("manageDepartments"), (req, res) => {
+  const id = Number(req.params.id);
+  const dept = db.get("departments").find({ id }).value();
+  if (!dept) return res.status(404).json({ error: "Department not found" });
+  const hasInventory = db.get("inventory").filter({ departmentId: id }).value().length > 0;
+  const hasIssues    = db.get("issues").filter({ departmentId: id }).value().length > 0;
+  const hasReceipts  = db.get("receipts").filter({ departmentId: id }).value().length > 0;
+  if (hasInventory || hasIssues || hasReceipts) {
+    return res.status(400).json({ error: "Cannot delete — department has existing inventory, issues, or receipts. Remove those records first." });
+  }
+  db.get("departments").remove({ id }).write();
+  logActivity(req, "DELETE_DEPARTMENT", "DEPARTMENT", id, { name: dept.name });
+  res.status(204).send();
+});
+
 // ITEMS
 app.get("/api/items",(_,res)=>res.json(db.get("items").orderBy("description","asc").value()));
 app.get("/api/items/stock",(_,res)=>{

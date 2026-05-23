@@ -3,7 +3,7 @@ import type { UseQueryOptions, UseMutationOptions } from "@tanstack/react-query"
 
 // ─── Base fetch ────────────────────────────────────────────────────────────────
 
-export const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "https://storemonitor-jvze.onrender.com";
+export const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, { credentials: "include", ...options });
