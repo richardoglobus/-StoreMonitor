@@ -44,17 +44,17 @@ function ParticleCanvas({ color = "99,102,241" }: { color?: string }) {
 }
 
 
+
 // ── PWA Install Banner ────────────────────────────────────────────────────
 function InstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [dismissed, setDismissed] = useState(false);
   const [installed, setInstalled] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
-    // Check if already installed (standalone mode)
     if (window.matchMedia('(display-mode: standalone)').matches) {
-      setInstalled(true);
-      return;
+      setInstalled(true); return;
     }
     const handler = (e: any) => { e.preventDefault(); setDeferredPrompt(e); };
     window.addEventListener('beforeinstallprompt', handler);
@@ -62,60 +62,101 @@ function InstallBanner() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
+
   const handleInstall = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') setInstalled(true);
-    setDeferredPrompt(null);
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') setInstalled(true);
+      setDeferredPrompt(null);
+    } else {
+      setShowManual(true);
+    }
   };
 
   if (installed || dismissed) return null;
 
-  // On iOS Safari — no beforeinstallprompt, show manual instructions
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
-  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-      background: 'linear-gradient(135deg, #0f766e, #0d9488)',
-      padding: '12px 16px', display: 'flex', alignItems: 'center',
-      gap: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-      animation: 'fadeUp 0.4s ease'
-    }}>
-      <img src="/icons/icon-72x72.png" alt="App icon"
-        style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0 }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ color: '#fff', fontWeight: 700, fontSize: 13, margin: 0 }}>
-          Install Mukurweini Hospital Stores App
-        </p>
-        <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, margin: '2px 0 0' }}>
-          {isIOS && isSafari
-            ? 'Tap the Share button below, then "Add to Home Screen"'
-            : deferredPrompt
-              ? 'Install for quick access — works offline too'
-              : 'Open in Chrome or Edge to install this app'}
-        </p>
-      </div>
-      {deferredPrompt && (
-        <button onClick={handleInstall} style={{
-          background: '#fff', color: '#0f766e', border: 'none',
-          borderRadius: 8, padding: '8px 14px', fontWeight: 700,
-          fontSize: 12, cursor: 'pointer', display: 'flex',
-          alignItems: 'center', gap: 5, flexShrink: 0, whiteSpace: 'nowrap'
-        }}>
-          <Download size={13} /> Install
-        </button>
-      )}
-      <button onClick={() => setDismissed(true)} style={{
-        background: 'rgba(255,255,255,0.15)', border: 'none',
-        borderRadius: 6, padding: 6, cursor: 'pointer',
-        color: '#fff', display: 'flex', flexShrink: 0
+    <>
+      {/* Banner */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+        background: 'linear-gradient(135deg,#0f766e,#0d9488)',
+        padding: '10px 14px', display: 'flex', alignItems: 'center',
+        gap: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+        animation: 'fadeUp 0.4s ease'
       }}>
-        <X size={14} />
-      </button>
-    </div>
+        <img src="/icons/icon-72x72.png" alt="icon"
+          style={{ width: 38, height: 38, borderRadius: 9, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ color:'#fff', fontWeight:700, fontSize:13, margin:0 }}>
+            Install Mukurweini Hospital Stores App
+          </p>
+          <p style={{ color:'rgba(255,255,255,0.8)', fontSize:11, margin:'2px 0 0' }}>
+            {isIOS ? 'Tap Share → "Add to Home Screen"' : 'Install for quick access on your device'}
+          </p>
+        </div>
+        {!isIOS && (
+          <button onClick={handleInstall} style={{
+            background:'#fff', color:'#0f766e', border:'none',
+            borderRadius:8, padding:'8px 14px', fontWeight:700,
+            fontSize:12, cursor:'pointer', display:'flex',
+            alignItems:'center', gap:5, flexShrink:0, whiteSpace:'nowrap'
+          }}>
+            <Download size={13}/> Install App
+          </button>
+        )}
+        <button onClick={() => setDismissed(true)} style={{
+          background:'rgba(255,255,255,0.15)', border:'none',
+          borderRadius:6, padding:6, cursor:'pointer',
+          color:'#fff', display:'flex', flexShrink:0
+        }}>
+          <X size={14}/>
+        </button>
+      </div>
+
+      {/* Manual install modal — shown when SW not ready yet */}
+      {showManual && (
+        <div style={{
+          position:'fixed', inset:0, zIndex:10000,
+          background:'rgba(0,0,0,0.7)', display:'flex',
+          alignItems:'center', justifyContent:'center', padding:20
+        }} onClick={() => setShowManual(false)}>
+          <div style={{
+            background:'#1a2332', borderRadius:16, padding:28,
+            maxWidth:360, width:'100%', boxShadow:'0 24px 60px rgba(0,0,0,0.6)',
+            border:'1px solid rgba(255,255,255,0.1)'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+              <p style={{ color:'#fff', fontWeight:700, fontSize:16, margin:0 }}>How to Install</p>
+              <button onClick={() => setShowManual(false)} style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer' }}>
+                <X size={18}/>
+              </button>
+            </div>
+            {[
+              { label:'Chrome (Android)', steps:['Open this page in Chrome','Tap the 3-dot menu (⋮) top right','Tap "Add to Home screen"','Tap "Install"'] },
+              { label:'Edge / Chrome (Windows)', steps:['Open this page in Edge or Chrome','Click the install icon (⊕) in the address bar','Click "Install"'] },
+            ].map(({ label, steps }) => (
+              <div key={label} style={{ marginBottom:16 }}>
+                <p style={{ color:'#0d9488', fontWeight:700, fontSize:12, margin:'0 0 8px', textTransform:'uppercase', letterSpacing:1 }}>{label}</p>
+                {steps.map((s,i) => (
+                  <p key={i} style={{ color:'rgba(255,255,255,0.8)', fontSize:13, margin:'4px 0', display:'flex', gap:8 }}>
+                    <span style={{ color:'#0d9488', fontWeight:700, flexShrink:0 }}>{i+1}.</span>{s}
+                  </p>
+                ))}
+              </div>
+            ))}
+            <button onClick={() => setShowManual(false)} style={{
+              width:'100%', padding:'11px', marginTop:6,
+              background:'linear-gradient(135deg,#0f766e,#0d9488)',
+              color:'#fff', border:'none', borderRadius:10,
+              fontWeight:700, fontSize:14, cursor:'pointer'
+            }}>Got it</button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
