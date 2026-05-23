@@ -68,24 +68,7 @@ const pathsToTry = [
   path.join(__dirname, "..", "data", "store.json"),
 ].filter(Boolean);
 
-console.log("==BACKUP_START==");
-let printed = false;
-for (const p of pathsToTry) {
-  try {
-    if (fs.existsSync(p)) {
-      const raw = fs.readFileSync(p, "utf8");
-      const parsed = JSON.parse(raw);
-      const hasData = (parsed.issues?.length > 0 || parsed.purchases?.length > 0 || parsed.users?.length > 1);
-      console.log("PATH:" + p + " issues:" + (parsed.issues?.length||0) + " purchases:" + (parsed.purchases?.length||0));
-      if (hasData && !printed) {
-        console.log(raw);
-        printed = true;
-      }
-    }
-  } catch(e) { console.log("PATH_ERROR:" + p + ":" + e.message); }
-}
-if (!printed) console.log("NO_DATA_FOUND");
-console.log("==BACKUP_END==");
+
 
 function nextId(table) {
   const id = (db.get(`_seq.${table}`).value() || 0) + 1;
@@ -678,7 +661,7 @@ app.post("/api/issues/voucher",requirePermission("issueItems"),(req,res)=>{
   res.status(201).json(inserted);
 });
 
-app.patch("/api/issues/:id", requirePermission("manageUsers"), (req, res) => {
+app.patch("/api/issues/:id", requirePermission("editIssues"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("issues").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Issue not found" });
@@ -729,7 +712,7 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   res.status(201).json(row);
 });
 
-app.patch("/api/purchases/:id", requirePermission("managePurchases"), (req, res) => {
+app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("purchases").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Purchase not found" });

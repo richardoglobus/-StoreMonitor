@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { API_BASE } from "@/lib/api";
 
 type DarkMode = "light" | "dark";
 
@@ -83,7 +84,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Load from server settings on mount
   useEffect(() => {
-    fetch("/api/settings/public").then(r => r.json()).then(s => {
+    fetch(`${API_BASE}/api/settings/public`).then(r => r.json()).then(s => {
       if (s.appTheme && THEMES[s.appTheme as AppTheme]) {
         setAppThemeState(s.appTheme as AppTheme);
       }

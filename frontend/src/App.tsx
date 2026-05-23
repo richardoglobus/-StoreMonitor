@@ -20,6 +20,7 @@ import Exports from "@/pages/exports";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import { AlertTriangle } from "lucide-react";
+import { API_BASE } from "@/lib/api";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: false } },
@@ -45,7 +46,7 @@ function AppWithAuth() {
   const [warnBeforeMs, setWarnBeforeMs] = useState(10_000);
 
   useEffect(() => {
-    fetch("/api/settings/public")
+    fetch(`${API_BASE}/api/settings/public`)
       .then(r => r.json())
       .then(s => {
         if (s.inactivityTimeoutMinutes) setTimeoutMs(s.inactivityTimeoutMinutes * 60_000);
