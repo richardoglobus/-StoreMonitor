@@ -789,6 +789,8 @@ const DEFAULT_SETTINGS = {
   appTheme: "indigo",
   sidebarStyle: "default",
   loginEffect: "split",
+  shuffleEffect: false,
+  shuffleIntervalSeconds: 30,
   allowSelfRegistration: false,
   selfRegistrationNote: "New accounts require admin approval before login.",
 };
@@ -824,6 +826,8 @@ app.get("/api/settings/public",(req,res)=>{
     appTheme:s.appTheme||'indigo',
     appLogo:s.appLogo||'Building2',
     loginEffect:s.loginEffect||'split',
+    shuffleEffect:s.shuffleEffect||false,
+    shuffleIntervalSeconds:s.shuffleIntervalSeconds||30,
     allowSelfRegistration:s.allowSelfRegistration||false,
     selfRegistrationNote:s.selfRegistrationNote||'',
   });
