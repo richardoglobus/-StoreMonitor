@@ -1,5 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
+import { Wifi, WifiOff } from "lucide-react";
 import {
   LayoutDashboard, Building2, PackageSearch, FileText,
   Download, Menu, ShoppingCart, BarChart3, Users,
@@ -50,6 +51,65 @@ function AppLogoIcon({ className }: { className?: string }) {
   const { appLogo } = useTheme();
   const Icon = LOGO_ICONS[appLogo] || Building2;
   return <Icon className={className} />;
+}
+
+
+// ── Online / Offline Banner ──────────────────────────────────────────────
+function OfflineBanner() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showBack, setShowBack] = useState(false);
+  const [backTimer, setBackTimer] = useState<ReturnType<typeof setTimeout>|null>(null);
+
+  useEffect(() => {
+    const goOnline = () => {
+      setIsOnline(true);
+      setShowBack(true);
+      const t = setTimeout(() => setShowBack(false), 4000);
+      setBackTimer(t);
+    };
+    const goOffline = () => {
+      setIsOnline(false);
+      setShowBack(false);
+      if (backTimer) clearTimeout(backTimer);
+    };
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  if (isOnline && !showBack) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999,
+      background: isOnline
+        ? 'linear-gradient(90deg,#15803d,#16a34a)'
+        : 'linear-gradient(90deg,#991b1b,#b91c1c)',
+      padding: '10px 20px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      gap: 10, boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
+      animation: 'slideUp 0.3s ease',
+      transition: 'background 0.4s ease',
+    }}>
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+      `}</style>
+      {isOnline
+        ? <Wifi size={16} color="#fff" />
+        : <WifiOff size={16} color="#fff" />}
+      <span style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>
+        {isOnline
+          ? '✓ Back online — your changes are being saved'
+          : 'You are offline — check your internet connection'}
+      </span>
+    </div>
+  );
 }
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -214,6 +274,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <main className="flex-1 p-4 md:p-8 min-w-0 overflow-auto">
         <div className="max-w-6xl mx-auto">{children}</div>
       </main>
+      <OfflineBanner />
     </div>
   );
 }
