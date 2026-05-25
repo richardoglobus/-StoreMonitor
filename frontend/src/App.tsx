@@ -96,6 +96,7 @@ function AppWithAuth() {
         <Route path="/issues" component={Issues} />
         <Route path="/reports" component={Reports} />
         <Route path="/exports" component={Exports} />
+        <Route path="/assets" component={Assets} />
         <Route path="/admin/users" component={UserManagement} />
         <Route path="/admin/settings" component={SettingsPage} />
         <Route path="/stock-valuation" component={StockValuationPage} />
