@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Wifi, WifiOff } from "lucide-react";
+import { Wifi, WifiOff, Package2 } from "lucide-react";
 import {
   LayoutDashboard, Building2, PackageSearch, FileText,
   Download, Menu, ShoppingCart, BarChart3, Users,
@@ -26,6 +26,7 @@ const LOGO_ICONS: Record<AppLogo, React.FC<any>> = {
 const NAV_ITEMS = [
   { href: "/",                label: "Dashboard",      icon: LayoutDashboard, permission: "viewDashboard" },
   { href: "/departments",     label: "Departments",    icon: Building2,       permission: "manageDepartments" },
+  { href: "/assets",          label: "Asset Register", icon: Package2,        permission: null },
   { href: "/items",           label: "Catalog",        icon: PackageSearch,   permission: "manageCatalog" },
   { href: "/purchases",       label: "Purchases",      icon: ShoppingCart,    permission: "managePurchases" },
   { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "issueItems" },

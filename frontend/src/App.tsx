@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/lib/theme-context";
 import { useInactivityLogout } from "@/lib/use-inactivity-logout";
 import Dashboard from "@/pages/dashboard";
 import Departments from "@/pages/departments";
+import Assets from "@/pages/assets";
 import DepartmentDetail from "@/pages/department-detail";
 import Items from "@/pages/items";
 import Purchases from "@/pages/purchases";

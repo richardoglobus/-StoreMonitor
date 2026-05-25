@@ -19,6 +19,7 @@ interface User {
     deleteTransactions: boolean;
     viewActivityLogs: boolean;
     manageUsers: boolean;
+    manageAssets: boolean;
   };
 }
 
