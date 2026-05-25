@@ -26,7 +26,7 @@ const LOGO_ICONS: Record<AppLogo, React.FC<any>> = {
 const NAV_ITEMS = [
   { href: "/",                label: "Dashboard",      icon: LayoutDashboard, permission: "viewDashboard" },
   { href: "/departments",     label: "Departments",    icon: Building2,       permission: "manageDepartments" },
-  { href: "/assets",          label: "Asset Register", icon: Package2,        permission: null },
+  { href: "/assets",          label: "Asset Register", icon: Package2,        permission: "viewDashboard" },
   { href: "/items",           label: "Catalog",        icon: PackageSearch,   permission: "manageCatalog" },
   { href: "/purchases",       label: "Purchases",      icon: ShoppingCart,    permission: "managePurchases" },
   { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "issueItems" },
@@ -129,7 +129,7 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => { setMobileOpen(false); }, [location]);
 
   const filteredNavItems = NAV_ITEMS.filter(
-    item => user?.permissions?.[item.permission as keyof typeof user.permissions]
+    item => item.permission === null || user?.permissions?.[item.permission as keyof typeof user.permissions]
   );
 
   const NavLinks = ({ onNavigate, showLabels = true }: { onNavigate?: () => void; showLabels?: boolean }) => (
