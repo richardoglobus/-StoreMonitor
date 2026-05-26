@@ -59,6 +59,7 @@ export default function Assets() {
   const [locationMismatches, setLocationMismatches] = useState<string[]>([]);
   const [syncOpen,           setSyncOpen]           = useState(false);
   const [syncing,            setSyncing]            = useState(false);
+  const [syncProgress,       setSyncProgress]       = useState({ current: 0, total: 0, currentLoc: "" });
   const [syncSuggestions,    setSyncSuggestions]    = useState<{assetLoc:string,deptName:string,count:number}[]>([]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -187,17 +188,17 @@ export default function Assets() {
   };
 
   const handleApplySync = async () => {
-    setSyncing(true);
-    // Count total assets to update
     const allToUpdate = syncSuggestions.flatMap(s =>
-      assets.filter(a => (a.location||"").toUpperCase().trim() === s.assetLoc.toUpperCase().trim())
+      assets
+        .filter(a => (a.location || "").toUpperCase().trim() === s.assetLoc.toUpperCase().trim())
         .map(a => ({ asset: a, newLoc: s.deptName }))
     );
+    setSyncing(true);
     setSyncProgress({ current: 0, total: allToUpdate.length, currentLoc: "" });
     try {
       let updated = 0;
       for (const { asset, newLoc } of allToUpdate) {
-        setSyncProgress(p => ({ ...p, current: updated + 1, currentLoc: newLoc }));
+        setSyncProgress({ current: updated + 1, total: allToUpdate.length, currentLoc: newLoc });
         await fetch(`${API_BASE}/api/assets/${asset.id}`, {
           method: "PATCH", credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -206,7 +207,10 @@ export default function Assets() {
         updated++;
       }
       toast.success(`Updated ${updated} asset locations`);
-      setSyncOpen(false); setSyncSuggestions([]); setSyncProgress({ current: 0, total: 0, currentLoc: "" }); fetchAll();
+      setSyncOpen(false);
+      setSyncSuggestions([]);
+      setSyncProgress({ current: 0, total: 0, currentLoc: "" });
+      fetchAll();
     } catch { toast.error("Sync failed"); }
     finally { setSyncing(false); }
   };
@@ -616,30 +620,28 @@ export default function Assets() {
             </div>
           )}
 
+          {syncing && syncProgress.total > 0 && (
+            <div className="px-4 pb-2 space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Updating <strong>{syncProgress.currentLoc}</strong>…</span>
+                <span className="font-mono font-semibold">{syncProgress.current} / {syncProgress.total}</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-2 rounded-full bg-primary transition-all duration-300"
+                  style={{ width: `${Math.round((syncProgress.current / syncProgress.total) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-right text-muted-foreground">
+                {Math.round((syncProgress.current / syncProgress.total) * 100)}% complete
+              </p>
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncOpen(false)}>Cancel</Button>
-            {syncSuggestions.length > 0 && (
-              {syncing && syncProgress.total > 0 && (
-                <div className="flex-1 space-y-1.5 mr-2">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Updating assets in <strong>{syncProgress.currentLoc}</strong>…</span>
-                    <span className="font-mono font-semibold">{syncProgress.current} / {syncProgress.total}</span>
-                  </div>
-                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-2 rounded-full bg-primary transition-all duration-200"
-                      style={{ width: `${Math.round((syncProgress.current / syncProgress.total) * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground text-right">
-                    {Math.round((syncProgress.current / syncProgress.total) * 100)}% complete
-                  </p>
-                </div>
-              )}
-              <Button onClick={handleApplySync} disabled={syncing}>
-                {syncing ? `Applying…` : `Apply ${syncSuggestions.length} Mapping${syncSuggestions.length!==1?"s":""}`}
-              </Button>
-            )}
+            <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={syncing}>Cancel</Button>
+            <Button onClick={handleApplySync} disabled={syncing}>
+              {syncing ? "Applying…" : `Apply ${syncSuggestions.length} Mapping${syncSuggestions.length!==1?"s":""}`}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
