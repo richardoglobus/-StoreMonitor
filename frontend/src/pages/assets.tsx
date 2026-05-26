@@ -554,32 +554,66 @@ export default function Assets() {
 
       {/* ── Auto-sync Dialog ── */}
       <Dialog open={syncOpen} onOpenChange={open => { if(!open) setSyncOpen(false); }}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Auto-match Locations to Departments</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Auto-match Locations to Departments</DialogTitle>
+          </DialogHeader>
+
           {syncSuggestions.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">No automatic matches found. The unmatched locations don't resemble any department name — update them manually using the Edit button.</p>
+            <div className="py-4 space-y-2">
+              <p className="text-sm text-muted-foreground">No automatic matches found. All unmatched locations are too different from your department names.</p>
+              <p className="text-sm text-muted-foreground">Use the <strong>Edit</strong> button on individual assets to update their location manually.</p>
+            </div>
           ) : (
-            <div className="space-y-3 py-2">
-              <p className="text-sm text-muted-foreground">These renames will be applied:</p>
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                Review each suggestion. Edit the target department, or remove rows you don't want to apply.
+              </p>
               <div className="rounded border divide-y text-sm">
-                {syncSuggestions.map(s => (
-                  <div key={s.assetLoc} className="flex items-center justify-between px-3 py-2">
-                    <div>
-                      <span className="font-mono text-red-500">{s.assetLoc}</span>
-                      <span className="mx-2 text-muted-foreground">→</span>
-                      <span className="font-mono text-green-600">{s.deptName}</span>
+                {syncSuggestions.map((s, idx) => (
+                  <div key={s.assetLoc} className="flex items-center gap-2 px-3 py-2">
+                    {/* Asset location (fixed) */}
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono text-xs text-red-500 block truncate">{s.assetLoc}</span>
+                      <span className="text-xs text-muted-foreground">{s.count} asset{s.count!==1?"s":""}</span>
                     </div>
-                    <span className="text-muted-foreground text-xs">{s.count} asset{s.count!==1?"s":""}</span>
+                    <span className="text-muted-foreground text-xs shrink-0">→</span>
+                    {/* Editable target department */}
+                    <Select
+                      value={s.deptName}
+                      onValueChange={v => setSyncSuggestions(prev => prev.map((r,i) => i===idx ? {...r, deptName: v} : r))}
+                    >
+                      <SelectTrigger className="w-44 h-7 text-xs">
+                        <SelectValue/>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map(d => <SelectItem key={d} value={d} className="text-xs">{d}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {/* Remove this row */}
+                    <Button
+                      size="icon" variant="ghost"
+                      className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+                      title="Remove this mapping"
+                      onClick={() => setSyncSuggestions(prev => prev.filter((_,i) => i!==idx))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5"/>
+                    </Button>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">Total: {syncSuggestions.reduce((n,s)=>n+s.count,0)} assets will be updated.</p>
+              <p className="text-xs text-muted-foreground">
+                {syncSuggestions.reduce((n,s)=>n+s.count,0)} assets will be updated across {syncSuggestions.length} location{syncSuggestions.length!==1?"s":""}.
+              </p>
             </div>
           )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setSyncOpen(false)}>Cancel</Button>
             {syncSuggestions.length > 0 && (
-              <Button onClick={handleApplySync} disabled={syncing}>{syncing ? "Applying…" : "Apply All"}</Button>
+              <Button onClick={handleApplySync} disabled={syncing}>
+                {syncing ? "Applying…" : `Apply ${syncSuggestions.length} Mapping${syncSuggestions.length!==1?"s":""}`}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>
