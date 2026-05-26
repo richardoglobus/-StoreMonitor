@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Wifi, WifiOff, Package2 } from "lucide-react";
+import { Wifi, WifiOff, Package2, RefreshCw } from "lucide-react";
 import {
   LayoutDashboard, Building2, PackageSearch, FileText,
   Download, Menu, ShoppingCart, BarChart3, Users,
@@ -272,8 +272,20 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 p-4 md:p-8 min-w-0 overflow-auto">
-        <div className="max-w-6xl mx-auto">{children}</div>
+      <main className="flex-1 min-w-0 overflow-auto">
+        {/* Top bar with refresh */}
+        <div className="flex justify-end px-4 md:px-8 pt-4 pb-0">
+          <button
+            title="Refresh page"
+            onClick={() => window.location.reload()}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border rounded-md px-2.5 py-1.5 hover:bg-muted transition-colors"
+          >
+            <RefreshCw className="h-3.5 w-3.5"/>Refresh
+          </button>
+        </div>
+        <div className="p-4 md:p-8 pt-3">
+          <div className="max-w-6xl mx-auto">{children}</div>
+        </div>
       </main>
       <OfflineBanner />
     </div>

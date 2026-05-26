@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Plus, ChevronRight, Pencil, Check, X, Trash2 } from "lucide-react";
+import { Building2, Plus, ChevronRight, Pencil, Check, X, Trash2, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
@@ -30,6 +30,7 @@ export default function Departments() {
   const [renameValue, setRenameValue] = useState("");
   const [renameSaving, setRenameSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [search, setSearch] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const { data: departments, isLoading } = useListDepartments(
@@ -139,13 +140,24 @@ export default function Departments() {
           </Dialog>
         </div>
 
+        {/* Search */}
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"/>
+          <Input
+            placeholder="Search departments…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1,2,3,4,5,6].map(i=><Skeleton key={i} className="h-32 w-full"/>)}
           </div>
         ) : departments && departments.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {departments.map(dept=>(
+            {departments.filter(d => d.name.toLowerCase().includes(search.toLowerCase())).map(dept=>(
               <div key={dept.id} className="relative group">
                 {renamingId === dept.id ? (
                   <Card className="border-primary shadow-md">
@@ -219,6 +231,12 @@ export default function Departments() {
                 )}
               </div>
             ))}
+          </div>
+        ) : search && departments && departments.filter(d => d.name.toLowerCase().includes(search.toLowerCase())).length === 0 ? (
+          <div className="text-center py-16 border border-dashed rounded-lg bg-muted/20">
+            <Search className="h-8 w-8 text-muted-foreground mx-auto mb-3 opacity-40"/>
+            <p className="text-sm text-muted-foreground">No departments match "<strong>{search}</strong>"</p>
+            <button className="text-xs text-primary mt-2 hover:underline" onClick={() => setSearch("")}>Clear search</button>
           </div>
         ) : (
           <div className="text-center py-20 border border-dashed rounded-lg bg-muted/20">

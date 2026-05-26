@@ -85,6 +85,13 @@ export default function Assets() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchAll();
+    setRefreshing(false);
+    toast.success("Asset register refreshed");
+  };
+
   // ── Filtered + paginated ──────────────────────────────────────────────────
   const filtered = assets.filter(a => {
     if (filterCat !== "all" && a.category !== filterCat) return false;
@@ -173,15 +180,26 @@ export default function Assets() {
     const suggestions: {assetLoc:string,deptName:string,count:number}[] = [];
     for (const assetLoc of locationMismatches) {
       const norm  = assetLoc.toUpperCase().trim();
-      const match = departments.find(dep => {
+      const count = assets.filter(a => (a.location||"").toUpperCase().trim() === norm).length;
+      // Try to find best matching department
+      let bestMatch = "";
+      let bestScore = 0;
+      for (const dep of departments) {
         const dn = dep.toUpperCase().trim();
-        return dn.includes(norm) || norm.includes(dn) ||
-          norm.split(/\s+/).some(w => w.length > 3 && dn.includes(w));
-      });
-      if (match) {
-        const count = assets.filter(a => (a.location||"").toUpperCase().trim() === norm).length;
-        suggestions.push({ assetLoc, deptName: match, count });
+        let score = 0;
+        if (dn === norm) { score = 100; }
+        else if (dn.includes(norm) || norm.includes(dn)) { score = 80; }
+        else {
+          // Word overlap scoring
+          const normWords = norm.split(/\s+/).filter(w => w.length > 2);
+          const dnWords   = dn.split(/\s+/).filter(w => w.length > 2);
+          const overlap   = normWords.filter(w => dnWords.some(dw => dw.includes(w) || w.includes(dw)));
+          if (overlap.length > 0) score = 40 + (overlap.length * 20);
+        }
+        if (score > bestScore) { bestScore = score; bestMatch = dep; }
       }
+      // Include ALL mismatches — use best match if found, else first dept as placeholder
+      suggestions.push({ assetLoc, deptName: bestMatch || (departments[0] || ""), count });
     }
     setSyncSuggestions(suggestions);
     setSyncOpen(true);
@@ -207,8 +225,7 @@ export default function Assets() {
         updated++;
       }
       toast.success(`Updated ${updated} asset locations`);
-      setSyncOpen(false);
-      setSyncSuggestions([]);
+      setSyncOpen(false); setSyncSuggestions([]);
       setSyncProgress({ current: 0, total: 0, currentLoc: "" });
       fetchAll();
     } catch { toast.error("Sync failed"); }
@@ -627,8 +644,7 @@ export default function Assets() {
                 <span className="font-mono font-semibold">{syncProgress.current} / {syncProgress.total}</span>
               </div>
               <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                <div
-                  className="h-2 rounded-full bg-primary transition-all duration-300"
+                <div className="h-2 rounded-full bg-primary transition-all duration-300"
                   style={{ width: `${Math.round((syncProgress.current / syncProgress.total) * 100)}%` }}
                 />
               </div>
