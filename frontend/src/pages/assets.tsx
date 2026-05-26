@@ -97,6 +97,52 @@ export default function Assets() {
     finally { setLoading(false); }
   }, []);
 
+  // Auto-sync: fuzzy-match asset locations to department names
+  const [syncSuggestions, setSyncSuggestions] = useState<{assetLoc:string, deptName:string, count:number}[]>([]);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSuggestSync = () => {
+    const suggestions: {assetLoc:string, deptName:string, count:number}[] = [];
+    for (const assetLoc of locationMismatches) {
+      const norm = assetLoc.toUpperCase().trim();
+      // Find best matching department: dept contains asset loc OR asset loc is contained in dept
+      const match = departments.find(d => {
+        const dn = d.toUpperCase().trim();
+        return dn.includes(norm) || norm.includes(dn) ||
+          // word overlap: at least one significant word matches
+          norm.split(/\s+/).some(w => w.length > 3 && dn.includes(w));
+      });
+      if (match) {
+        const count = assets.filter(a => (a.location||"").toUpperCase().trim() === norm).length;
+        suggestions.push({ assetLoc, deptName: match, count });
+      }
+    }
+    setSyncSuggestions(suggestions);
+    setSyncOpen(true);
+  };
+
+  const handleApplySync = async () => {
+    setSyncing(true);
+    try {
+      let updated = 0;
+      for (const s of syncSuggestions) {
+        const matching = assets.filter(a => (a.location||"").toUpperCase().trim() === s.assetLoc.toUpperCase().trim());
+        for (const asset of matching) {
+          await fetch(`${API_BASE}/api/assets/${asset.id}`, {
+            method:"PATCH", credentials:"include",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ location: s.deptName })
+          });
+          updated++;
+        }
+      }
+      toast.success(`Updated ${updated} asset locations`);
+      setSyncOpen(false); setSyncSuggestions([]); fetchAll();
+    } catch { toast.error("Sync failed"); }
+    finally { setSyncing(false); }
+  };
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // Filtered + paginated
@@ -249,6 +295,11 @@ export default function Assets() {
                   <p className="text-xs text-muted-foreground mt-1">
                     These locations exist only in the asset register. You can add them as departments or update the asset location.
                   </p>
+                  {canManage && (
+                    <Button size="sm" variant="outline" className="mt-2 h-7 text-xs border-yellow-400 text-yellow-700 hover:bg-yellow-50" onClick={handleSuggestSync}>
+                      Auto-match to departments
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -420,7 +471,13 @@ export default function Assets() {
             </div>
             <div className="space-y-1">
               <Label>Location</Label>
-              <Input value={form.location} onChange={e => setForm(f => ({...f, location: e.target.value.toUpperCase()}))} placeholder="e.g. MATERNITY"/>
+              <Select value={form.location} onValueChange={v => setForm(f => ({...f, location: v}))}>
+                <SelectTrigger><SelectValue placeholder="Select department"/></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">— None —</SelectItem>
+                  {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Date Acquired</Label>
@@ -428,11 +485,27 @@ export default function Assets() {
             </div>
             <div className="col-span-2 space-y-1">
               <Label>Status</Label>
-              <Input value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value.toUpperCase()}))} placeholder="FUNCTIONAL"/>
+              <Select value={form.status} onValueChange={v => setForm(f => ({...f, status: v}))}>
+                <SelectTrigger><SelectValue placeholder="Select status"/></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FUNCTIONAL">FUNCTIONAL</SelectItem>
+                  <SelectItem value="NON-FUNCTIONAL">NON-FUNCTIONAL</SelectItem>
+                  <SelectItem value="UNDER REPAIR">UNDER REPAIR</SelectItem>
+                  <SelectItem value="DECOMMISSIONED">DECOMMISSIONED</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="col-span-2 space-y-1">
               <Label>Ownership</Label>
-              <Input value={form.ownership} onChange={e => setForm(f => ({...f, ownership: e.target.value.toUpperCase()}))} placeholder="FACILITY OWNED"/>
+              <Select value={form.ownership} onValueChange={v => setForm(f => ({...f, ownership: v}))}>
+                <SelectTrigger><SelectValue placeholder="Select ownership"/></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FACILITY OWNED">FACILITY OWNED</SelectItem>
+                  <SelectItem value="ON PLACEMENT">ON PLACEMENT</SelectItem>
+                  <SelectItem value="LEASED">LEASED</SelectItem>
+                  <SelectItem value="DONATED">DONATED</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="col-span-2 space-y-1">
               <Label>Notes</Label>
@@ -455,7 +528,13 @@ export default function Assets() {
               <p className="text-sm text-muted-foreground font-medium">{moveAsset.description}</p>
               <div className="space-y-1">
                 <Label>New Location</Label>
-                <Input value={moveForm.location} onChange={e => setMoveForm(f => ({...f, location: e.target.value.toUpperCase()}))} placeholder="e.g. MALE WARD"/>
+                <Select value={moveForm.location} onValueChange={v => setMoveForm(f => ({...f, location: v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select department"/></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— Keep current —</SelectItem>
+                    {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label>New Category</Label>
@@ -534,6 +613,40 @@ export default function Assets() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Sync Locations Dialog */}
+      <Dialog open={syncOpen} onOpenChange={open => { if(!open) setSyncOpen(false); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Auto-match Asset Locations to Departments</DialogTitle>
+          </DialogHeader>
+          {syncSuggestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No fuzzy matches found. The unmatched locations are too different from your department names — update them manually.</p>
+          ) : (
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-muted-foreground">The following renames will be applied to asset locations:</p>
+              <div className="rounded border divide-y text-sm">
+                {syncSuggestions.map(s => (
+                  <div key={s.assetLoc} className="flex items-center justify-between px-3 py-2">
+                    <div>
+                      <span className="font-mono text-red-500">{s.assetLoc}</span>
+                      <span className="mx-2 text-muted-foreground">→</span>
+                      <span className="font-mono text-green-600">{s.deptName}</span>
+                    </div>
+                    <span className="text-muted-foreground text-xs">{s.count} asset{s.count!==1?"s":""}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Total: {syncSuggestions.reduce((n,s)=>n+s.count,0)} assets will be updated.</p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncOpen(false)}>Cancel</Button>
+            {syncSuggestions.length > 0 && (
+              <Button onClick={handleApplySync} disabled={syncing}>{syncing ? "Applying…" : "Apply All"}</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
