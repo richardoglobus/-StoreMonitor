@@ -92,6 +92,8 @@ const PERMISSION_LABELS: Record<string, string> = {
   editIssues: "Edit Issues (Admin)",
   viewActivityLogs: "View Activity Logs",
   manageUsers: "Manage Users & Settings",
+  viewAssets: "View Asset Register",
+  manageAssets: "Manage Assets (Add/Edit/Delete)",
 };
 
 export default function UserManagement() {

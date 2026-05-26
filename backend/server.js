@@ -1021,13 +1021,12 @@ function seedAssets() {
     console.log('Assets seeded:', SEED_ASSETS.length, 'records');
   }
 }
-seedAssets();
 
 
 db.defaults({
   _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0 },
   users: [], departments: [], items: [], inventory: [],
-  receipts: [], issues: [], purchases: [], activities: []
+  receipts: [], issues: [], purchases: [], activities: [], assets: [], assetCategories: []
 }).write();
 
 // DATA RECOVERY: try all known paths and print whichever has data
@@ -2617,8 +2616,12 @@ adapter.write = function(data) {
 downloadFromSupabase().finally(() => {
   // Re-read db after potential Supabase restore
   db.read();
+  // Ensure assets keys exist after Supabase restore (in case old store.json lacks them)
+  if (!db.get('assets').value()) db.set('assets', []).write();
+  if (!db.get('assetCategories').value()) db.set('assetCategories', []).write();
   runMigrations();
   seedAdmin();
+  seedAssets();
   
 // ─────────────────────────────────────────────────────────────────────────
 // ASSET REGISTER ROUTES
