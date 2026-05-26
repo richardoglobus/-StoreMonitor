@@ -60,6 +60,7 @@ export default function Assets() {
   const [syncOpen,           setSyncOpen]           = useState(false);
   const [syncing,            setSyncing]            = useState(false);
   const [syncSuggestions,    setSyncSuggestions]    = useState<{assetLoc:string,deptName:string,count:number}[]>([]);
+  const [refreshing,         setRefreshing]         = useState(false);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
