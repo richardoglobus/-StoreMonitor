@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PackageSearch, Plus, Search, Pencil, Trash2, AlertCircle, Zap } from "lucide-react";
+import { PackageSearch, Plus, Search, Pencil, Trash2, AlertCircle, Zap, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -81,7 +81,7 @@ export default function Items() {
   const [newItem, setNewItem] = useState({ description: "", unit: "", quantity: "0", lowStockThreshold: "10" });
   const [editItem, setEditItem] = useState({ description: "", unit: "", quantity: "0", lowStockThreshold: "10" });
 
-  const { data: items, isLoading } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
+  const { data: items, isLoading, refetch: refetchItems, isFetching } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
 
   const existingUnits = useMemo(() => Array.from(new Set((items??[]).map(i=>i.unit.toUpperCase()))), [items]);
 
@@ -163,6 +163,10 @@ export default function Items() {
             <h1 className="text-3xl font-bold tracking-tight">Item Catalog</h1>
             <p className="text-muted-foreground">Master list of all hospital supplies with current stock levels.</p>
           </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => refetchItems()} disabled={isFetching} title="Refresh">
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}/>
+            </Button>
           {canManageCatalog && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
@@ -219,6 +223,7 @@ export default function Items() {
               </DialogContent>
             </Dialog>
           )}
+          </div>
         </div>
 
         {/* Emergency: negative stock banner */}

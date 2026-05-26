@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown, Zap } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown, Zap, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Cell } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +61,7 @@ export default function Dashboard() {
   const [to, setTo] = useState(todayStr());
   const month = dateToMonth(from);
 
-  const { data: summary, isLoading: isLoadingSummary } = useGetDashboardSummary(
+  const { data: summary, isLoading: isLoadingSummary, refetch: refetchDash, isFetching: isFetchingDash } = useGetDashboardSummary(
     { month }, { query: { queryKey: getGetDashboardSummaryQueryKey({ month }), refetchInterval: 60_000 } }
   );
   const { data: recentIssues, isLoading: isLoadingRecent } = useGetRecentIssues(
@@ -106,7 +106,12 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground">Overview of hospital stores inventory.</p>
           </div>
-          <LiveClock />
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => refetchDash()} disabled={isFetchingDash} title="Refresh">
+              <RefreshCw className={`h-4 w-4 ${isFetchingDash ? "animate-spin" : ""}`}/>
+            </Button>
+            <LiveClock />
+          </div>
         </div>
 
         <Card>

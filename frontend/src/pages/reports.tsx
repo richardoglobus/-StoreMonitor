@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, BarChart3, Loader2, FileSpreadsheet, Printer } from "lucide-react";
+import { Download, BarChart3, Loader2, FileSpreadsheet, Printer, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
@@ -45,7 +45,7 @@ export default function MonthlyReportPage() {
   const startMonth = queryDates.from.slice(0, 7);
   const endMonth = queryDates.to.slice(0, 7);
 
-  const { data: report, isLoading, error } = useGetMonthlyReport(
+  const { data: report, isLoading, error, refetch: refetchReport, isFetching } = useGetMonthlyReport(
     { startMonth, endMonth },
     { query: { queryKey: [...getGetMonthlyReportQueryKey({ startMonth, endMonth }), "_v2"], refetchOnMount: true, staleTime: 0 } }
   );
@@ -83,9 +83,14 @@ export default function MonthlyReportPage() {
       <style>{`@media print { nav,aside,header,[data-no-print]{display:none!important;} main{padding:0!important;} }`}</style>
       <Layout>
       <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Monthly Report</h1>
-          <p className="text-muted-foreground">Comprehensive summary of stock movements over a date range.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Monthly Report</h1>
+            <p className="text-muted-foreground">Comprehensive summary of stock movements over a date range.</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => refetchReport()} disabled={isFetching} title="Refresh">
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}/>
+          </Button>
         </div>
 
         <Card>

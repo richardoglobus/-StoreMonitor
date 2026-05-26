@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, ShoppingCart, Download, FileSpreadsheet, Search, Loader2, AlertTriangle, Pencil, X } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, Download, FileSpreadsheet, Search, Loader2, AlertTriangle, Pencil, X, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -74,7 +74,7 @@ export default function Purchases() {
 
   const { data: items } = useListItems({ query: { queryKey: getListItemsQueryKey() } });
   const queryParams = { from, to } as any;
-  const { data: purchases, isLoading } = useListPurchases(queryParams, { query: { queryKey: getListPurchasesQueryKey(queryParams) } });
+  const { data: purchases, isLoading, refetch: refetchPurchases, isFetching } = useListPurchases(queryParams, { query: { queryKey: getListPurchasesQueryKey(queryParams) } });
 
   const deletePurchase = useDeletePurchase({
     mutation: {
@@ -189,6 +189,9 @@ export default function Purchases() {
             <p className="text-muted-foreground">Track all incoming stock — one supplier can have multiple commodities per voucher.</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => refetchPurchases()} disabled={isFetching} title="Refresh">
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}/>
+            </Button>
             <Button variant="outline" size="sm" disabled={loadingCsv} onClick={() => dl(`${API_BASE}/api/export/purchases.csv?from=${from}&to=${to}`, `purchases_${from}_${to}.csv`, setLoadingCsv)}>
               {loadingCsv ? <Loader2 className="h-4 w-4 mr-1 animate-spin"/> : <Download className="h-4 w-4 mr-1"/>}CSV
             </Button>

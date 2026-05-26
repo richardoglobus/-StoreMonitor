@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, FileSpreadsheet, Search, Loader2, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { TrendingUp, FileSpreadsheet, Search, Loader2, AlertTriangle, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -63,7 +63,7 @@ export default function StockValuationPage() {
   const [filterStatus, setFilterStatus] = useState<"ALL" | "OK" | "LOW" | "OUT">("ALL");
   const [loadingXlsx, setLoadingXlsx] = useState(false);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, refetch: refetchStock } = useQuery({
     queryKey: ["stock-valuation", queryDate],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/reports/stock-valuation?asAt=${queryDate}`, { credentials: "include" });
@@ -140,6 +140,9 @@ export default function StockValuationPage() {
             <Button onClick={handleGenerate} disabled={isFetching} className="gap-2">
               {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <TrendingUp className="h-4 w-4" />}
               {isFetching ? "Calculating…" : "Generate Report"}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => refetchStock()} disabled={isFetching} title="Refresh current results">
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}/>
             </Button>
             {queryDate !== todayStr() && (
               <Button variant="outline" size="sm" onClick={() => { setAsAt(todayStr()); setQueryDate(todayStr()); }}>

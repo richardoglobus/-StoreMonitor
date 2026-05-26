@@ -13,7 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, Plus, Trash2, X, Search , Pencil } from "lucide-react";
+import { Download, Plus, Trash2, X, Search, Pencil, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -174,7 +174,7 @@ export default function Issues() {
 
   const month = from.slice(0, 7);
   const queryParams = { month, ...(departmentIdFilter !== "all" ? { departmentId: Number(departmentIdFilter) } : {}) };
-  const { data: issues, isLoading } = useListIssues(queryParams, { query: { queryKey: getListIssuesQueryKey(queryParams) } });
+  const { data: issues, isLoading, refetch: refetchIssues, isFetching } = useListIssues(queryParams, { query: { queryKey: getListIssuesQueryKey(queryParams) } });
 
   const createVoucher = useCreateIssueVoucher({
     mutation: {
@@ -286,6 +286,9 @@ export default function Issues() {
             <p className="text-muted-foreground">Track all items issued to departments.</p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
+            <Button variant="ghost" size="icon" onClick={() => refetchIssues()} disabled={isFetching} title="Refresh">
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}/>
+            </Button>
             <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
             <Select value={departmentIdFilter} onValueChange={setDepartmentIdFilter}>
               <SelectTrigger className="w-[180px]">
