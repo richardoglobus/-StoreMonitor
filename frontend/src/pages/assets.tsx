@@ -59,7 +59,6 @@ export default function Assets() {
   const [locationMismatches, setLocationMismatches] = useState<string[]>([]);
   const [syncOpen,           setSyncOpen]           = useState(false);
   const [syncing,            setSyncing]            = useState(false);
-  const [syncProgress,       setSyncProgress]       = useState({ current: 0, total: 0, currentLoc: "" });
   const [syncSuggestions,    setSyncSuggestions]    = useState<{assetLoc:string,deptName:string,count:number}[]>([]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -89,7 +88,7 @@ export default function Assets() {
     setRefreshing(true);
     await fetchAll();
     setRefreshing(false);
-    toast.success("Asset register refreshed");
+    toast.success("Refreshed");
   };
 
   // ── Filtered + paginated ──────────────────────────────────────────────────
@@ -180,54 +179,33 @@ export default function Assets() {
     const suggestions: {assetLoc:string,deptName:string,count:number}[] = [];
     for (const assetLoc of locationMismatches) {
       const norm  = assetLoc.toUpperCase().trim();
-      const count = assets.filter(a => (a.location||"").toUpperCase().trim() === norm).length;
-      // Try to find best matching department
-      let bestMatch = "";
-      let bestScore = 0;
-      for (const dep of departments) {
+      const match = departments.find(dep => {
         const dn = dep.toUpperCase().trim();
-        let score = 0;
-        if (dn === norm) { score = 100; }
-        else if (dn.includes(norm) || norm.includes(dn)) { score = 80; }
-        else {
-          // Word overlap scoring
-          const normWords = norm.split(/\s+/).filter(w => w.length > 2);
-          const dnWords   = dn.split(/\s+/).filter(w => w.length > 2);
-          const overlap   = normWords.filter(w => dnWords.some(dw => dw.includes(w) || w.includes(dw)));
-          if (overlap.length > 0) score = 40 + (overlap.length * 20);
-        }
-        if (score > bestScore) { bestScore = score; bestMatch = dep; }
+        return dn.includes(norm) || norm.includes(dn) ||
+          norm.split(/\s+/).some(w => w.length > 3 && dn.includes(w));
+      });
+      if (match) {
+        const count = assets.filter(a => (a.location||"").toUpperCase().trim() === norm).length;
+        suggestions.push({ assetLoc, deptName: match, count });
       }
-      // Include ALL mismatches — use best match if found, else first dept as placeholder
-      suggestions.push({ assetLoc, deptName: bestMatch || (departments[0] || ""), count });
     }
     setSyncSuggestions(suggestions);
     setSyncOpen(true);
   };
 
   const handleApplySync = async () => {
-    const allToUpdate = syncSuggestions.flatMap(s =>
-      assets
-        .filter(a => (a.location || "").toUpperCase().trim() === s.assetLoc.toUpperCase().trim())
-        .map(a => ({ asset: a, newLoc: s.deptName }))
-    );
     setSyncing(true);
-    setSyncProgress({ current: 0, total: allToUpdate.length, currentLoc: "" });
     try {
       let updated = 0;
-      for (const { asset, newLoc } of allToUpdate) {
-        setSyncProgress({ current: updated + 1, total: allToUpdate.length, currentLoc: newLoc });
-        await fetch(`${API_BASE}/api/assets/${asset.id}`, {
-          method: "PATCH", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ location: newLoc })
-        });
-        updated++;
+      for (const s of syncSuggestions) {
+        const toUpdate = assets.filter(a => (a.location||"").toUpperCase().trim() === s.assetLoc.toUpperCase().trim());
+        for (const a of toUpdate) {
+          await fetch(`${API_BASE}/api/assets/${a.id}`, { method:"PATCH", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ location: s.deptName }) });
+          updated++;
+        }
       }
       toast.success(`Updated ${updated} asset locations`);
-      setSyncOpen(false); setSyncSuggestions([]);
-      setSyncProgress({ current: 0, total: 0, currentLoc: "" });
-      fetchAll();
+      setSyncOpen(false); setSyncSuggestions([]); fetchAll();
     } catch { toast.error("Sync failed"); }
     finally { setSyncing(false); }
   };
@@ -268,6 +246,9 @@ export default function Assets() {
                 <Button size="sm" onClick={() => { setForm({...EMPTY_FORM}); setEditAsset(null); setAddOpen(true); }}><Plus className="h-4 w-4 mr-1"/>Add Asset</Button>
               </>
             )}
+            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} title="Refresh data">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}/>
+            </Button>
             <Button size="sm" variant="outline" onClick={() => downloadExport("csv")}><Download className="h-4 w-4 mr-1"/>CSV</Button>
             <Button size="sm" variant="outline" onClick={() => downloadExport("xlsx")}><Download className="h-4 w-4 mr-1"/>Excel</Button>
           </div>
@@ -637,27 +618,13 @@ export default function Assets() {
             </div>
           )}
 
-          {syncing && syncProgress.total > 0 && (
-            <div className="px-4 pb-2 space-y-1.5">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Updating <strong>{syncProgress.currentLoc}</strong>…</span>
-                <span className="font-mono font-semibold">{syncProgress.current} / {syncProgress.total}</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                <div className="h-2 rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${Math.round((syncProgress.current / syncProgress.total) * 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-right text-muted-foreground">
-                {Math.round((syncProgress.current / syncProgress.total) * 100)}% complete
-              </p>
-            </div>
-          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncOpen(false)} disabled={syncing}>Cancel</Button>
-            <Button onClick={handleApplySync} disabled={syncing}>
-              {syncing ? "Applying…" : `Apply ${syncSuggestions.length} Mapping${syncSuggestions.length!==1?"s":""}`}
-            </Button>
+            <Button variant="outline" onClick={() => setSyncOpen(false)}>Cancel</Button>
+            {syncSuggestions.length > 0 && (
+              <Button onClick={handleApplySync} disabled={syncing}>
+                {syncing ? "Applying…" : `Apply ${syncSuggestions.length} Mapping${syncSuggestions.length!==1?"s":""}`}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

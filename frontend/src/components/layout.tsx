@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Wifi, WifiOff, Package2, RefreshCw } from "lucide-react";
+import { Wifi, WifiOff, Package2 } from "lucide-react";
 import {
   LayoutDashboard, Building2, PackageSearch, FileText,
   Download, Menu, ShoppingCart, BarChart3, Users,
@@ -205,23 +205,23 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Desktop sidebar ── */}
-      <aside className={`hidden md:flex flex-col border-r bg-card h-screen sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
+      <aside className={`hidden md:flex flex-col border-r bg-card h-screen sticky top-0 shrink-0 transition-all duration-300 z-40 ${collapsed ? "w-[60px] hover:w-60 hover:shadow-2xl group/sidebar" : "w-60"}`}>
 
         {/* Logo + toggle button */}
         <div className={`flex items-center border-b h-14 shrink-0 ${collapsed ? "justify-center px-2" : "px-4 gap-2"}`}>
-          {!collapsed && (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
                 <AppLogoIcon className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="font-bold text-xs leading-tight text-foreground truncate">Mukurweini Hospital Stores</span>
+              {(!collapsed) && (
+                <span className="font-bold text-xs leading-tight text-foreground truncate">Mukurweini Hospital Stores</span>
+              )}
+              {collapsed && (
+                <span className="font-bold text-xs leading-tight text-foreground truncate opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+                  Mukurweini Hospital Stores
+                </span>
+              )}
             </div>
-          )}
-          {collapsed && (
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <AppLogoIcon className="h-5 w-5 text-primary-foreground" />
-            </div>
-          )}
           <Button
             variant="ghost" size="icon"
             onClick={() => setCollapsed(c => !c)}
@@ -233,7 +233,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
-          <NavLinks showLabels={!collapsed} />
+          <NavLinks showLabels={!collapsed} hoverExpanded={collapsed} />
         </nav>
 
         {/* User section */}
@@ -272,20 +272,8 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 min-w-0 overflow-auto">
-        {/* Top bar with refresh */}
-        <div className="flex justify-end px-4 md:px-8 pt-4 pb-0">
-          <button
-            title="Refresh page"
-            onClick={() => window.location.reload()}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border rounded-md px-2.5 py-1.5 hover:bg-muted transition-colors"
-          >
-            <RefreshCw className="h-3.5 w-3.5"/>Refresh
-          </button>
-        </div>
-        <div className="p-4 md:p-8 pt-3">
-          <div className="max-w-6xl mx-auto">{children}</div>
-        </div>
+      <main className="flex-1 p-4 md:p-8 min-w-0 overflow-auto">
+        <div className="max-w-6xl mx-auto">{children}</div>
       </main>
       <OfflineBanner />
     </div>
