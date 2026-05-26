@@ -1200,7 +1200,9 @@ function normalizePermissions(role, permissions) {
     editPurchases: permissions.editPurchases !== undefined ? !!permissions.editPurchases : defaults.editPurchases,
     editIssues: permissions.editIssues !== undefined ? !!permissions.editIssues : defaults.editIssues,
     viewActivityLogs: permissions.viewActivityLogs !== undefined ? !!permissions.viewActivityLogs : defaults.viewActivityLogs,
-    manageUsers: permissions.manageUsers !== undefined ? !!permissions.manageUsers : defaults.manageUsers
+    manageUsers: permissions.manageUsers !== undefined ? !!permissions.manageUsers : defaults.manageUsers,
+    viewAssets: permissions.viewAssets !== undefined ? !!permissions.viewAssets : defaults.viewAssets,
+    manageAssets: permissions.manageAssets !== undefined ? !!permissions.manageAssets : defaults.manageAssets
   };
 }
 
