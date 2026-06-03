@@ -208,6 +208,7 @@ export default function Issues() {
     if (!voucherData.departmentId || !voucherData.s11No.trim() || voucherItems.some(i => !i.itemId || !i.quantity || !i.folioNo.trim())) {
       toast.error("Please fill in all required fields"); return;
     }
+    if (voucherData.issuedAt > todayStr()) { toast.error("Issue date cannot be in the future"); return; }
     for (const vItem of voucherItems) {
       const stock = itemStock?.find(s => s.id === Number(vItem.itemId));
       if (!stock || stock.stockBalance <= 0) { toast.error("Cannot issue an item with zero stock"); return; }
@@ -227,6 +228,7 @@ export default function Issues() {
   const handleEditIssue = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editIssue) return;
+    if (editIssue.issuedAt > todayStr()) { toast.error("Issue date cannot be in the future"); return; }
     setEditLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/issues/${editIssue.id}`, {
@@ -322,7 +324,7 @@ export default function Issues() {
                   </div>
                   <div className="space-y-2">
                     <Label>Date</Label>
-                    <input type="date" value={voucherData.issuedAt} onChange={e => setVoucherData({...voucherData, issuedAt: e.target.value})} required className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
+                    <input type="date" value={voucherData.issuedAt} max={todayStr()} onChange={e => setVoucherData({...voucherData, issuedAt: e.target.value})} required className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
                   </div>
 
                   <div className="space-y-2">
@@ -496,6 +498,7 @@ export default function Issues() {
                   <div className="space-y-2">
                     <Label>Issue Date</Label>
                     <input type="date" value={editIssue.issuedAt}
+                      max={todayStr()}
                       onChange={e => setEditIssue({...editIssue, issuedAt: e.target.value})}
                       required className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring" />
                   </div>
