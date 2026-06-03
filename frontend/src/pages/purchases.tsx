@@ -115,6 +115,7 @@ export default function Purchases() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!header.supplier.trim() || !header.purchasedAt) { toast.error("Supplier and date are required"); return; }
+    if (header.purchasedAt > todayStr()) { toast.error("Purchase date cannot be in the future"); return; }
     if (lines.some(l => !l.itemId || !l.quantity || !l.unitPrice)) { toast.error("Each line needs an item, quantity and unit price"); return; }
     setSubmitting(true);
     try {
@@ -149,6 +150,7 @@ export default function Purchases() {
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault(); if (!editForm) return;
+    if (editForm.purchasedAt > todayStr()) { toast.error("Purchase date cannot be in the future"); return; }
     setEditLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/purchases/${editForm.id}`, {
@@ -247,7 +249,7 @@ export default function Purchases() {
                   </div>
                   <div className="space-y-2">
                     <Label>Purchase Date <span className="text-destructive">*</span></Label>
-                    <input type="date" value={header.purchasedAt} onChange={e => setHeader({...header, purchasedAt: e.target.value})} required className={dateInputCls}/>
+                    <input type="date" value={header.purchasedAt} max={todayStr()} onChange={e => setHeader({...header, purchasedAt: e.target.value})} required className={dateInputCls}/>
                   </div>
                 </div>
 
@@ -416,7 +418,7 @@ export default function Purchases() {
                     </div>
                     <div className="space-y-2">
                       <Label>Purchase Date</Label>
-                      <input type="date" value={editForm.purchasedAt} onChange={e => setEditForm({...editForm,purchasedAt:e.target.value})} required className={dateInputCls}/>
+                      <input type="date" value={editForm.purchasedAt} max={todayStr()} onChange={e => setEditForm({...editForm,purchasedAt:e.target.value})} required className={dateInputCls}/>
                     </div>
                     <div className="space-y-2">
                       <Label>Quantity</Label>
