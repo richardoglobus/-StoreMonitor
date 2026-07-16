@@ -1140,7 +1140,8 @@ const ALL_PERMISSIONS = {
   editIssues: true,
   viewActivityLogs: true,
   manageUsers: true,
-  manageAssets: true
+  manageAssets: true,
+  manageDigitalForms: true
 };
 
 function getDefaultPermissions(role) {
@@ -1161,7 +1162,8 @@ function getDefaultPermissions(role) {
       editIssues: true,
       viewActivityLogs: false,
       manageUsers: false,
-      manageAssets: true
+      manageAssets: true,
+      manageDigitalForms: false
     };
   }
   return {
@@ -1179,7 +1181,8 @@ function getDefaultPermissions(role) {
     deleteTransactions: false,
     viewActivityLogs: false,
     manageUsers: false,
-    manageAssets: false
+    manageAssets: false,
+    manageDigitalForms: false
   };
 }
 
@@ -2798,6 +2801,165 @@ app.get('/api/assets/export/xlsx', requireAuth, async (req, res) => {
     console.error('Asset XLSX export error:', e);
     res.status(500).json({ error: 'Export failed: ' + e.message });
   }
+});
+
+
+// ── DIGITAL FORMS (CCTV LOGS) ─────────────────────────────────────────────
+const CCTV_DAILY_SEED  = [{"id":1,"date":"2026-02-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":2,"date":"2026-02-03","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":3,"date":"2026-02-04","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":4,"date":"2026-02-05","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":5,"date":"2026-02-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":"Replaced power cable on Cam 2"},{"id":6,"date":"2026-02-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":7,"date":"2026-02-10","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"JANE MWANGI","remarks":""},{"id":8,"date":"2026-02-11","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":9,"date":"2026-02-12","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":10,"date":"2026-02-13","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":11,"date":"2026-02-16","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":12,"date":"2026-02-17","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"JANE MWANGI","remarks":""},{"id":13,"date":"2026-02-18","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":14,"date":"2026-02-19","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":15,"date":"2026-02-20","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":16,"date":"2026-02-23","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":17,"date":"2026-02-24","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":18,"date":"2026-02-25","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SARAH NJOKI","remarks":""},{"id":19,"date":"2026-02-26","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"PETER KAMAU","remarks":""},{"id":20,"date":"2026-02-27","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":"Minor dust cleaned from lens"},{"id":21,"date":"2026-03-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":"Minor dust cleaned from lens"},{"id":22,"date":"2026-03-03","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":23,"date":"2026-03-04","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":24,"date":"2026-03-05","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":25,"date":"2026-03-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":26,"date":"2026-03-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":"Replaced power cable on Cam 2"},{"id":27,"date":"2026-03-10","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":28,"date":"2026-03-11","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":29,"date":"2026-03-12","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":30,"date":"2026-03-13","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":31,"date":"2026-03-16","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":32,"date":"2026-03-17","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":33,"date":"2026-03-18","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":34,"date":"2026-03-19","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":35,"date":"2026-03-20","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":36,"date":"2026-03-23","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"PETER KAMAU","remarks":""},{"id":37,"date":"2026-03-24","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SARAH NJOKI","remarks":""},{"id":38,"date":"2026-03-25","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":"Replaced power cable on Cam 2"},{"id":39,"date":"2026-03-26","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":40,"date":"2026-03-27","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":"Minor dust cleaned from lens"},{"id":41,"date":"2026-03-30","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SARAH NJOKI","remarks":""},{"id":42,"date":"2026-03-31","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":"Minor dust cleaned from lens"},{"id":43,"date":"2026-04-01","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":44,"date":"2026-04-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":45,"date":"2026-04-03","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":"Replaced power cable on Cam 2"},{"id":46,"date":"2026-04-06","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":47,"date":"2026-04-07","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":48,"date":"2026-04-08","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":49,"date":"2026-04-09","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"JANE MWANGI","remarks":""},{"id":50,"date":"2026-04-10","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":51,"date":"2026-04-13","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER","remarks":""},{"id":52,"date":"2026-04-14","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":53,"date":"2026-04-15","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":"Restarted NVR"},{"id":54,"date":"2026-04-16","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":55,"date":"2026-04-17","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":56,"date":"2026-04-20","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":57,"date":"2026-04-21","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":"Restarted NVR"},{"id":58,"date":"2026-04-22","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":59,"date":"2026-04-23","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":"Minor dust cleaned from lens"},{"id":60,"date":"2026-04-24","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":61,"date":"2026-04-27","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":62,"date":"2026-04-28","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":63,"date":"2026-04-29","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":"Restarted NVR"},{"id":64,"date":"2026-04-30","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":65,"date":"2026-05-01","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":66,"date":"2026-05-04","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":67,"date":"2026-05-05","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":68,"date":"2026-05-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":69,"date":"2026-05-07","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":70,"date":"2026-05-08","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":71,"date":"2026-05-11","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"PETER KAMAU","remarks":""},{"id":72,"date":"2026-05-12","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":"Replaced power cable on Cam 2"},{"id":73,"date":"2026-05-13","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":74,"date":"2026-05-14","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"PETER KAMAU","remarks":""},{"id":75,"date":"2026-05-15","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":76,"date":"2026-05-18","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":77,"date":"2026-05-19","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":78,"date":"2026-05-20","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":79,"date":"2026-05-21","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":"Minor dust cleaned from lens"},{"id":80,"date":"2026-05-22","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":81,"date":"2026-05-25","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":82,"date":"2026-05-26","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":83,"date":"2026-05-27","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":84,"date":"2026-05-28","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":85,"date":"2026-05-29","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":86,"date":"2026-06-01","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":87,"date":"2026-06-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":88,"date":"2026-06-03","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":89,"date":"2026-06-04","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"PETER KAMAU","remarks":""},{"id":90,"date":"2026-06-05","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":91,"date":"2026-06-08","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":"Replaced power cable on Cam 2"},{"id":92,"date":"2026-06-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"PETER KAMAU","remarks":""},{"id":93,"date":"2026-06-10","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":94,"date":"2026-06-11","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":95,"date":"2026-06-12","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"JANE MWANGI","remarks":""},{"id":96,"date":"2026-06-15","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":97,"date":"2026-06-16","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":98,"date":"2026-06-17","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":99,"date":"2026-06-18","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":100,"date":"2026-06-19","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER","remarks":"Minor dust cleaned from lens"},{"id":101,"date":"2026-06-22","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":102,"date":"2026-06-23","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":""},{"id":103,"date":"2026-06-24","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":104,"date":"2026-06-25","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":105,"date":"2026-06-26","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SARAH NJOKI","remarks":"Restarted NVR"},{"id":106,"date":"2026-06-29","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":107,"date":"2026-06-30","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","remarks":""},{"id":108,"date":"2026-07-01","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":109,"date":"2026-07-02","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":110,"date":"2026-07-03","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":111,"date":"2026-07-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"JANE MWANGI","remarks":""},{"id":112,"date":"2026-07-07","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER","remarks":""},{"id":113,"date":"2026-07-08","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":114,"date":"2026-07-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"JANE MWANGI","remarks":""},{"id":115,"date":"2026-07-10","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"PETER KAMAU","remarks":""},{"id":116,"date":"2026-07-13","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":117,"date":"2026-07-14","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER","remarks":""},{"id":118,"date":"2026-07-15","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"PETER KAMAU","remarks":""},{"id":119,"date":"2026-07-16","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"JANE MWANGI","remarks":""}];
+const CCTV_WEEKLY_SEED = [{"id":1,"date":"2026-02-03","recordingVerified":true,"storageSpaceGb":326,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":2,"date":"2026-02-10","recordingVerified":true,"storageSpaceGb":443,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":3,"date":"2026-02-17","recordingVerified":true,"storageSpaceGb":421,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":4,"date":"2026-02-24","recordingVerified":false,"storageSpaceGb":339,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":"Replaced faulty network switch"},{"id":5,"date":"2026-03-03","recordingVerified":true,"storageSpaceGb":164,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":6,"date":"2026-03-10","recordingVerified":true,"storageSpaceGb":128,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":"Replaced faulty network switch"},{"id":7,"date":"2026-03-17","recordingVerified":true,"storageSpaceGb":171,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":8,"date":"2026-03-24","recordingVerified":true,"storageSpaceGb":387,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":9,"date":"2026-03-31","recordingVerified":false,"storageSpaceGb":283,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":10,"date":"2026-04-07","recordingVerified":true,"storageSpaceGb":296,"networkConnectivity":"INTERMITTENT","firmwareUpdated":true,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":11,"date":"2026-04-14","recordingVerified":false,"storageSpaceGb":392,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":12,"date":"2026-04-21","recordingVerified":false,"storageSpaceGb":187,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":13,"date":"2026-04-28","recordingVerified":true,"storageSpaceGb":394,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":14,"date":"2026-05-05","recordingVerified":true,"storageSpaceGb":448,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":15,"date":"2026-05-12","recordingVerified":true,"storageSpaceGb":333,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":16,"date":"2026-05-19","recordingVerified":false,"storageSpaceGb":307,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":17,"date":"2026-05-26","recordingVerified":false,"storageSpaceGb":129,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":18,"date":"2026-06-02","recordingVerified":false,"storageSpaceGb":154,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":""},{"id":19,"date":"2026-06-09","recordingVerified":true,"storageSpaceGb":416,"networkConnectivity":"INTERMITTENT","firmwareUpdated":true,"conductedBy":"ICT OFFICER - ALICE WERU","remarks":"Updated NVR firmware to v3.4.1"},{"id":20,"date":"2026-06-16","recordingVerified":false,"storageSpaceGb":148,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":"Reconfigured remote access VPN"},{"id":21,"date":"2026-06-23","recordingVerified":true,"storageSpaceGb":209,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":22,"date":"2026-06-30","recordingVerified":true,"storageSpaceGb":381,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":23,"date":"2026-07-07","recordingVerified":true,"storageSpaceGb":416,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""},{"id":24,"date":"2026-07-14","recordingVerified":false,"storageSpaceGb":151,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT OFFICER - JOHN MWENDA","remarks":""}];
+const CCTV_FOOTAGE_SEED= [{"id":1,"date":"2026-02-14","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Investigation of missing equipment from store","authorizedBy":"FACILITY IN-CHARGE","witness":"SECURITY OFFICER","footageDate":"2026-02-12","retrievedBy":"ICT OFFICER - JOHN MWENDA"},{"id":2,"date":"2026-02-28","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Verification of access times - HR request","authorizedBy":"FACILITY IN-CHARGE","witness":"HR OFFICER","footageDate":"2026-02-25","retrievedBy":"ICT OFFICER - ALICE WERU"},{"id":3,"date":"2026-03-15","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Patient complaint - alleged staff misconduct","authorizedBy":"MEDICAL SUPERINTENDENT","witness":"SECURITY OFFICER","footageDate":"2026-03-14","retrievedBy":"ICT OFFICER - JOHN MWENDA"},{"id":4,"date":"2026-04-03","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Theft investigation - pharmacy corridor","authorizedBy":"FACILITY IN-CHARGE","witness":"POLICE OFFICER - OB NO 045/2026","footageDate":"2026-04-01","retrievedBy":"ICT OFFICER - JOHN MWENDA"},{"id":5,"date":"2026-04-22","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Routine quality audit","authorizedBy":"COUNTY ICT AUDITOR","witness":"FACILITY IN-CHARGE","footageDate":"2026-04-20","retrievedBy":"COUNTY ICT TEAM"},{"id":6,"date":"2026-05-10","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Accident verification - parking area incident","authorizedBy":"FACILITY IN-CHARGE","witness":"SECURITY OFFICER","footageDate":"2026-05-09","retrievedBy":"ICT OFFICER - ALICE WERU"},{"id":7,"date":"2026-06-05","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Staff attendance verification - disciplinary case","authorizedBy":"MEDICAL SUPERINTENDENT","witness":"HR OFFICER","footageDate":"2026-06-03","retrievedBy":"ICT OFFICER - JOHN MWENDA"},{"id":8,"date":"2026-07-02","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Vandalism report - male ward window","authorizedBy":"FACILITY IN-CHARGE","witness":"SECURITY OFFICER","footageDate":"2026-07-01","retrievedBy":"ICT OFFICER - ALICE WERU"}];
+const CCTV_INCIDENT_SEED=[{"id":1,"dateTime":"2026-02-19 14:30","natureOfIncident":"Camera 5 (Maternity corridor) went offline unexpectedly","reportedBy":"SECURITY OFFICER","actionTaken":"ICT Officer notified. Power adapter replaced. Camera restored by 16:00.","status":"RESOLVED"},{"id":2,"dateTime":"2026-03-08 08:15","natureOfIncident":"NVR showing storage full warning - recording paused","reportedBy":"FACILITY IN-CHARGE","actionTaken":"ICT Officer cleared old footage (>30 days). Recording resumed. Storage policy updated.","status":"RESOLVED"},{"id":3,"dateTime":"2026-04-01 23:50","natureOfIncident":"Suspected tampering - Camera 2 angle shifted at main entrance","reportedBy":"NIGHT SECURITY OFFICER","actionTaken":"Camera repositioned and secured. Reported to Security and HR. Disciplinary inquiry opened.","status":"UNDER INVESTIGATION"},{"id":4,"dateTime":"2026-05-20 11:00","natureOfIncident":"Power outage - UPS failure caused 2-hour recording gap","reportedBy":"ICT OFFICER - JOHN MWENDA","actionTaken":"UPS battery replaced. Generator backup configured for CCTV circuit.","status":"RESOLVED"},{"id":5,"dateTime":"2026-06-17 09:30","natureOfIncident":"Remote access credentials expired - county monitoring disrupted","reportedBy":"COUNTY ICT TEAM","actionTaken":"Credentials renewed and remote VPN reconfigured. Access restored same day.","status":"RESOLVED"},{"id":6,"dateTime":"2026-07-10 16:45","natureOfIncident":"Camera 9 (Pharmacy) lens cracked - possible vandalism","reportedBy":"SECURITY OFFICER","actionTaken":"Camera covered and reported. Replacement ordered. Police notified.","status":"PENDING"}];
+
+function seedCCTV(){
+  if(!db.get('cctvDaily').value())   { db.set('cctvDaily',   CCTV_DAILY_SEED).write();   console.log('CCTV daily seeded:',   CCTV_DAILY_SEED.length); }
+  if(!db.get('cctvWeekly').value())  { db.set('cctvWeekly',  CCTV_WEEKLY_SEED).write();  console.log('CCTV weekly seeded:',  CCTV_WEEKLY_SEED.length); }
+  if(!db.get('cctvFootage').value()) { db.set('cctvFootage', CCTV_FOOTAGE_SEED).write(); console.log('CCTV footage seeded:', CCTV_FOOTAGE_SEED.length); }
+  if(!db.get('cctvIncident').value()){ db.set('cctvIncident',CCTV_INCIDENT_SEED).write();console.log('CCTV incident seeded:',CCTV_INCIDENT_SEED.length); }
+}
+seedCCTV();
+
+// ── CCTV ROUTES ───────────────────────────────────────────────────────────
+function nextCCTVId(col){ const items=db.get(col).value()||[]; return items.length?Math.max(...items.map(i=>i.id))+1:1; }
+
+// DAILY
+app.get('/api/cctv/daily', requireAuth, (req,res)=>{
+  let rows=db.get('cctvDaily').value()||[];
+  if(req.query.from) rows=rows.filter(r=>r.date>=req.query.from);
+  if(req.query.to)   rows=rows.filter(r=>r.date<=req.query.to);
+  res.json(rows.sort((a,b)=>b.date.localeCompare(a.date)));
+});
+app.post('/api/cctv/daily', requirePermission('manageDigitalForms'), (req,res)=>{
+  const {date,cameraStatus,nvrStatus,checkedBy,remarks}=req.body;
+  if(!date||!checkedBy) return res.status(400).json({error:'date and checkedBy required'});
+  const row={id:nextCCTVId('cctvDaily'),date,cameraStatus:cameraStatus||'',nvrStatus:nvrStatus||'',checkedBy,remarks:remarks||''};
+  db.get('cctvDaily').push(row).write();
+  res.status(201).json(row);
+});
+app.patch('/api/cctv/daily/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  const id=Number(req.params.id);
+  const row=db.get('cctvDaily').find({id}).value();
+  if(!row) return res.status(404).json({error:'Not found'});
+  const allowed=['date','cameraStatus','nvrStatus','checkedBy','remarks'];
+  const up={}; allowed.forEach(k=>{if(req.body[k]!==undefined)up[k]=req.body[k];});
+  db.get('cctvDaily').find({id}).assign(up).write();
+  res.json(db.get('cctvDaily').find({id}).value());
+});
+app.delete('/api/cctv/daily/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  const id=Number(req.params.id);
+  if(!db.get('cctvDaily').find({id}).value()) return res.status(404).json({error:'Not found'});
+  db.get('cctvDaily').remove({id}).write(); res.status(204).send();
+});
+
+// WEEKLY
+app.get('/api/cctv/weekly', requireAuth, (req,res)=>{
+  res.json((db.get('cctvWeekly').value()||[]).sort((a,b)=>b.date.localeCompare(a.date)));
+});
+app.post('/api/cctv/weekly', requirePermission('manageDigitalForms'), (req,res)=>{
+  const row={id:nextCCTVId('cctvWeekly'),...req.body};
+  db.get('cctvWeekly').push(row).write(); res.status(201).json(row);
+});
+app.patch('/api/cctv/weekly/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  const id=Number(req.params.id);
+  db.get('cctvWeekly').find({id}).assign(req.body).write();
+  res.json(db.get('cctvWeekly').find({id}).value());
+});
+app.delete('/api/cctv/weekly/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  db.get('cctvWeekly').remove({id:Number(req.params.id)}).write(); res.status(204).send();
+});
+
+// FOOTAGE
+app.get('/api/cctv/footage', requireAuth, (req,res)=>{
+  res.json((db.get('cctvFootage').value()||[]).sort((a,b)=>b.date.localeCompare(a.date)));
+});
+app.post('/api/cctv/footage', requirePermission('manageDigitalForms'), (req,res)=>{
+  const row={id:nextCCTVId('cctvFootage'),...req.body};
+  db.get('cctvFootage').push(row).write(); res.status(201).json(row);
+});
+app.patch('/api/cctv/footage/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  const id=Number(req.params.id);
+  db.get('cctvFootage').find({id}).assign(req.body).write();
+  res.json(db.get('cctvFootage').find({id}).value());
+});
+app.delete('/api/cctv/footage/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  db.get('cctvFootage').remove({id:Number(req.params.id)}).write(); res.status(204).send();
+});
+
+// INCIDENT
+app.get('/api/cctv/incident', requireAuth, (req,res)=>{
+  res.json((db.get('cctvIncident').value()||[]).sort((a,b)=>b.dateTime.localeCompare(a.dateTime)));
+});
+app.post('/api/cctv/incident', requirePermission('manageDigitalForms'), (req,res)=>{
+  const row={id:nextCCTVId('cctvIncident'),...req.body};
+  db.get('cctvIncident').push(row).write(); res.status(201).json(row);
+});
+app.patch('/api/cctv/incident/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  const id=Number(req.params.id);
+  db.get('cctvIncident').find({id}).assign(req.body).write();
+  res.json(db.get('cctvIncident').find({id}).value());
+});
+app.delete('/api/cctv/incident/:id', requirePermission('manageDigitalForms'), (req,res)=>{
+  db.get('cctvIncident').remove({id:Number(req.params.id)}).write(); res.status(204).send();
+});
+
+// EXPORT EXCEL
+app.get('/api/cctv/export/xlsx', requireAuth, async (req,res)=>{
+  try {
+    const ExcelJS=require('exceljs');
+    const wb=new ExcelJS.Workbook();
+    wb.creator='Mukurweini Hospital Stores';
+    const teal={argb:'FF0F766E'}, white={argb:'FFFFFFFF'};
+    const hdrStyle=(ws,row)=>{ row.font={bold:true,color:white}; row.fill={type:'pattern',pattern:'solid',fgColor:teal}; };
+
+    // Sheet 1: Daily
+    const ws1=wb.addWorksheet('Daily Checklist');
+    ws1.addRow(['MUKURWEINI HOSPITAL - DAILY CCTV CHECKLIST LOG']);
+    ws1.getRow(1).font={bold:true,size:12};
+    const h1=ws1.addRow(['#','Date','Camera Status','NVR/DVR Status','Checked By','Remarks']);
+    hdrStyle(ws1,h1);
+    (db.get('cctvDaily').value()||[]).sort((a,b)=>a.date.localeCompare(b.date)).forEach((r,i)=>{
+      ws1.addRow([i+1,r.date,r.cameraStatus,r.nvrStatus,r.checkedBy,r.remarks]);
+    });
+    ws1.columns=[4,14,36,28,24,30].map(w=>({width:w}));
+
+    // Sheet 2: Weekly
+    const ws2=wb.addWorksheet('Weekly Maintenance');
+    ws2.addRow(['MUKURWEINI HOSPITAL - WEEKLY CCTV MAINTENANCE LOG']);
+    ws2.getRow(1).font={bold:true,size:12};
+    const h2=ws2.addRow(['#','Date','Recording OK','Storage (GB free)','Network','Firmware Updated','Conducted By','Remarks']);
+    hdrStyle(ws2,h2);
+    (db.get('cctvWeekly').value()||[]).sort((a,b)=>a.date.localeCompare(b.date)).forEach((r,i)=>{
+      ws2.addRow([i+1,r.date,r.recordingVerified?'YES':'NO',r.storageSpaceGb,r.networkConnectivity,r.firmwareUpdated?'YES':'NO',r.conductedBy,r.remarks]);
+    });
+    ws2.columns=[4,14,14,16,14,18,28,34].map(w=>({width:w}));
+
+    // Sheet 3: Footage Access
+    const ws3=wb.addWorksheet('Footage Access Log');
+    ws3.addRow(['MUKURWEINI HOSPITAL - FOOTAGE ACCESS LOG']);
+    ws3.getRow(1).font={bold:true,size:12};
+    const h3=ws3.addRow(['#','Date','Facility','Reason','Footage Date','Authorized By','Retrieved By','Witness']);
+    hdrStyle(ws3,h3);
+    (db.get('cctvFootage').value()||[]).sort((a,b)=>a.date.localeCompare(b.date)).forEach((r,i)=>{
+      ws3.addRow([i+1,r.date,r.facility,r.reason,r.footageDate,r.authorizedBy,r.retrievedBy,r.witness]);
+    });
+    ws3.columns=[4,14,28,40,14,24,24,24].map(w=>({width:w}));
+
+    // Sheet 4: Incidents
+    const ws4=wb.addWorksheet('Incident Reports');
+    ws4.addRow(['MUKURWEINI HOSPITAL - CCTV INCIDENT LOG']);
+    ws4.getRow(1).font={bold:true,size:12};
+    const h4=ws4.addRow(['#','Date & Time','Nature of Incident','Reported By','Action Taken','Status']);
+    hdrStyle(ws4,h4);
+    (db.get('cctvIncident').value()||[]).sort((a,b)=>a.dateTime.localeCompare(b.dateTime)).forEach((r,i)=>{
+      ws4.addRow([i+1,r.dateTime,r.natureOfIncident,r.reportedBy,r.actionTaken,r.status]);
+    });
+    ws4.columns=[4,18,44,24,48,18].map(w=>({width:w}));
+
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition','attachment; filename="cctv-logs.xlsx"');
+    const buf=await wb.xlsx.writeBuffer();
+    res.setHeader('Content-Length',buf.length);
+    res.end(buf);
+  } catch(e){ res.status(500).json({error:'Export failed: '+e.message}); }
 });
 
 app.listen(PORT, () => {

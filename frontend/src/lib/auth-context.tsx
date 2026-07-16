@@ -20,6 +20,7 @@ interface User {
     viewActivityLogs: boolean;
     manageUsers: boolean;
     manageAssets: boolean;
+    manageDigitalForms: boolean;
   };
 }
 

@@ -1,3 +1,4 @@
+import { ClipboardList } from "lucide-react";
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Wifi, WifiOff, Package2 } from "lucide-react";
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { href: "/",                label: "Dashboard",      icon: LayoutDashboard, permission: "viewDashboard" },
   { href: "/departments",     label: "Departments",    icon: Building2,       permission: "manageDepartments" },
   { href: "/assets",          label: "Asset Register", icon: Package2,        permission: "viewDashboard" },
+  { href: "/digital-forms",   label: "Digital Forms",  icon: ClipboardList,   permission: "viewDashboard" },
   { href: "/items",           label: "Catalog",        icon: PackageSearch,   permission: "manageCatalog" },
   { href: "/purchases",       label: "Purchases",      icon: ShoppingCart,    permission: "managePurchases" },
   { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "issueItems" },
@@ -205,23 +207,23 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Desktop sidebar ── */}
-      <aside className={`hidden md:flex flex-col border-r bg-card h-screen sticky top-0 shrink-0 transition-all duration-300 z-40 ${collapsed ? "w-[60px] hover:w-60 hover:shadow-2xl group/sidebar" : "w-60"}`}>
+      <aside className={`hidden md:flex flex-col border-r bg-card h-screen sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
 
         {/* Logo + toggle button */}
         <div className={`flex items-center border-b h-14 shrink-0 ${collapsed ? "justify-center px-2" : "px-4 gap-2"}`}>
-          <div className="flex items-center gap-2 flex-1 min-w-0">
+          {!collapsed && (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
                 <AppLogoIcon className="h-5 w-5 text-primary-foreground" />
               </div>
-              {(!collapsed) && (
-                <span className="font-bold text-xs leading-tight text-foreground truncate">Mukurweini Hospital Stores</span>
-              )}
-              {collapsed && (
-                <span className="font-bold text-xs leading-tight text-foreground truncate opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200 whitespace-nowrap">
-                  Mukurweini Hospital Stores
-                </span>
-              )}
+              <span className="font-bold text-xs leading-tight text-foreground truncate">Mukurweini Hospital Stores</span>
             </div>
+          )}
+          {collapsed && (
+            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+              <AppLogoIcon className="h-5 w-5 text-primary-foreground" />
+            </div>
+          )}
           <Button
             variant="ghost" size="icon"
             onClick={() => setCollapsed(c => !c)}
@@ -233,7 +235,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
-          <NavLinks showLabels={!collapsed} hoverExpanded={collapsed} />
+          <NavLinks showLabels={!collapsed} />
         </nav>
 
         {/* User section */}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, Suspense, lazy, Component, ReactNode } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
@@ -8,6 +8,8 @@ import { ThemeProvider } from "@/lib/theme-context";
 import { useInactivityLogout } from "@/lib/use-inactivity-logout";
 import Dashboard from "@/pages/dashboard";
 import Departments from "@/pages/departments";
+import Assets from "@/pages/assets";
+import DigitalForms from "@/pages/digital-forms";
 import DepartmentDetail from "@/pages/department-detail";
 import Items from "@/pages/items";
 import Purchases from "@/pages/purchases";
@@ -21,28 +23,6 @@ import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import { AlertTriangle } from "lucide-react";
 import { API_BASE } from "@/lib/api";
-
-// Lazy-load Assets so a crash there doesn't kill the whole app
-const Assets = lazy(() => import("@/pages/assets"));
-
-// Error boundary — catches React render errors and shows a message instead of blank screen
-class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  constructor(props: any) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(error: Error) { return { error }; }
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-screen gap-4 p-8">
-          <AlertTriangle className="h-10 w-10 text-destructive" />
-          <h2 className="text-xl font-bold">Something went wrong</h2>
-          <p className="text-sm text-muted-foreground text-center max-w-sm">{this.state.error.message}</p>
-          <button className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm" onClick={() => this.setState({ error: null })}>Try again</button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: false } },
@@ -117,13 +97,8 @@ function AppWithAuth() {
         <Route path="/issues" component={Issues} />
         <Route path="/reports" component={Reports} />
         <Route path="/exports" component={Exports} />
-        <Route path="/assets">
-          <ErrorBoundary>
-            <Suspense fallback={<div className="flex items-center justify-center h-64 text-muted-foreground">Loading Asset Register…</div>}>
-              <Assets />
-            </Suspense>
-          </ErrorBoundary>
-        </Route>
+        <Route path="/assets" component={Assets} />
+          <Route path="/digital-forms" component={DigitalForms} />
         <Route path="/admin/users" component={UserManagement} />
         <Route path="/admin/settings" component={SettingsPage} />
         <Route path="/stock-valuation" component={StockValuationPage} />
