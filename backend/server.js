@@ -1205,7 +1205,8 @@ function normalizePermissions(role, permissions) {
     viewActivityLogs: permissions.viewActivityLogs !== undefined ? !!permissions.viewActivityLogs : defaults.viewActivityLogs,
     manageUsers: permissions.manageUsers !== undefined ? !!permissions.manageUsers : defaults.manageUsers,
     viewAssets: permissions.viewAssets !== undefined ? !!permissions.viewAssets : defaults.viewAssets,
-    manageAssets: permissions.manageAssets !== undefined ? !!permissions.manageAssets : defaults.manageAssets
+    manageAssets: permissions.manageAssets !== undefined ? !!permissions.manageAssets : defaults.manageAssets,
+    manageDigitalForms: permissions.manageDigitalForms !== undefined ? !!permissions.manageDigitalForms : defaults.manageDigitalForms
   };
 }
 
@@ -1408,16 +1409,7 @@ function requirePermission(perm){
     return res.status(403).json({error:"Forbidden"});
   };
 }
-function requirePermission(permission) {
-  return (req, res, next) => {
-    if (!req.session.userId) return res.status(401).json({ error: "Unauthorized" });
-    const user = db.get("users").find({ id: req.session.userId }).value();
-    if (!user) return res.status(401).json({ error: "Unauthorized" });
-    const permissions = normalizePermissions(user.role, user.permissions);
-    if (!permissions[permission]) return res.status(403).json({ error: "Forbidden" });
-    next();
-  };
-}
+
 
 app.get("/api/healthz",(_,res)=>res.json({status:"ok"}));
 

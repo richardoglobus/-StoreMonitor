@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/lib/auth-context";
+import { useLocation } from "wouter";
 import { API_BASE } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,9 @@ const STATUS_COLORS: Record<string,string> = {
 
 export default function DigitalForms() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const canManage = !!user?.permissions?.manageDigitalForms;
+  useEffect(() => { if (user && !canManage) setLocation("/"); }, [user, canManage, setLocation]);
   const [tab, setTab] = useState<TabKey>("daily");
 
   const [daily,    setDaily]    = useState<DailyLog[]>([]);
