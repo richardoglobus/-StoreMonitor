@@ -39,6 +39,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
       editIssues: true,
       viewActivityLogs: true,
       manageUsers: true,
+      manageAssets: true,
+      manageDigitalForms: true,
     };
   }
   if (role === "manager") {
@@ -57,6 +59,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
       editIssues: true,
       viewActivityLogs: false,
       manageUsers: false,
+      manageAssets: true,
+      manageDigitalForms: false,
     };
   }
   return {
@@ -74,6 +78,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
     editIssues: false,
     viewActivityLogs: false,
     manageUsers: false,
+    manageAssets: false,
+    manageDigitalForms: false,
   };
 };
 
@@ -94,6 +100,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   manageUsers: "Manage Users & Settings",
   viewAssets: "View Asset Register",
   manageAssets: "Manage Assets (Add/Edit/Delete)",
+  manageDigitalForms: "Manage Digital Forms / CCTV Logs (Add/Edit/Delete)",
 };
 
 export default function UserManagement() {

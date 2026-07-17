@@ -9,7 +9,6 @@ import { useInactivityLogout } from "@/lib/use-inactivity-logout";
 import Dashboard from "@/pages/dashboard";
 import Departments from "@/pages/departments";
 import Assets from "@/pages/assets";
-import DigitalForms from "@/pages/digital-forms";
 import DepartmentDetail from "@/pages/department-detail";
 import Items from "@/pages/items";
 import Purchases from "@/pages/purchases";
@@ -21,6 +20,7 @@ import StockValuationPage from "@/pages/stock-valuation";
 import Exports from "@/pages/exports";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
+import DigitalForms from "@/pages/digital-forms";
 import { AlertTriangle } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 
@@ -98,10 +98,10 @@ function AppWithAuth() {
         <Route path="/reports" component={Reports} />
         <Route path="/exports" component={Exports} />
         <Route path="/assets" component={Assets} />
-          <Route path="/digital-forms" component={DigitalForms} />
         <Route path="/admin/users" component={UserManagement} />
         <Route path="/admin/settings" component={SettingsPage} />
         <Route path="/stock-valuation" component={StockValuationPage} />
+          <Route path="/digital-forms" component={DigitalForms} />
         <Route component={NotFound} />
       </Switch>
       <InactivityWarning secondsLeft={warningSeconds} />
