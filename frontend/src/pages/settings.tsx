@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle, Palette, Pencil, Trash2, Tag } from "lucide-react";
+import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle, Palette, Pencil, Trash2, Tag, Camera, Plus, X } from "lucide-react";
 import { useTheme, THEMES, LOGOS, AppTheme, AppLogo } from "@/lib/theme-context";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
@@ -125,6 +125,63 @@ export default function SettingsPage() {
   if (!user?.permissions?.manageUsers) { setLocation("/"); return null; }
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULTS);
+  const [officers, setOfficers] = useState<{id:number,name:string}[]>([]);
+  const [officersLoading, setOfficersLoading] = useState(false);
+  const [newOfficerName, setNewOfficerName] = useState("");
+  const [editingOfficer, setEditingOfficer] = useState<number|null>(null);
+  const [editOfficerName, setEditOfficerName] = useState("");
+
+  const loadOfficers = async () => {
+    setOfficersLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/ict-officers`, { credentials: "include" });
+      const data = await res.json();
+      setOfficers(Array.isArray(data) ? data : []);
+    } catch { toast.error("Failed to load ICT officers"); }
+    finally { setOfficersLoading(false); }
+  };
+
+  useEffect(() => { loadOfficers(); }, []);
+
+  const handleAddOfficer = async () => {
+    if (!newOfficerName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/ict-officers`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newOfficerName.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || "Failed to add officer"); return; }
+      toast.success(`Added "${data.name}"`);
+      setNewOfficerName("");
+      loadOfficers();
+    } catch { toast.error("Failed to add officer"); }
+  };
+
+  const handleRenameOfficer = async (id: number) => {
+    if (!editOfficerName.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/ict-officers/${id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editOfficerName.trim() })
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || "Rename failed"); return; }
+      toast.success("Officer renamed");
+      setEditingOfficer(null); setEditOfficerName("");
+      loadOfficers();
+    } catch { toast.error("Rename failed"); }
+  };
+
+  const handleDeleteOfficer = async (id: number, name: string) => {
+    if (!confirm(`Remove "${name}" from the ICT officers list?`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/ict-officers/${id}`, { method: "DELETE", credentials: "include" });
+      if (res.status === 204) { toast.success("Officer removed"); loadOfficers(); return; }
+      const d = await res.json(); toast.error(d.error || "Delete failed");
+    } catch { toast.error("Delete failed"); }
+  };
   const { setAppTheme, setAppLogo } = useTheme();
   const [units, setUnits] = useState<{unit:string;itemCount:number;items:{id:number;description:string}[]}[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(false);
@@ -501,6 +558,60 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground italic">Click "Load Units" to see all units currently in use in the catalog.</p>
           )}
           <p className="text-xs text-muted-foreground">Renaming a unit updates all catalog items using that unit. Deleting clears the unit from those items — you must then reassign them in the Catalog.</p>
+        </SectionCard>
+
+        <SectionCard icon={Camera} title="ICT Officers" description="Manage the list of ICT officers available in the Digital Forms (CCTV log) dropdowns.">
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="e.g. John Mwenda"
+              value={newOfficerName}
+              onChange={e => setNewOfficerName(e.target.value.toUpperCase())}
+              onKeyDown={e => { if (e.key === "Enter") handleAddOfficer(); }}
+              className="max-w-xs"
+            />
+            <Button size="sm" onClick={handleAddOfficer} disabled={!newOfficerName.trim()} className="gap-1">
+              <Plus className="h-3.5 w-3.5"/>Add Officer
+            </Button>
+          </div>
+
+          {officersLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 className="h-4 w-4 animate-spin"/>Loading officers…
+            </div>
+          ) : officers.length > 0 ? (
+            <div className="space-y-1 max-h-72 overflow-y-auto">
+              {officers.map(o => (
+                <div key={o.id} className="flex items-center gap-3 p-2.5 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                  {editingOfficer === o.id ? (
+                    <>
+                      <Input
+                        value={editOfficerName} onChange={e => setEditOfficerName(e.target.value.toUpperCase())}
+                        className="h-7 text-sm flex-1 max-w-[220px]" autoFocus
+                        onKeyDown={e => { if (e.key === "Enter") handleRenameOfficer(o.id); if (e.key === "Escape") { setEditingOfficer(null); setEditOfficerName(""); } }}
+                      />
+                      <Button size="sm" className="h-7 text-xs" onClick={() => handleRenameOfficer(o.id)} disabled={!editOfficerName.trim()}>Save</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setEditingOfficer(null); setEditOfficerName(""); }}>Cancel</Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm font-medium flex-1">{o.name}</span>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => { setEditingOfficer(o.id); setEditOfficerName(o.name); }}>
+                        <Pencil className="h-3 w-3"/>
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteOfficer(o.id, o.name)}>
+                        <X className="h-3 w-3"/>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No ICT officers added yet. Add one above.</p>
+          )}
+          <p className="text-xs text-muted-foreground">These names appear in the ICT Officer dropdown across all Digital Forms log types (Daily, Weekly, Footage Access, Incident Reports).</p>
         </SectionCard>
 
         {/* 8. Appearance */}

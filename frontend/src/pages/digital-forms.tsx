@@ -22,7 +22,6 @@ interface IncidentLog { id:number; dateTime:string; natureOfIncident:string; rep
 const PAGE = 20;
 const TODAY = new Date().toISOString().split('T')[0];
 
-const ICT_OFFICERS = ["JOHN MWENDA", "ALICE WERU", "COUNTY ICT TEAM", "OTHER"];
 const CAMERA_STATUS_OPTIONS = ["ALL CAMERAS OPERATIONAL", "SOME CAMERAS OFFLINE", "MULTIPLE CAMERAS DOWN", "UNDER MAINTENANCE"];
 const NVR_STATUS_OPTIONS = ["NVR RECORDING - OK", "NVR STORAGE LOW - ALERT SENT", "NVR NOT RECORDING", "NVR UNDER REPAIR"];
 
@@ -46,6 +45,14 @@ export default function DigitalForms() {
   const canManage = !!user?.permissions?.manageDigitalForms;
   useEffect(() => { if (user && !canManage) setLocation("/"); }, [user, canManage, setLocation]);
   const [tab, setTab] = useState<TabKey>("daily");
+  const [officers, setOfficers] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/ict-officers`, { credentials: "include" })
+      .then(r => r.json())
+      .then(list => setOfficers(Array.isArray(list) ? list.map((o: any) => o.name) : []))
+      .catch(() => {});
+  }, []);
 
   const [daily,    setDaily]    = useState<DailyLog[]>([]);
   const [weekly,   setWeekly]   = useState<WeeklyLog[]>([]);
@@ -94,10 +101,10 @@ export default function DigitalForms() {
   const paged = rows.slice((page-1)*PAGE, page*PAGE);
 
   const defaultForm = () => {
-    if (tab==="daily")    return { date:TODAY, cameraStatus:CAMERA_STATUS_OPTIONS[0], nvrStatus:NVR_STATUS_OPTIONS[0], checkedBy:"", ictOfficer:ICT_OFFICERS[0], remarks:"" };
-    if (tab==="weekly")   return { date:TODAY, recordingVerified:true, storageSpaceGb:"", networkConnectivity:"STABLE", firmwareUpdated:false, conductedBy:"ICT DEPARTMENT", ictOfficer:ICT_OFFICERS[0], remarks:"" };
-    if (tab==="footage")  return { date:TODAY, facility:"MUKURWEINI SUB-COUNTY HOSPITAL", reason:"", footageDate:TODAY, authorizedBy:"", retrievedBy:"", ictOfficer:ICT_OFFICERS[0], witness:"" };
-    return { dateTime: TODAY+" 08:00", natureOfIncident:"", reportedBy:"", ictOfficer:ICT_OFFICERS[0], actionTaken:"", status:"PENDING" };
+    if (tab==="daily")    return { date:TODAY, cameraStatus:CAMERA_STATUS_OPTIONS[0], nvrStatus:NVR_STATUS_OPTIONS[0], checkedBy:"", ictOfficer:(officers[0] || ""), remarks:"" };
+    if (tab==="weekly")   return { date:TODAY, recordingVerified:true, storageSpaceGb:"", networkConnectivity:"STABLE", firmwareUpdated:false, conductedBy:"ICT DEPARTMENT", ictOfficer:(officers[0] || ""), remarks:"" };
+    if (tab==="footage")  return { date:TODAY, facility:"MUKURWEINI SUB-COUNTY HOSPITAL", reason:"", footageDate:TODAY, authorizedBy:"", retrievedBy:"", ictOfficer:(officers[0] || ""), witness:"" };
+    return { dateTime: TODAY+" 08:00", natureOfIncident:"", reportedBy:"", ictOfficer:(officers[0] || ""), actionTaken:"", status:"PENDING" };
   };
 
   const openAdd  = () => { setForm(defaultForm()); setAddOpen(true); };
@@ -161,9 +168,9 @@ export default function DigitalForms() {
         <div className="space-y-1"><Label>Checked By *</Label><Input value={form.checkedBy||""} onChange={e=>setF("checkedBy",e.target.value.toUpperCase())} placeholder="SECURITY OFFICER"/></div>
         <div className="space-y-1">
           <Label>ICT Officer</Label>
-          <Select value={form.ictOfficer||ICT_OFFICERS[0]} onValueChange={v=>setF("ictOfficer",v)}>
+          <Select value={form.ictOfficer||(officers[0] || "")} onValueChange={v=>setF("ictOfficer",v)}>
             <SelectTrigger><SelectValue/></SelectTrigger>
-            <SelectContent>{ICT_OFFICERS.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+            <SelectContent>{officers.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="col-span-2 space-y-1"><Label>Remarks</Label><Input value={form.remarks||""} onChange={e=>setF("remarks",e.target.value)}/></div>
@@ -197,9 +204,9 @@ export default function DigitalForms() {
         <div className="space-y-1"><Label>Conducted By</Label><Input value={form.conductedBy||""} onChange={e=>setF("conductedBy",e.target.value.toUpperCase())}/></div>
         <div className="col-span-2 space-y-1">
           <Label>ICT Officer</Label>
-          <Select value={form.ictOfficer||ICT_OFFICERS[0]} onValueChange={v=>setF("ictOfficer",v)}>
+          <Select value={form.ictOfficer||(officers[0] || "")} onValueChange={v=>setF("ictOfficer",v)}>
             <SelectTrigger><SelectValue/></SelectTrigger>
-            <SelectContent>{ICT_OFFICERS.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+            <SelectContent>{officers.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="col-span-2 space-y-1"><Label>Remarks</Label><Input value={form.remarks||""} onChange={e=>setF("remarks",e.target.value)}/></div>
@@ -215,9 +222,9 @@ export default function DigitalForms() {
         <div className="space-y-1"><Label>Retrieved By</Label><Input value={form.retrievedBy||""} onChange={e=>setF("retrievedBy",e.target.value.toUpperCase())}/></div>
         <div className="space-y-1">
           <Label>ICT Officer</Label>
-          <Select value={form.ictOfficer||ICT_OFFICERS[0]} onValueChange={v=>setF("ictOfficer",v)}>
+          <Select value={form.ictOfficer||(officers[0] || "")} onValueChange={v=>setF("ictOfficer",v)}>
             <SelectTrigger><SelectValue/></SelectTrigger>
-            <SelectContent>{ICT_OFFICERS.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+            <SelectContent>{officers.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1"><Label>Witness</Label><Input value={form.witness||""} onChange={e=>setF("witness",e.target.value.toUpperCase())}/></div>
@@ -230,9 +237,9 @@ export default function DigitalForms() {
         <div className="space-y-1"><Label>Reported By</Label><Input value={form.reportedBy||""} onChange={e=>setF("reportedBy",e.target.value.toUpperCase())}/></div>
         <div className="space-y-1">
           <Label>ICT Officer</Label>
-          <Select value={form.ictOfficer||ICT_OFFICERS[0]} onValueChange={v=>setF("ictOfficer",v)}>
+          <Select value={form.ictOfficer||(officers[0] || "")} onValueChange={v=>setF("ictOfficer",v)}>
             <SelectTrigger><SelectValue/></SelectTrigger>
-            <SelectContent>{ICT_OFFICERS.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+            <SelectContent>{officers.map(o=><SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="col-span-2 space-y-1">

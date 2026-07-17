@@ -2811,8 +2811,48 @@ function seedCCTV(){
   if(!db.get('cctvWeekly').value())   { db.set('cctvWeekly',   CCTV_WEEKLY_SEED).write();   console.log('CCTV weekly seeded:',   CCTV_WEEKLY_SEED.length); }
   if(!db.get('cctvFootage').value())  { db.set('cctvFootage',  CCTV_FOOTAGE_SEED).write();  console.log('CCTV footage seeded:',  CCTV_FOOTAGE_SEED.length); }
   if(!db.get('cctvIncident').value()) { db.set('cctvIncident', CCTV_INCIDENT_SEED).write(); console.log('CCTV incident seeded:', CCTV_INCIDENT_SEED.length); }
+  if(!db.get('ictOfficers').value())  {
+    db.set('ictOfficers', [
+      { id: 1, name: 'JOHN MWENDA' },
+      { id: 2, name: 'ALICE WERU' },
+      { id: 3, name: 'COUNTY ICT TEAM' }
+    ]).write();
+    console.log('ICT officers seeded: 3');
+  }
 }
 seedCCTV();
+
+// ICT OFFICERS CRUD
+app.get('/api/ict-officers', requireAuth, (req, res) => {
+  res.json(db.get('ictOfficers').value() || []);
+});
+app.post('/api/ict-officers', requirePermission('manageDigitalForms'), (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  const list = db.get('ictOfficers').value() || [];
+  if (list.find(o => o.name.toLowerCase() === name.trim().toLowerCase()))
+    return res.status(409).json({ error: 'Officer already exists' });
+  const id = list.length ? Math.max(...list.map(o => o.id)) + 1 : 1;
+  const officer = { id, name: name.trim().toUpperCase() };
+  db.get('ictOfficers').push(officer).write();
+  res.status(201).json(officer);
+});
+app.patch('/api/ict-officers/:id', requirePermission('manageDigitalForms'), (req, res) => {
+  const id = Number(req.params.id);
+  const { name } = req.body;
+  const officer = db.get('ictOfficers').find({ id }).value();
+  if (!officer) return res.status(404).json({ error: 'Officer not found' });
+  db.get('ictOfficers').find({ id }).assign({ name: (name||'').trim().toUpperCase() }).write();
+  res.json(db.get('ictOfficers').find({ id }).value());
+});
+app.delete('/api/ict-officers/:id', requirePermission('manageDigitalForms'), (req, res) => {
+  const id = Number(req.params.id);
+  const officer = db.get('ictOfficers').find({ id }).value();
+  if (!officer) return res.status(404).json({ error: 'Officer not found' });
+  db.get('ictOfficers').remove({ id }).write();
+  res.status(204).send();
+});
+
 
 function nextCCTVId(col){ const items = db.get(col).value() || []; return items.length ? Math.max(...items.map(i => i.id)) + 1 : 1; }
 
