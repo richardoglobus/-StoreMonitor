@@ -198,7 +198,7 @@ export default function UserManagement() {
       fullName: user.fullName,
       role: user.role
       ,
-      permissions: user.permissions
+      permissions: { ...defaultPermissionsByRole(user.role), ...user.permissions }
     });
     setIsEditOpen(true);
   };
