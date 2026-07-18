@@ -2821,6 +2821,7 @@ function seedCCTV(){
   }
 }
 seedCCTV();
+backfillMissingDailyLogs();
 
 // ICT OFFICERS CRUD
 app.get('/api/ict-officers', requireAuth, (req, res) => {
@@ -2866,12 +2867,57 @@ function filterByDateRange(rows, field, from, to) {
   return out;
 }
 
+// ── AUTO-FILL MISSED DAILY CHECKLIST DAYS ─────────────────────────────────
+// If a day passes with no daily checklist entry, backfill it the next time
+// the server starts or the daily log is fetched, so no day is ever silently skipped.
+function backfillMissingDailyLogs() {
+  const rows = db.get('cctvDaily').value() || [];
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const existingDates = new Set(rows.map(r => r.date));
+  let lastDate;
+  if (rows.length) {
+    lastDate = rows.map(r => r.date).sort().slice(-1)[0];
+  } else {
+    // Nothing seeded yet — nothing to backfill against, skip
+    return;
+  }
+
+  let cursor = new Date(lastDate);
+  cursor.setDate(cursor.getDate() + 1);
+  const today = new Date(todayStr);
+
+  const toInsert = [];
+  while (cursor < today) {
+    const dateStr = cursor.toISOString().slice(0, 10);
+    if (!existingDates.has(dateStr)) {
+      toInsert.push({
+        date: dateStr,
+        cameraStatus: "NOT CHECKED - AUTO-FILLED",
+        nvrStatus: "NOT CHECKED - AUTO-FILLED",
+        checkedBy: "SYSTEM",
+        ictOfficer: "",
+        remarks: "No entry was made for this date. Automatically filled by the system."
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  if (toInsert.length) {
+    let nextId = rows.length ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+    toInsert.forEach(row => { row.id = nextId++; });
+    db.get('cctvDaily').push(...toInsert).write();
+    console.log(`Auto-filled ${toInsert.length} missed daily checklist day(s)`);
+  }
+}
+
 // ── CCTV ROUTES ───────────────────────────────────────────────────────────
 ['daily','weekly','footage','incident'].forEach(kind => {
   const col = 'cctv' + kind.charAt(0).toUpperCase() + kind.slice(1);
   const dateField = CCTV_DATE_FIELD[col];
 
   app.get(`/api/cctv/${kind}`, requireAuth, (req, res) => {
+    if (kind === 'daily') backfillMissingDailyLogs();
     let rows = db.get(col).value() || [];
     rows = filterByDateRange(rows, dateField, req.query.from, req.query.to);
     res.json(rows.slice().sort((a,b) => (b[dateField]||'').localeCompare(a[dateField]||'')));
