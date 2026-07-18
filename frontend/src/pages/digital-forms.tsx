@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { ClipboardList, Download, Plus, Pencil, Trash2, ShieldAlert, Film, Wrench, ChevronLeft, ChevronRight, X, CalendarRange } from "lucide-react";
+import { ClipboardList, Download, Plus, Pencil, Trash2, ShieldAlert, Film, Wrench, ChevronLeft, ChevronRight, X, CalendarRange, RefreshCw } from "lucide-react";
 
 interface DailyLog { id:number; date:string; cameraStatus:string; nvrStatus:string; checkedBy:string; ictOfficer:string; remarks:string; }
 interface WeeklyLog { id:number; date:string; recordingVerified:boolean; storageSpaceGb:number; networkConnectivity:string; firmwareUpdated:boolean; conductedBy:string; ictOfficer:string; remarks:string; }
@@ -59,6 +59,7 @@ export default function DigitalForms() {
   const [footage,  setFootage]  = useState<FootageLog[]>([]);
   const [incident, setIncident] = useState<IncidentLog[]>([]);
   const [loading,  setLoading]  = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [page,     setPage]     = useState(1);
 
   // Date range filter (per tab, shared state resets on tab switch)
@@ -95,6 +96,13 @@ export default function DigitalForms() {
 
   const applyFilter = () => { setPage(1); fetchTab(tab, fromDate, toDate); };
   const clearFilter  = () => { setFromDate(""); setToDate(""); setPage(1); fetchTab(tab, "", ""); };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchTab(tab, fromDate, toDate);
+    setRefreshing(false);
+    toast.success("Refreshed");
+  };
 
   const rows: any[] = tab==="daily" ? daily : tab==="weekly" ? weekly : tab==="footage" ? footage : incident;
   const totalPages = Math.ceil(rows.length / PAGE) || 1;
@@ -375,6 +383,9 @@ export default function DigitalForms() {
           </div>
           <div className="flex gap-2">
             {canManage && <Button size="sm" onClick={openAdd}><Plus className="h-4 w-4 mr-1"/>Add Entry</Button>}
+            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing} title="Refresh data">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}/>
+            </Button>
             <Button size="sm" variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-1"/>Download Excel</Button>
           </div>
         </div>
