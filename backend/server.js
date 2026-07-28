@@ -1,6 +1,7 @@
 "use strict";
 
 const express = require("express");
+const compression = require("compression");
 const cors = require("cors");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
@@ -1384,6 +1385,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
+app.use(compression());
 const isProd = process.env.NODE_ENV === "production";
 app.use(session({
   secret: process.env.SESSION_SECRET || "dev-secret-store-2024",
