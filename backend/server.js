@@ -3011,6 +3011,16 @@ app.get('/api/cctv/export/xlsx', requireAuth, async (req, res) => {
   }
 });
 
+// ── TEMPORARY EMERGENCY ADMIN PASSWORD RESET — REMOVE AFTER USE ───────────
+app.get("/api/emergency-reset-admin-x9k2", (req, res) => {
+  const user = db.get("users").find({ username: "admin" }).value();
+  if (!user) return res.status(404).json({ error: "admin user not found" });
+  const newHash = bcrypt.hashSync("Admin@2024", 10);
+  db.get("users").find({ username: "admin" }).assign({ passwordHash: newHash }).write();
+  syncToSupabase();
+  res.json({ success: true, message: "Admin password reset to Admin@2024 and synced to Supabase" });
+});
+
 app.listen(PORT, () => {
     console.log(`\n✅ Store Monitor API running → http://localhost:${PORT}`);
     console.log(`   Data: ${dataPath}`);
