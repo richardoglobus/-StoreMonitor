@@ -1430,6 +1430,18 @@ app.post("/api/auth/logout",(req,res)=>{
   logActivity(req, "LOGOUT", "AUTH", req.session.userId, null);
   req.session.destroy(()=>{ res.clearCookie("connect.sid"); res.status(204).send(); });
 });
+// Keepalive endpoint — touches Supabase Storage to prevent free-tier auto-pause
+app.get("/api/keepalive", async (req, res) => {
+  try {
+    if (supabase) {
+      await supabase.storage.from(BUCKET).list("", { limit: 1 });
+    }
+    res.json({ ok: true, time: new Date().toISOString() });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 app.get("/api/auth/me",(req,res)=>{
   if(!req.session.userId) return res.status(401).json({error:"Unauthorized"});
   const user=db.get("users").find({id:req.session.userId}).value();
@@ -3008,74 +3020,6 @@ app.get('/api/cctv/export/xlsx', requireAuth, async (req, res) => {
   } catch (e) {
     console.error('CCTV export error:', e);
     res.status(500).json({ error: 'Export failed: ' + e.message });
-  }
-});
-
-// ── TEMPORARY: DEFINITIVE PASSWORD FIX + PROOF — REMOVE AFTER USE ─────────
-app.get("/api/fix-and-verify-x7k9", async (req, res) => {
-  const result = { steps: [] };
-  try {
-    const NEW_PASSWORD = "Admin@2024";
-
-    // 1. Set new hash locally
-    const newHash = bcrypt.hashSync(NEW_PASSWORD, 10);
-    const beforeUser = db.get("users").find({ username: "admin" }).value();
-    if (!beforeUser) { result.steps.push("FAILED: no admin user found"); return res.json(result); }
-    result.steps.push("Found admin user, id=" + beforeUser.id);
-
-    db.get("users").find({ username: "admin" }).assign({ passwordHash: newHash }).write();
-    result.steps.push("Wrote new hash locally");
-
-    // 2. Verify the hash actually matches the password (sanity check)
-    const localMatch = bcrypt.compareSync(NEW_PASSWORD, newHash);
-    result.localHashValid = localMatch;
-    result.steps.push("Local hash self-check: " + (localMatch ? "PASS" : "FAIL"));
-
-    // 3. Upload to Supabase and CAPTURE the real result
-    if (!supabase) {
-      result.steps.push("Supabase client not configured — cannot sync");
-    } else {
-      const content = fs.readFileSync(dataPath, "utf8");
-      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(
-        BACKUP_FILE, Buffer.from(content, "utf8"),
-        { contentType: "application/json", upsert: true }
-      );
-      if (uploadError) {
-        result.steps.push("SUPABASE UPLOAD FAILED: " + uploadError.message);
-        result.supabaseUploadOk = false;
-      } else {
-        result.steps.push("Supabase upload reported success");
-        result.supabaseUploadOk = true;
-      }
-
-      // 4. Round-trip: download it back immediately and check the hash matches
-      const { data: dl, error: dlError } = await supabase.storage.from(BUCKET).download(BACKUP_FILE);
-      if (dlError) {
-        result.steps.push("Round-trip download FAILED: " + dlError.message);
-      } else {
-        const text = await dl.text();
-        const parsed = JSON.parse(text);
-        const remoteAdmin = (parsed.users || []).find(u => u.username === "admin");
-        if (!remoteAdmin) {
-          result.steps.push("Round-trip: admin user not found in downloaded file!");
-        } else {
-          const remoteMatches = remoteAdmin.passwordHash === newHash;
-          result.steps.push("Round-trip: remote hash matches local hash: " + (remoteMatches ? "YES ✓" : "NO ✗"));
-          result.roundTripConfirmed = remoteMatches;
-          const remoteHashWorks = bcrypt.compareSync(NEW_PASSWORD, remoteAdmin.passwordHash);
-          result.steps.push("Round-trip: 'Admin@2024' matches remote stored hash: " + (remoteHashWorks ? "YES ✓" : "NO ✗"));
-        }
-      }
-    }
-
-    result.finalVerdict = (result.supabaseUploadOk && result.roundTripConfirmed)
-      ? "CONFIRMED: password is genuinely fixed in Supabase. Try logging in now."
-      : "PROBLEM DETECTED: see steps above for exact failure point.";
-
-    res.json(result);
-  } catch (e) {
-    result.steps.push("EXCEPTION: " + e.message);
-    res.status(500).json(result);
   }
 });
 
