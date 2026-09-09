@@ -1167,6 +1167,27 @@ function getDefaultPermissions(role) {
       manageDigitalForms: false
     };
   }
+  if (role === "accountant") {
+    return {
+      viewDashboard: true,
+      issueItems: false,
+      manageCatalog: false,
+      manageDepartments: false,
+      manageInventory: false,
+      managePurchases: true,
+      viewReports: true,
+      exportData: true,
+      deleteTransactions: false,
+      editCatalog: false,
+      editPurchases: true,
+      editIssues: false,
+      viewActivityLogs: false,
+      manageUsers: false,
+      viewAssets: true,
+      manageAssets: false,
+      manageDigitalForms: false
+    };
+  }
   return {
     viewDashboard: true,
     issueItems: true,
@@ -1448,6 +1469,19 @@ app.get("/api/auth/me",(req,res)=>{
   if(!user) return res.status(401).json({error:"Unauthorized"});
   const freshPerms = normalizePermissions(user.role, user.permissions);
   res.json({id:user.id,username:user.username,fullName:user.fullName,role:user.role,permissions:freshPerms});
+});
+// Self-service password change (any logged-in user changes their own password)
+app.patch("/api/auth/change-password",requireAuth,(req,res)=>{
+  const {currentPassword,newPassword}=req.body;
+  if(!currentPassword||!newPassword) return res.status(400).json({error:"Missing fields"});
+  if(newPassword.length<6) return res.status(400).json({error:"New password must be at least 6 characters"});
+  const user=db.get("users").find({id:req.session.userId}).value();
+  if(!user) return res.status(401).json({error:"Unauthorized"});
+  if(!bcrypt.compareSync(currentPassword,user.passwordHash)) return res.status(401).json({error:"Current password is incorrect"});
+  const hash=bcrypt.hashSync(newPassword,10);
+  db.get("users").find({id:user.id}).assign({passwordHash:hash}).write();
+  logActivity(req, "CHANGE_PASSWORD", "USER", user.id, null);
+  res.json({success:true,message:"Password changed successfully"});
 });
 app.get("/api/auth/users",requirePermission("manageUsers"),(_,res)=>{ res.json(db.get("users").orderBy("username","asc").value().map(u=>({id:u.id,username:u.username,fullName:u.fullName,role:u.role,permissions:normalizePermissions(u.role, u.permissions)}))); });
 app.post("/api/auth/users",requireAdmin,(req,res)=>{
