@@ -6,7 +6,7 @@ interface User {
   id: number;
   username: string;
   fullName: string | null;
-  role: "admin" | "manager" | "staff";
+  role: "admin" | "manager" | "accountant" | "staff";
   permissions: {
     viewDashboard: boolean;
     issueItems: boolean;

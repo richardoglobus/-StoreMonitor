@@ -8,16 +8,76 @@ import {
   getGetDashboardSummaryQueryKey, getGetRecentIssuesQueryKey,
   getGetLowStockQueryKey, getGetDepartmentUsageQueryKey,
   getGetTopUsedItemsQueryKey, getListActivityQueryKey, getListItemStockQueryKey,
+  useChangePassword,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown, Zap, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown, Zap, RefreshCw, KeyRound } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Cell } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { toast } from "sonner";
+
+function ChangePasswordDialog() {
+  const [open, setOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const changePassword = useChangePassword();
+
+  const reset = () => { setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) { toast.error("New password must be at least 6 characters"); return; }
+    if (newPassword !== confirmPassword) { toast.error("New passwords do not match"); return; }
+    changePassword.mutate({ data: { currentPassword, newPassword } }, {
+      onSuccess: () => { toast.success("Password changed successfully"); reset(); setOpen(false); },
+      onError: (err: any) => toast.error(err?.error || "Failed to change password"),
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-2">
+          <KeyRound className="h-4 w-4" /> Change Password
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Change Password</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="currentPassword">Current Password</Label>
+            <Input id="currentPassword" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">New Password</Label>
+            <Input id="newPassword" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm New Password</Label>
+            <Input id="confirmPassword" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required minLength={6} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={changePassword.isPending}>
+              {changePassword.isPending ? "Saving..." : "Update Password"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const CHART_COLORS = [
   "#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6",
@@ -107,6 +167,7 @@ export default function Dashboard() {
             <p className="text-muted-foreground">Overview of hospital stores inventory.</p>
           </div>
           <div className="flex items-center gap-2">
+            <ChangePasswordDialog />
             <Button variant="ghost" size="icon" onClick={() => refetchDash()} disabled={isFetchingDash} title="Refresh">
               <RefreshCw className={`h-4 w-4 ${isFetchingDash ? "animate-spin" : ""}`}/>
             </Button>

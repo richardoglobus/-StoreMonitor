@@ -28,7 +28,7 @@ export type Permissions = {
   viewActivityLogs: boolean;
   manageUsers: boolean;
 };
-export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "staff"; permissions: Permissions };
+export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
 export type Department = { id: number; name: string; slug: string };
 export type Item = { id: number; description: string; unit: string; quantity: number };
 export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; stockBalance: number };
@@ -116,6 +116,9 @@ export function useLogin(options?: MutOpts<AuthUser, { data: { username: string;
 
 export function useLogout(options?: MutOpts<void, void>) {
   return useMutation({ mutationFn: () => apiFetch<void>("/api/auth/logout", { method: "POST" }), ...options?.mutation });
+}
+export function useChangePassword(options?: MutOpts<{ success: boolean; message: string }, { data: { currentPassword: string; newPassword: string } }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<{ success: boolean; message: string }>("/api/auth/change-password", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
 
 export function useListUsers(options?: QueryOpts<AuthUser[]>) {

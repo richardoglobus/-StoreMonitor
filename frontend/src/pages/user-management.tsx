@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
-const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
+const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "staff") => {
   if (role === "admin") {
     return {
       viewDashboard: true,
@@ -60,6 +60,27 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "staff") => {
       viewActivityLogs: false,
       manageUsers: false,
       manageAssets: true,
+      manageDigitalForms: false,
+    };
+  }
+  if (role === "accountant") {
+    return {
+      viewDashboard: true,
+      issueItems: false,
+      manageCatalog: false,
+      manageDepartments: false,
+      manageInventory: false,
+      managePurchases: true,
+      viewReports: true,
+      exportData: true,
+      deleteTransactions: false,
+      editCatalog: false,
+      editPurchases: true,
+      editIssues: false,
+      viewActivityLogs: false,
+      manageUsers: false,
+      viewAssets: true,
+      manageAssets: false,
       manageDigitalForms: false,
     };
   }
@@ -207,6 +228,7 @@ export default function UserManagement() {
     switch (role) {
       case "admin": return <Badge className="bg-red-100 text-red-800 border-red-200">Admin</Badge>;
       case "manager": return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Manager</Badge>;
+      case "accountant": return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Accountant</Badge>;
       default: return <Badge variant="secondary">Staff</Badge>;
     }
   };
@@ -252,6 +274,7 @@ export default function UserManagement() {
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="accountant">Accountant</SelectItem>
                       <SelectItem value="staff">Staff</SelectItem>
                     </SelectContent>
                   </Select>
@@ -360,6 +383,7 @@ export default function UserManagement() {
                   <SelectContent>
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="accountant">Accountant</SelectItem>
                     <SelectItem value="staff">Staff</SelectItem>
                   </SelectContent>
                 </Select>
