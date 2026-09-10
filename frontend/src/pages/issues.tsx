@@ -172,8 +172,7 @@ export default function Issues() {
   const { data: departments } = useListDepartments({ query: { queryKey: getListDepartmentsQueryKey() } });
   const { data: itemStock } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
 
-  const month = from.slice(0, 7);
-  const queryParams = { month, ...(departmentIdFilter !== "all" ? { departmentId: Number(departmentIdFilter) } : {}) };
+  const queryParams = { from, to, ...(departmentIdFilter !== "all" ? { departmentId: Number(departmentIdFilter) } : {}) };
   const { data: issues, isLoading, refetch: refetchIssues, isFetching } = useListIssues(queryParams, { query: { queryKey: getListIssuesQueryKey(queryParams) } });
 
   const createVoucher = useCreateIssueVoucher({

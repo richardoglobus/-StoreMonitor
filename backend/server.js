@@ -1658,11 +1658,17 @@ app.post("/api/receipts",(req,res)=>{
 // ISSUES
 app.get("/api/issues",requirePermission("issueItems"),(req,res)=>{
   const departmentId=req.query.departmentId?Number(req.query.departmentId):null,month=req.query.month,limit=req.query.limit?Number(req.query.limit):null;
-  const {start,end}=month?monthRange(month):{start:null,end:null};
+  // Support ?from=YYYY-MM-DD&to=YYYY-MM-DD OR ?month=YYYY-MM
+  let start=null, end=null;
+  if (req.query.from && req.query.to) {
+    start = req.query.from; end = req.query.to;
+  } else if (month) {
+    const r = monthRange(month); start = r.start; end = r.end;
+  }
   const itemMap=getItemMap(),deptMap=getDeptMap();
   let rows=db.get("issues").value();
   if(departmentId) rows=rows.filter(r=>r.departmentId===departmentId);
-  if(start) rows=rows.filter(r=>inRange(r.issuedAt,start,end));
+  if(start) rows=rows.filter(r=>r.issuedAt>=start&&r.issuedAt<=end);
   rows=rows.sort((a,b)=>b.issuedAt.localeCompare(a.issuedAt)||b.id-a.id);
   if(limit) rows=rows.slice(0,limit);
   res.json(rows.map(r=>({...r,item:itemMap.get(r.itemId),department:deptMap.get(r.departmentId)})));
