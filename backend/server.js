@@ -2003,16 +2003,21 @@ app.get("/api/reports/monthly",requirePermission("viewReports"),(req,res)=>{
 // EXPORTS
 app.get("/api/export/issues.csv",requirePermission("exportData"),(req,res)=>{
   const month=req.query.month,departmentId=req.query.departmentId?Number(req.query.departmentId):null;
-  const {start,end}=month?monthRange(month):{start:null,end:null};
+  const itemId=req.query.itemId?Number(req.query.itemId):null,s11No=req.query.s11No?String(req.query.s11No).toLowerCase():null;
+  let start=null,end=null;
+  if(req.query.from&&req.query.to){ start=req.query.from; end=req.query.to; }
+  else if(month){ const r=monthRange(month); start=r.start; end=r.end; }
   const itemMap=getItemMap(),deptMap=getDeptMap();
   let rows=db.get("issues").value();
   if(departmentId) rows=rows.filter(r=>r.departmentId===departmentId);
-  if(start) rows=rows.filter(r=>inRange(r.issuedAt,start,end));
+  if(itemId) rows=rows.filter(r=>r.itemId===itemId);
+  if(s11No) rows=rows.filter(r=>r.s11No&&r.s11No.toLowerCase().includes(s11No));
+  if(start) rows=rows.filter(r=> req.query.from&&req.query.to ? (r.issuedAt>=start&&r.issuedAt<=end) : inRange(r.issuedAt,start,end));
   rows=rows.sort((a,b)=>a.issuedAt.localeCompare(b.issuedAt)||a.id-b.id);
   const lines=[["ID","Date","Weekday","Department","Item","Unit","Quantity","Note"].map(csvEscape).join(",")];
   for(const r of rows){const item=itemMap.get(r.itemId),dept=deptMap.get(r.departmentId);lines.push([r.id,r.issuedAt,r.weekday,dept?.name||"",item?.description||"",item?.unit||"",r.quantity,r.note??""].map(csvEscape).join(","));}
   res.setHeader("Content-Type","text/csv");
-  res.setHeader("Content-Disposition",`attachment; filename="issues_${month??"all"}${departmentId?`_dept${departmentId}`:""}.csv"`);
+  res.setHeader("Content-Disposition",`attachment; filename="issues_${req.query.from||month||"all"}${req.query.to?`_to_${req.query.to}`:""}${departmentId?`_dept${departmentId}`:""}.csv"`);
   res.send(lines.join("\n"));
 });
 app.get("/api/export/inventory.csv",requirePermission("exportData"),(req,res)=>{

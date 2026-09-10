@@ -13,11 +13,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, Plus, Trash2, X, Search, Pencil, RefreshCw } from "lucide-react";
+import { Download, Plus, Trash2, X, Search, Pencil, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -157,7 +158,11 @@ export default function Issues() {
   const [to, setTo] = useState(todayStr());
   const canDeleteTransactions = !!user?.permissions?.deleteTransactions;
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
+  const [itemIdFilter, setItemIdFilter] = useState("all");
+  const [s11Filter, setS11Filter] = useState("");
   const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount = (itemIdFilter !== "all" ? 1 : 0) + (s11Filter.trim() ? 1 : 0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editIssueOpen, setEditIssueOpen] = useState(false);
   const [editIssue, setEditIssue] = useState<any>(null);
@@ -263,20 +268,23 @@ export default function Issues() {
     setEditIssueOpen(true);
   };
 
-  const downloadUrl = `${API_BASE}/api/export/issues.csv?month=${month}${departmentIdFilter !== "all" ? `&departmentId=${departmentIdFilter}` : ""}`;
+  const downloadUrl = `${API_BASE}/api/export/issues.csv?from=${from}&to=${to}${departmentIdFilter !== "all" ? `&departmentId=${departmentIdFilter}` : ""}${itemIdFilter !== "all" ? `&itemId=${itemIdFilter}` : ""}${s11Filter.trim() ? `&s11No=${encodeURIComponent(s11Filter.trim())}` : ""}`;
 
-  const filteredIssues = search.trim()
-    ? (issues ?? []).filter(i => {
-        const q = search.toLowerCase();
-        return (
-          i.item?.description?.toLowerCase().includes(q) ||
-          i.department?.name?.toLowerCase().includes(q) ||
-          i.folioNo?.toLowerCase().includes(q) ||
-          i.s11No?.toLowerCase().includes(q) ||
-          i.voucherId?.toLowerCase().includes(q)
-        );
-      })
-    : (issues ?? []);
+  const filteredIssues = (issues ?? []).filter(i => {
+    if (itemIdFilter !== "all" && i.itemId !== Number(itemIdFilter)) return false;
+    if (s11Filter.trim() && !i.s11No?.toLowerCase().includes(s11Filter.trim().toLowerCase())) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matches =
+        i.item?.description?.toLowerCase().includes(q) ||
+        i.department?.name?.toLowerCase().includes(q) ||
+        i.folioNo?.toLowerCase().includes(q) ||
+        i.s11No?.toLowerCase().includes(q) ||
+        i.voucherId?.toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+    return true;
+  });
 
   return (
     <Layout>
@@ -371,7 +379,7 @@ export default function Issues() {
             if (!res.ok) { toast.error("Export failed. Check you are logged in."); return; }
             const blob = await res.blob();
             const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-            a.download = `issues_${month}.csv`; document.body.appendChild(a); a.click();
+            a.download = `issues_${from}_to_${to}.csv`; document.body.appendChild(a); a.click();
             document.body.removeChild(a);
           }}>
             <Download className="h-4 w-4 mr-2" />Download CSV
@@ -392,7 +400,63 @@ export default function Issues() {
                 <X className="h-4 w-4"/>
               </Button>
             )}
-            {search && (
+            <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-2 shrink-0">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">{activeFilterCount}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-80 space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Date range</Label>
+                  <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Department</Label>
+                  <Select value={departmentIdFilter} onValueChange={setDepartmentIdFilter}>
+                    <SelectTrigger><SelectValue placeholder="All Departments" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {departments?.map(d => <SelectItem key={d.id} value={d.id.toString()}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Item</Label>
+                  <Select value={itemIdFilter} onValueChange={setItemIdFilter}>
+                    <SelectTrigger><SelectValue placeholder="All Items" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Items</SelectItem>
+                      {itemStock?.map(it => <SelectItem key={it.id} value={it.id.toString()}>{it.description}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">S11 No</Label>
+                  <Input
+                    placeholder="e.g. 7438"
+                    value={s11Filter}
+                    onChange={e => setS11Filter(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+                {(itemIdFilter !== "all" || s11Filter.trim() || departmentIdFilter !== "all") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => { setItemIdFilter("all"); setS11Filter(""); setDepartmentIdFilter("all"); }}
+                  >
+                    <X className="h-3.5 w-3.5" /> Clear filters
+                  </Button>
+                )}
+              </PopoverContent>
+            </Popover>
+            {(search || activeFilterCount > 0) && (
               <span className="text-xs text-muted-foreground ml-1">
                 {filteredIssues.length} result{filteredIssues.length !== 1 ? "s" : ""}
               </span>
