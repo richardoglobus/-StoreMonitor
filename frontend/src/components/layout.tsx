@@ -6,7 +6,7 @@ import {
   Download, Menu, ShoppingCart, BarChart3, Users,
   LogOut, User as UserIcon, Sun, Moon, Settings2, TrendingUp,
   Heart, Shield, Star, Cross, Stethoscope, Pill, Activity, Leaf,
-  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked,
+  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -28,7 +28,13 @@ const NAV_ITEMS = [
   { href: "/departments",     label: "Departments",    icon: Building2,       permission: "manageDepartments" },
   { href: "/assets",          label: "Asset Register", icon: Package2,        permission: "viewDashboard" },
   { href: "/digital-forms",   label: "Digital Forms",  icon: ClipboardList,   permission: "manageDigitalForms" },
-  { href: "/items",           label: "Catalog",        icon: PackageSearch,   permission: "manageCatalog" },
+  {
+    label: "Catalog", icon: PackageSearch, permission: "manageCatalog",
+    children: [
+      { href: "/items",              label: "Item Catalog", icon: PackageSearch, permission: "manageCatalog" },
+      { href: "/items/categories",   label: "Categories",   icon: Tag,          permission: "manageCatalog" },
+    ],
+  },
   { href: "/purchases",       label: "Purchases",      icon: ShoppingCart,    permission: "managePurchases" },
   { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "issueItems" },
   { href: "/reports",         label: "Monthly Report", icon: BarChart3,       permission: "viewReports" },

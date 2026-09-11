@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { API_BASE } from "@/lib/api";
+import { useListCategories, getListCategoriesQueryKey, useUpdateCategory } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface AppSettings {
   // Session & Security
@@ -126,7 +128,10 @@ export default function SettingsPage() {
   const [, setLocation] = useLocation();
   if (!user?.permissions?.manageUsers) { setLocation("/"); return null; }
 
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<AppSettings>(DEFAULTS);
+  const { data: catalogCategories } = useListCategories();
+  const updateCategory = useUpdateCategory({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); toast.success("Category charge code updated"); } } });
   const [officers, setOfficers] = useState<{id:number,name:string}[]>([]);
   const [officersLoading, setOfficersLoading] = useState(false);
   const [newOfficerName, setNewOfficerName] = useState("");
@@ -460,9 +465,21 @@ export default function SettingsPage() {
         <SectionCard icon={FileText} title="Reports & Exports" description="Configure what appears on monthly reports and Excel exports.">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Default Charge Item Code</Label>
+              <Label>Charge Item Code</Label>
               <Input value={settings.reportChargeItem} onChange={e => update("reportChargeItem", e.target.value)} placeholder="2211002" className="font-mono" />
-              <p className="text-xs text-muted-foreground">Fallback for reports when an item category has no code. Category-specific codes are managed in Item Catalog.</p>
+              <p className="text-xs text-muted-foreground">Used as the report charge item code unless a category-specific code is configured below.</p>
+            </div>
+            <div className="sm:col-span-2 space-y-2 border rounded-lg p-3">
+              <Label>Category Charge Item Codes</Label>
+              <p className="text-xs text-muted-foreground">For example, assign 221102 to NON-PHARM. These codes appear on report rows for items in each category.</p>
+              {(catalogCategories || []).map(category => (
+                <div key={category.id} className="flex items-center gap-3">
+                  <span className="text-sm font-medium min-w-32">{category.name}</span>
+                  <Input defaultValue={category.chargeItemCode || ""} placeholder="Charge item code" className="font-mono" onBlur={e => {
+                    if (e.target.value !== (category.chargeItemCode || "")) updateCategory.mutate({ categoryId: category.id, data: { chargeItemCode: e.target.value } });
+                  }} />
+                </div>
+              ))}
             </div>
             <div className="space-y-2">
               <Label>Responsible Officer Name</Label>

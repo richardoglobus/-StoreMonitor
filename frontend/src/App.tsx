@@ -27,6 +27,7 @@ import SuppliersPage from "@/pages/accounts/suppliers";
 import PaymentsPage from "@/pages/accounts/payments";
 import FinancialReportsPage from "@/pages/accounts/financial-reports";
 import ChartOfAccountsPage from "@/pages/accounts/chart-of-accounts";
+import CatalogCategoriesPage from "@/pages/catalog-categories";
 import { AlertTriangle } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 
@@ -118,6 +119,7 @@ function AppWithAuth() {
         <Route path="/departments" component={Departments} />
         <Route path="/departments/:id" component={DepartmentDetail} />
         <Route path="/items" component={Items} />
+        <Route path="/items/categories" component={CatalogCategoriesPage} />
         <Route path="/purchases" component={Purchases} />
         <Route path="/issues" component={Issues} />
         <Route path="/reports" component={Reports} />
