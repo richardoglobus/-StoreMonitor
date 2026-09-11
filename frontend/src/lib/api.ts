@@ -258,3 +258,85 @@ export function useGetMonthlyReport(params: { startMonth: string; endMonth: stri
 export function useListActivity(params?: any, options?: QueryOpts<ActivityLog[]>) {
   return useQuery({ queryKey: getListActivityQueryKey(params), queryFn: () => apiFetch<ActivityLog[]>(`/api/activity${qs(params ?? {})}`), ...options?.query });
 }
+
+// ─── Accounts Section ───────────────────────────────────────────────────────
+
+export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; balance: number; createdAt: string };
+export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargedTo: string | null; folioNo: string | null };
+export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved"; createdBy: number; createdAt: string; approvedBy: number | null; approvedAt: string | null; supplier?: Supplier | null };
+export type StockMovement = { id: number; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "GRN" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
+export type PaymentEntry = { id: number; date: string; supplierId: number; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };
+export type ChartAccount = { id: number; code: string; name: string; type: string; balance: number; isDefault: boolean };
+export type JournalEntry = { id: number; date: string; reference: string; description: string; debitAccount: string; creditAccount: string; amount: number };
+export type FinancialSummary = { period: { start: string; end: string }; totalGrnsApproved: number; totalGoodsReceivedValue: number; totalPaidThisPeriod: number; totalAccountsPayable: number; pendingGrnCount: number; inventoryValue: number; topSuppliersByBalance: Supplier[]; accounts: ChartAccount[] };
+
+export const getListGrnsQueryKey = (params?: any) => ["/api/accounts/grns", params] as const;
+export function useListGrns(params?: any, options?: QueryOpts<Grn[]>) {
+  return useQuery({ queryKey: getListGrnsQueryKey(params), queryFn: () => apiFetch<Grn[]>(`/api/accounts/grns${qs(params ?? {})}`), ...options?.query });
+}
+export function useCreateGrn(options?: MutOpts<Grn, { data: any }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<Grn>("/api/accounts/grns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useApproveGrn(options?: MutOpts<Grn, { grnId: number }>) {
+  return useMutation({ mutationFn: ({ grnId }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}/approve`, { method: "PATCH" }), ...options?.mutation });
+}
+export function useDeleteGrn(options?: MutOpts<void, { grnId: number }>) {
+  return useMutation({ mutationFn: ({ grnId }) => apiFetch<void>(`/api/accounts/grns/${grnId}`, { method: "DELETE" }), ...options?.mutation });
+}
+
+export const getListStockMovementsQueryKey = (params?: any) => ["/api/accounts/stock-movements", params] as const;
+export function useListStockMovements(params?: any, options?: QueryOpts<StockMovement[]>) {
+  return useQuery({ queryKey: getListStockMovementsQueryKey(params), queryFn: () => apiFetch<StockMovement[]>(`/api/accounts/stock-movements${qs(params ?? {})}`), ...options?.query });
+}
+export const getListStockBalancesQueryKey = () => ["/api/accounts/stock-movements/balances"] as const;
+export function useListStockBalances(options?: QueryOpts<{ itemCode: string; description: string; unit: string | null; balance: number }[]>) {
+  return useQuery({ queryKey: getListStockBalancesQueryKey(), queryFn: () => apiFetch<{ itemCode: string; description: string; unit: string | null; balance: number }[]>(`/api/accounts/stock-movements/balances`), ...options?.query });
+}
+export function useCreateStockAdjustment(options?: MutOpts<StockMovement, { data: any }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<StockMovement>("/api/accounts/stock-movements/adjustment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+
+export const getListSuppliersQueryKey = () => ["/api/accounts/suppliers"] as const;
+export function useListSuppliers(options?: QueryOpts<Supplier[]>) {
+  return useQuery({ queryKey: getListSuppliersQueryKey(), queryFn: () => apiFetch<Supplier[]>("/api/accounts/suppliers"), ...options?.query });
+}
+export function useCreateSupplier(options?: MutOpts<Supplier, { data: any }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<Supplier>("/api/accounts/suppliers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useUpdateSupplier(options?: MutOpts<Supplier, { supplierId: number; data: any }>) {
+  return useMutation({ mutationFn: ({ supplierId, data }) => apiFetch<Supplier>(`/api/accounts/suppliers/${supplierId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useDeleteSupplier(options?: MutOpts<void, { supplierId: number }>) {
+  return useMutation({ mutationFn: ({ supplierId }) => apiFetch<void>(`/api/accounts/suppliers/${supplierId}`, { method: "DELETE" }), ...options?.mutation });
+}
+export function useGetSupplierLedger(supplierId: number, options?: QueryOpts<{ supplier: Supplier; entries: any[] }>) {
+  return useQuery({ queryKey: ["/api/accounts/suppliers", supplierId, "ledger"], queryFn: () => apiFetch<{ supplier: Supplier; entries: any[] }>(`/api/accounts/suppliers/${supplierId}/ledger`), enabled: !!supplierId, ...options?.query });
+}
+
+export const getListPaymentsQueryKey = (params?: any) => ["/api/accounts/payments", params] as const;
+export function useListPayments(params?: any, options?: QueryOpts<PaymentEntry[]>) {
+  return useQuery({ queryKey: getListPaymentsQueryKey(params), queryFn: () => apiFetch<PaymentEntry[]>(`/api/accounts/payments${qs(params ?? {})}`), ...options?.query });
+}
+export function useCreatePayment(options?: MutOpts<PaymentEntry, { data: any }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<PaymentEntry>("/api/accounts/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useDeletePayment(options?: MutOpts<void, { paymentId: number }>) {
+  return useMutation({ mutationFn: ({ paymentId }) => apiFetch<void>(`/api/accounts/payments/${paymentId}`, { method: "DELETE" }), ...options?.mutation });
+}
+
+export const getListChartOfAccountsQueryKey = () => ["/api/accounts/chart-of-accounts"] as const;
+export function useListChartOfAccounts(options?: QueryOpts<ChartAccount[]>) {
+  return useQuery({ queryKey: getListChartOfAccountsQueryKey(), queryFn: () => apiFetch<ChartAccount[]>("/api/accounts/chart-of-accounts"), ...options?.query });
+}
+export function useCreateChartAccount(options?: MutOpts<ChartAccount, { data: any }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<ChartAccount>("/api/accounts/chart-of-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useDeleteChartAccount(options?: MutOpts<void, { accountId: number }>) {
+  return useMutation({ mutationFn: ({ accountId }) => apiFetch<void>(`/api/accounts/chart-of-accounts/${accountId}`, { method: "DELETE" }), ...options?.mutation });
+}
+export function useListJournalEntries(params?: any, options?: QueryOpts<JournalEntry[]>) {
+  return useQuery({ queryKey: ["/api/accounts/journal-entries", params], queryFn: () => apiFetch<JournalEntry[]>(`/api/accounts/journal-entries${qs(params ?? {})}`), ...options?.query });
+}
+export function useGetFinancialSummary(params?: any, options?: QueryOpts<FinancialSummary>) {
+  return useQuery({ queryKey: ["/api/accounts/reports/summary", params], queryFn: () => apiFetch<FinancialSummary>(`/api/accounts/reports/summary${qs(params ?? {})}`), ...options?.query });
+}

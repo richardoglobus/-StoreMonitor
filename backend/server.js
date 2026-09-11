@@ -1025,10 +1025,26 @@ function seedAssets() {
 
 
 db.defaults({
-  _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0 },
+  _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0,
+          grns: 0, suppliers: 0, paymentEntries: 0, chartOfAccounts: 0, journalEntries: 0, stockMovements: 0 },
   users: [], departments: [], items: [], inventory: [],
-  receipts: [], issues: [], purchases: [], activities: [], assets: [], assetCategories: []
+  receipts: [], issues: [], purchases: [], activities: [], assets: [], assetCategories: [],
+  grns: [], suppliers: [], paymentEntries: [], chartOfAccounts: [], journalEntries: [], stockMovements: []
 }).write();
+
+// Seed default Chart of Accounts if empty
+if (db.get("chartOfAccounts").value().length === 0) {
+  const defaultAccounts = [
+    { code: "1000", name: "Inventory",         type: "Asset" },
+    { code: "1100", name: "Bank",               type: "Asset" },
+    { code: "1200", name: "Cash",               type: "Asset" },
+    { code: "2000", name: "Accounts Payable",   type: "Liability" },
+    { code: "5000", name: "Purchases / COGS",   type: "Expense" },
+  ];
+  for (const a of defaultAccounts) {
+    db.get("chartOfAccounts").push({ id: nextId("chartOfAccounts"), ...a, balance: 0, isDefault: true }).write();
+  }
+}
 
 // DATA RECOVERY: try all known paths and print whichever has data
 const pathsToTry = [
@@ -1774,6 +1790,302 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
 });
 
 app.delete("/api/purchases/:id",requirePermission("deleteTransactions"),(req,res)=>{ const id=Number(req.params.id); db.get("purchases").remove({id}).write(); logActivity(req, "DELETE_PURCHASE", "PURCHASE", id, null); res.status(204).send(); });
+
+// ══════════════════════════════════════════════════════════════════════════
+// ACCOUNTS SECTION — GRN, Stock Movement, Suppliers, Payments, Chart of Accounts
+// ══════════════════════════════════════════════════════════════════════════
+
+function accountByCode(code) { return db.get("chartOfAccounts").find({ code }); }
+function adjustAccountBalance(code, delta) {
+  const acc = accountByCode(code);
+  if (acc.value()) acc.assign({ balance: Number((acc.value().balance + delta).toFixed(2)) }).write();
+}
+function postJournalEntry({ date, reference, description, debitAccount, creditAccount, amount }) {
+  const row = { id: nextId("journalEntries"), date, reference, description, debitAccount, creditAccount, amount: Number(amount) };
+  db.get("journalEntries").push(row).write();
+  adjustAccountBalance(debitAccount, Number(amount));
+  adjustAccountBalance(creditAccount, -Number(amount));
+  return row;
+}
+function currentItemBalance(itemCode) {
+  const rows = db.get("stockMovements").filter({ itemCode }).value();
+  if (!rows.length) return 0;
+  return rows[rows.length - 1].balance;
+}
+function pushStockMovement({ date, itemCode, description, unit, reference, transactionType, qtyIn = 0, qtyOut = 0, note = null }) {
+  const prevBalance = currentItemBalance(itemCode);
+  const balance = Number((prevBalance + Number(qtyIn) - Number(qtyOut)).toFixed(2));
+  const row = { id: nextId("stockMovements"), date, itemCode, description, unit: unit || null, reference, transactionType, qtyIn: Number(qtyIn), qtyOut: Number(qtyOut), balance, note };
+  db.get("stockMovements").push(row).write();
+  return row;
+}
+function genSequentialNo(prefix, table) {
+  const n = db.get(table).value().length + 1;
+  return `${prefix}-${String(n).padStart(3, "0")}`;
+}
+
+// ── GRN (Goods Received Note) ───────────────────────────────────────────
+app.get("/api/accounts/grns", requirePermission("viewReports"), (req, res) => {
+  const supplierMap = new Map(db.get("suppliers").value().map(s => [s.id, s]));
+  let rows = db.get("grns").value().sort((a, b) => b.id - a.id);
+  if (req.query.status) rows = rows.filter(r => r.status === req.query.status);
+  if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
+  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null })));
+});
+app.get("/api/accounts/grns/:id", requirePermission("viewReports"), (req, res) => {
+  const row = db.get("grns").find({ id: Number(req.params.id) }).value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  const supplier = db.get("suppliers").find({ id: row.supplierId }).value();
+  res.json({ ...row, supplier: supplier || null });
+});
+app.post("/api/accounts/grns", requirePermission("managePurchases"), (req, res) => {
+  const { date, lpoNo, supplierId, invoiceNo, items } = req.body;
+  if (!date) return res.status(400).json({ error: "Date is required" });
+  if (!supplierId) return res.status(400).json({ error: "Supplier is required" });
+  if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "At least one item line is required" });
+  const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
+  if (!supplier) return res.status(400).json({ error: "Supplier not found" });
+  let totalAmount = 0;
+  const cleanItems = items.map(it => {
+    const qtyReceived = Number(it.qtyReceived) || 0;
+    const unitCost = Number(it.unitCost) || 0;
+    const totalCost = Number((qtyReceived * unitCost).toFixed(2));
+    totalAmount += totalCost;
+    return {
+      itemCode: it.itemCode || null,
+      description: String(it.description || "").trim().toUpperCase(),
+      unit: it.unit || null,
+      qtyReceived, unitCost, totalCost,
+      batchNo: it.batchNo || null,
+      expiryDate: it.expiryDate || null,
+      chargedTo: it.chargedTo || null,
+      folioNo: it.folioNo || null,
+    };
+  });
+  const row = {
+    id: nextId("grns"),
+    grnNo: genSequentialNo("GRN", "grns"),
+    date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null,
+    items: cleanItems, totalAmount: Number(totalAmount.toFixed(2)),
+    status: "pending",
+    createdBy: req.session.userId, createdAt: new Date().toISOString(),
+    approvedBy: null, approvedAt: null,
+  };
+  db.get("grns").push(row).write();
+  logActivity(req, "CREATE_GRN", "GRN", row.id, { grnNo: row.grnNo, supplierId: row.supplierId, totalAmount: row.totalAmount });
+  res.status(201).json(row);
+});
+app.patch("/api/accounts/grns/:id/approve", requirePermission("managePurchases"), (req, res) => {
+  const id = Number(req.params.id);
+  const rowRef = db.get("grns").find({ id });
+  const row = rowRef.value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  if (row.status === "approved") return res.status(400).json({ error: "GRN already approved" });
+  // Reflect stock: for each item line, push a stock movement (qty in) and roll balance forward
+  for (const it of row.items) {
+    if (!it.itemCode && !it.description) continue;
+    pushStockMovement({
+      date: row.date,
+      itemCode: it.itemCode || it.description,
+      description: it.description,
+      unit: it.unit,
+      reference: row.grnNo,
+      transactionType: "GRN",
+      qtyIn: it.qtyReceived,
+      qtyOut: 0,
+      note: `Received from ${row.grnNo}`,
+    });
+  }
+  // Accounting: Debit Inventory, Credit Accounts Payable
+  postJournalEntry({
+    date: row.date, reference: row.grnNo,
+    description: `Goods received — ${row.grnNo}`,
+    debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount,
+  });
+  // Supplier now owes this amount (accounts payable)
+  const supplierRef = db.get("suppliers").find({ id: row.supplierId });
+  if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + row.totalAmount).toFixed(2)) }).write();
+  rowRef.assign({ status: "approved", approvedBy: req.session.userId, approvedAt: new Date().toISOString() }).write();
+  logActivity(req, "APPROVE_GRN", "GRN", id, { grnNo: row.grnNo, totalAmount: row.totalAmount });
+  res.json(rowRef.value());
+});
+app.delete("/api/accounts/grns/:id", requirePermission("deleteTransactions"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("grns").find({ id }).value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  if (row.status === "approved") return res.status(400).json({ error: "Cannot delete an approved GRN. It is already posted to stock and accounts." });
+  db.get("grns").remove({ id }).write();
+  logActivity(req, "DELETE_GRN", "GRN", id, null);
+  res.status(204).send();
+});
+
+// ── Stock Movement (ledger) ─────────────────────────────────────────────
+app.get("/api/accounts/stock-movements", requirePermission("viewReports"), (req, res) => {
+  let rows = db.get("stockMovements").value();
+  if (req.query.itemCode) rows = rows.filter(r => r.itemCode === req.query.itemCode);
+  if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
+  if (req.query.to) rows = rows.filter(r => r.date <= req.query.to);
+  rows = [...rows].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  res.json(rows);
+});
+app.get("/api/accounts/stock-movements/balances", requirePermission("viewReports"), (req, res) => {
+  const rows = db.get("stockMovements").value();
+  const map = new Map();
+  for (const r of rows) map.set(r.itemCode, { itemCode: r.itemCode, description: r.description, unit: r.unit, balance: r.balance });
+  res.json([...map.values()].sort((a, b) => a.description?.localeCompare(b.description)));
+});
+app.post("/api/accounts/stock-movements/adjustment", requirePermission("managePurchases"), (req, res) => {
+  const { date, itemCode, description, unit, adjustmentQty, reason, approvedBy } = req.body;
+  if (!date || !itemCode) return res.status(400).json({ error: "Date and item are required" });
+  const qty = Number(adjustmentQty);
+  if (!qty) return res.status(400).json({ error: "Adjustment quantity is required" });
+  if (!reason || !String(reason).trim()) return res.status(400).json({ error: "Reason for adjustment is required" });
+  const row = pushStockMovement({
+    date, itemCode, description: description || itemCode, unit,
+    reference: `ADJ-${db.get("stockMovements").value().length + 1}`,
+    transactionType: "ADJUSTMENT",
+    qtyIn: qty > 0 ? qty : 0,
+    qtyOut: qty < 0 ? Math.abs(qty) : 0,
+    note: `${reason}${approvedBy ? ` — Approved by ${approvedBy}` : ""}`,
+  });
+  logActivity(req, "STOCK_ADJUSTMENT", "STOCK", row.id, { itemCode, adjustmentQty: qty, reason });
+  res.status(201).json(row);
+});
+
+// ── Suppliers ────────────────────────────────────────────────────────────
+app.get("/api/accounts/suppliers", requirePermission("viewReports"), (_req, res) => {
+  res.json(db.get("suppliers").orderBy("name", "asc").value());
+});
+app.post("/api/accounts/suppliers", requirePermission("managePurchases"), (req, res) => {
+  const { name, contactPerson, phone, email, address } = req.body;
+  if (!name || !String(name).trim()) return res.status(400).json({ error: "Supplier name is required" });
+  const row = { id: nextId("suppliers"), name: String(name).trim().toUpperCase(), contactPerson: contactPerson || null, phone: phone || null, email: email || null, address: address || null, balance: 0, createdAt: new Date().toISOString() };
+  db.get("suppliers").push(row).write();
+  logActivity(req, "CREATE_SUPPLIER", "SUPPLIER", row.id, { name: row.name });
+  res.status(201).json(row);
+});
+app.patch("/api/accounts/suppliers/:id", requirePermission("managePurchases"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("suppliers").find({ id });
+  if (!row.value()) return res.status(404).json({ error: "Supplier not found" });
+  const { name, contactPerson, phone, email, address } = req.body;
+  const updates = {};
+  if (name !== undefined) updates.name = String(name).trim().toUpperCase();
+  if (contactPerson !== undefined) updates.contactPerson = contactPerson || null;
+  if (phone !== undefined) updates.phone = phone || null;
+  if (email !== undefined) updates.email = email || null;
+  if (address !== undefined) updates.address = address || null;
+  row.assign(updates).write();
+  logActivity(req, "UPDATE_SUPPLIER", "SUPPLIER", id, updates);
+  res.json(row.value());
+});
+app.delete("/api/accounts/suppliers/:id", requirePermission("deleteTransactions"), (req, res) => {
+  const id = Number(req.params.id);
+  const hasGrns = db.get("grns").find({ supplierId: id }).value();
+  if (hasGrns) return res.status(400).json({ error: "Cannot delete a supplier with existing GRN records" });
+  db.get("suppliers").remove({ id }).write();
+  logActivity(req, "DELETE_SUPPLIER", "SUPPLIER", id, null);
+  res.status(204).send();
+});
+app.get("/api/accounts/suppliers/:id/ledger", requirePermission("viewReports"), (req, res) => {
+  const id = Number(req.params.id);
+  const supplier = db.get("suppliers").find({ id }).value();
+  if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+  const grns = db.get("grns").filter({ supplierId: id }).value().map(g => ({ type: "GRN", date: g.date, reference: g.grnNo, debit: 0, credit: g.status === "approved" ? g.totalAmount : 0, status: g.status }));
+  const payments = db.get("paymentEntries").filter({ supplierId: id }).value().map(p => ({ type: "PAYMENT", date: p.date, reference: p.reference || `PMT-${p.id}`, debit: p.amount, credit: 0 }));
+  const entries = [...grns, ...payments].sort((a, b) => a.date.localeCompare(b.date));
+  let running = 0;
+  const withBalance = entries.map(e => { running += e.credit - e.debit; return { ...e, balance: Number(running.toFixed(2)) }; });
+  res.json({ supplier, entries: withBalance });
+});
+
+// ── Payment Entries ──────────────────────────────────────────────────────
+app.get("/api/accounts/payments", requirePermission("viewReports"), (req, res) => {
+  const supplierMap = new Map(db.get("suppliers").value().map(s => [s.id, s]));
+  let rows = db.get("paymentEntries").value().sort((a, b) => b.id - a.id);
+  if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
+  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null })));
+});
+app.post("/api/accounts/payments", requirePermission("managePurchases"), (req, res) => {
+  const { date, supplierId, amount, method, reference, note } = req.body;
+  if (!date || !supplierId || !amount) return res.status(400).json({ error: "Date, supplier and amount are required" });
+  const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
+  if (!supplier) return res.status(400).json({ error: "Supplier not found" });
+  const amt = Number(amount);
+  const row = { id: nextId("paymentEntries"), date, supplierId: Number(supplierId), amount: amt, method: method || "Bank", reference: reference || null, note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
+  db.get("paymentEntries").push(row).write();
+  // Accounting: Debit Accounts Payable, Credit Bank
+  postJournalEntry({
+    date, reference: reference || `PMT-${row.id}`,
+    description: `Payment to ${supplier.name}`,
+    debitAccount: "2000", creditAccount: method === "Cash" ? "1200" : "1100", amount: amt,
+  });
+  db.get("suppliers").find({ id: supplier.id }).assign({ balance: Number((supplier.balance - amt).toFixed(2)) }).write();
+  logActivity(req, "CREATE_PAYMENT", "PAYMENT", row.id, { supplierId: row.supplierId, amount: amt });
+  res.status(201).json(row);
+});
+app.delete("/api/accounts/payments/:id", requirePermission("deleteTransactions"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("paymentEntries").find({ id }).value();
+  if (!row) return res.status(404).json({ error: "Payment not found" });
+  const supplier = db.get("suppliers").find({ id: row.supplierId });
+  if (supplier.value()) supplier.assign({ balance: Number((supplier.value().balance + row.amount).toFixed(2)) }).write();
+  db.get("paymentEntries").remove({ id }).write();
+  logActivity(req, "DELETE_PAYMENT", "PAYMENT", id, null);
+  res.status(204).send();
+});
+
+// ── Chart of Accounts ────────────────────────────────────────────────────
+app.get("/api/accounts/chart-of-accounts", requirePermission("viewReports"), (_req, res) => {
+  res.json(db.get("chartOfAccounts").orderBy("code", "asc").value());
+});
+app.post("/api/accounts/chart-of-accounts", requirePermission("managePurchases"), (req, res) => {
+  const { code, name, type } = req.body;
+  if (!code || !name || !type) return res.status(400).json({ error: "Code, name and type are required" });
+  if (db.get("chartOfAccounts").find({ code }).value()) return res.status(400).json({ error: "Account code already exists" });
+  const row = { id: nextId("chartOfAccounts"), code: String(code).trim(), name: String(name).trim(), type, balance: 0, isDefault: false };
+  db.get("chartOfAccounts").push(row).write();
+  logActivity(req, "CREATE_ACCOUNT", "ACCOUNT", row.id, { code: row.code, name: row.name });
+  res.status(201).json(row);
+});
+app.delete("/api/accounts/chart-of-accounts/:id", requirePermission("manageUsers"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("chartOfAccounts").find({ id }).value();
+  if (!row) return res.status(404).json({ error: "Account not found" });
+  if (row.isDefault) return res.status(400).json({ error: "Cannot delete a default account" });
+  db.get("chartOfAccounts").remove({ id }).write();
+  logActivity(req, "DELETE_ACCOUNT", "ACCOUNT", id, null);
+  res.status(204).send();
+});
+app.get("/api/accounts/journal-entries", requirePermission("viewReports"), (req, res) => {
+  let rows = db.get("journalEntries").value().sort((a, b) => b.id - a.id);
+  if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
+  if (req.query.to) rows = rows.filter(r => r.date <= req.query.to);
+  res.json(rows);
+});
+
+// ── Financial Reports ────────────────────────────────────────────────────
+app.get("/api/accounts/reports/summary", requirePermission("viewReports"), (req, res) => {
+  const { start, end } = req.query.from && req.query.to ? { start: req.query.from, end: req.query.to } : monthRange(currentMonth());
+  const grns = db.get("grns").value();
+  const grnsApproved = grns.filter(g => g.status === "approved");
+  const grnsInRange = grnsApproved.filter(g => g.date >= start && g.date <= end);
+  const payments = db.get("paymentEntries").value();
+  const paymentsInRange = payments.filter(p => p.date >= start && p.date <= end);
+  const suppliers = db.get("suppliers").value();
+  const accounts = db.get("chartOfAccounts").value();
+  res.json({
+    period: { start, end },
+    totalGrnsApproved: grnsApproved.length,
+    totalGoodsReceivedValue: Number(grnsInRange.reduce((s, g) => s + g.totalAmount, 0).toFixed(2)),
+    totalPaidThisPeriod: Number(paymentsInRange.reduce((s, p) => s + p.amount, 0).toFixed(2)),
+    totalAccountsPayable: Number(suppliers.reduce((s, sup) => s + (sup.balance || 0), 0).toFixed(2)),
+    pendingGrnCount: grns.filter(g => g.status === "pending").length,
+    inventoryValue: accounts.find(a => a.code === "1000")?.balance || 0,
+    topSuppliersByBalance: [...suppliers].sort((a, b) => b.balance - a.balance).slice(0, 10),
+    accounts,
+  });
+});
 
 // DASHBOARD
 

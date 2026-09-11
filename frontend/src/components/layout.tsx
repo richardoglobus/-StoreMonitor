@@ -6,7 +6,7 @@ import {
   Download, Menu, ShoppingCart, BarChart3, Users,
   LogOut, User as UserIcon, Sun, Moon, Settings2, TrendingUp,
   Heart, Shield, Star, Cross, Stethoscope, Pill, Activity, Leaf,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -33,6 +33,17 @@ const NAV_ITEMS = [
   { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "issueItems" },
   { href: "/reports",         label: "Monthly Report", icon: BarChart3,       permission: "viewReports" },
   { href: "/stock-valuation", label: "Stock Valuation",icon: TrendingUp,      permission: "viewReports" },
+  {
+    label: "Accounts", icon: Landmark, permission: "viewReports",
+    children: [
+      { href: "/accounts/grn",               label: "GRN (Goods Received)", icon: ReceiptText,  permission: "viewReports" },
+      { href: "/accounts/stock-movement",    label: "Stock Movement",       icon: PackageSearch, permission: "viewReports" },
+      { href: "/accounts/suppliers",         label: "Suppliers",            icon: Users,         permission: "viewReports" },
+      { href: "/accounts/payments",          label: "Payment Entries",      icon: Wallet,        permission: "viewReports" },
+      { href: "/accounts/financial-reports", label: "Financial Reports",    icon: BarChart3,     permission: "viewReports" },
+      { href: "/accounts/chart-of-accounts", label: "Chart of Accounts",    icon: BookMarked,    permission: "viewReports" },
+    ],
+  },
   { href: "/exports",         label: "Exports",        icon: Download,        permission: "exportData" },
   { href: "/admin/users",     label: "Users",          icon: Users,           permission: "manageUsers" },
   { href: "/admin/settings",  label: "Settings",       icon: Settings2,       permission: "manageUsers" },
@@ -129,13 +140,60 @@ export function Layout({ children }: { children: ReactNode }) {
   // Close mobile sheet on navigation
   useEffect(() => { setMobileOpen(false); }, [location]);
 
-  const filteredNavItems = NAV_ITEMS.filter(
-    item => item.permission === null || user?.permissions?.[item.permission as keyof typeof user.permissions]
-  );
+  const filteredNavItems = NAV_ITEMS
+    .map(item => {
+      if ("children" in item && item.children) {
+        const children = item.children.filter(c => c.permission === null || user?.permissions?.[c.permission as keyof typeof user.permissions]);
+        return children.length > 0 ? { ...item, children } : null;
+      }
+      return item.permission === null || user?.permissions?.[item.permission as keyof typeof user.permissions] ? item : null;
+    })
+    .filter((item): item is typeof NAV_ITEMS[number] => item !== null);
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const isGroupOpen = (label: string, childActive: boolean) => openGroups[label] ?? childActive ?? true;
+  const toggleGroup = (label: string) => setOpenGroups(g => ({ ...g, [label]: !isGroupOpen(label, false) }));
 
   const NavLinks = ({ onNavigate, showLabels = true }: { onNavigate?: () => void; showLabels?: boolean }) => (
     <>
       {filteredNavItems.map((item) => {
+        if ("children" in item && item.children) {
+          const childActive = item.children.some(c => location === c.href || location.startsWith(c.href));
+          const open = isGroupOpen(item.label, childActive);
+          const GroupIcon = item.icon;
+          return (
+            <div key={item.label}>
+              <button
+                type="button"
+                onClick={() => toggleGroup(item.label)}
+                title={!showLabels ? item.label : undefined}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm ${
+                  showLabels ? "" : "justify-center px-2"
+                } ${childActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
+                <GroupIcon className="h-4 w-4 shrink-0" />
+                {showLabels && <span className="flex-1 text-left">{item.label}</span>}
+                {showLabels && <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />}
+              </button>
+              {showLabels && open && (
+                <div className="ml-4 pl-3 border-l flex flex-col gap-0.5 mt-0.5 mb-1">
+                  {item.children.map(child => {
+                    const isActive = location === child.href || location.startsWith(child.href);
+                    const ChildIcon = child.icon;
+                    return (
+                      <Link key={child.href} href={child.href} onClick={onNavigate}
+                        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-md transition-colors text-sm ${
+                          isActive ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}>
+                        <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
         const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
         const Icon = item.icon;
         return (
