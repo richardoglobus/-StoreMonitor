@@ -262,7 +262,7 @@ export function useListActivity(params?: any, options?: QueryOpts<ActivityLog[]>
 // ─── Accounts Section ───────────────────────────────────────────────────────
 
 export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; balance: number; createdAt: string };
-export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargedTo: string | null; folioNo: string | null };
+export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargeableVote: string | null; folioNo: string | null };
 export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved"; createdBy: number; createdAt: string; approvedBy: number | null; approvedAt: string | null; supplier?: Supplier | null };
 export type StockMovement = { id: number; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "GRN" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
 export type PaymentEntry = { id: number; date: string; supplierId: number; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };

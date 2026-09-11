@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import {
@@ -20,10 +20,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { API_BASE } from "@/lib/api";
 
 const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
-const emptyLine = () => ({ itemCode: "", description: "", unit: "", qtyReceived: "", unitCost: "", batchNo: "", expiryDate: "", chargedTo: "", folioNo: "" });
+const emptyLine = () => ({ itemCode: "", description: "", unit: "", qtyReceived: "", unitCost: "", batchNo: "", expiryDate: "", chargeableVote: "", folioNo: "" });
 
 export default function GrnPage() {
   const queryClient = useQueryClient();
@@ -40,6 +41,14 @@ export default function GrnPage() {
 
   const { data: grns, isLoading } = useListGrns({}, { query: { queryKey: getListGrnsQueryKey({}) } });
   const { data: suppliers } = useListSuppliers();
+
+  const [chargeItemCodes, setChargeItemCodes] = useState<{ code: string; meaning: string }[]>([]);
+  useEffect(() => {
+    fetch(`${API_BASE}/api/settings/public`)
+      .then(r => r.json())
+      .then(s => setChargeItemCodes(Array.isArray(s.chargeItemCodes) ? s.chargeItemCodes : []))
+      .catch(() => {});
+  }, []);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListGrnsQueryKey({}) });
 
@@ -120,7 +129,17 @@ export default function GrnPage() {
                       <div className="space-y-1"><Label className="text-xs">Total Cost</Label><Input disabled value={lineTotal(l).toFixed(2)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Batch No.</Label><Input value={l.batchNo} onChange={e => updateLine(i, "batchNo", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Expiry Date</Label><input type="date" className={dateCls} value={l.expiryDate} onChange={e => updateLine(i, "expiryDate", e.target.value)}/></div>
-                      <div className="space-y-1"><Label className="text-xs">Charged To (Dept/Office)</Label><Input value={l.chargedTo} onChange={e => updateLine(i, "chargedTo", e.target.value)}/></div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Chargeable Vote</Label>
+                        <Select value={l.chargeableVote} onValueChange={v => updateLine(i, "chargeableVote", v)}>
+                          <SelectTrigger><SelectValue placeholder="Select vote"/></SelectTrigger>
+                          <SelectContent>
+                            {chargeItemCodes.map(c => (
+                              <SelectItem key={c.code} value={c.code}>{c.code} — {c.meaning}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-1"><Label className="text-xs">Folio No.</Label><Input value={l.folioNo} onChange={e => updateLine(i, "folioNo", e.target.value)}/></div>
                     </div>
                   </div>

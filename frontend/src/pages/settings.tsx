@@ -40,6 +40,7 @@ interface AppSettings {
   requireSupplierName: boolean;
   // Reports & Exports
   reportChargeItem: string;
+  chargeItemCodes: { code: string; meaning: string }[];
   responsibleOfficer: string;
   storeOfficerTitle: string;
   reportingOfficerTitle: string;
@@ -76,6 +77,7 @@ const DEFAULTS: AppSettings = {
   requireInvoiceNumber: true,
   requireSupplierName: true,
   reportChargeItem: "2211002",
+  chargeItemCodes: [{ code: "2211002", meaning: "Non-Pharmaceuticals" }],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -217,6 +219,18 @@ export default function SettingsPage() {
     toast.success(`Deleted unit "${unit}" from ${data.affectedItems} item(s). Please update those items in Catalog.`);
     loadUnits();
   };
+  const [newChargeCode, setNewChargeCode] = useState("");
+  const [newChargeMeaning, setNewChargeMeaning] = useState("");
+  const addChargeItemCode = () => {
+    if (!newChargeCode.trim() || !newChargeMeaning.trim()) return;
+    if (settings.chargeItemCodes.some(c => c.code === newChargeCode.trim())) { toast.error("Code already exists"); return; }
+    update("chargeItemCodes", [...settings.chargeItemCodes, { code: newChargeCode.trim(), meaning: newChargeMeaning.trim() }]);
+    setNewChargeCode(""); setNewChargeMeaning("");
+  };
+  const removeChargeItemCode = (code: string) => {
+    update("chargeItemCodes", settings.chargeItemCodes.filter(c => c.code !== code));
+  };
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -459,6 +473,32 @@ export default function SettingsPage() {
               <Label>Charge Item Code</Label>
               <Input value={settings.reportChargeItem} onChange={e => update("reportChargeItem", e.target.value)} placeholder="2211002" className="font-mono" />
               <p className="text-xs text-muted-foreground">Appears in "Charge Item" column on every monthly report row.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Charge Item Codes (Chargeable Votes)</Label>
+              <p className="text-xs text-muted-foreground">Each code is linked to a meaning, e.g. 2211002 = Non-Pharmaceuticals. These appear as the "Chargeable Vote" options on GRN item lines.</p>
+              <div className="space-y-1.5">
+                {settings.chargeItemCodes.map(c => (
+                  <div key={c.code} className="flex items-center gap-2 border rounded-lg p-2">
+                    <span className="font-mono text-xs bg-muted px-2 py-1 rounded">{c.code}</span>
+                    <span className="text-sm flex-1">{c.meaning}</span>
+                    <button onClick={() => removeChargeItemCode(c.code)} className="text-muted-foreground hover:text-destructive"><X className="h-3.5 w-3.5"/></button>
+                  </div>
+                ))}
+                {settings.chargeItemCodes.length === 0 && <p className="text-xs text-muted-foreground">No charge item codes added yet.</p>}
+              </div>
+              <div className="flex gap-2 items-end pt-1">
+                <div className="space-y-1">
+                  <Label className="text-xs">Code</Label>
+                  <Input value={newChargeCode} onChange={e => setNewChargeCode(e.target.value)} placeholder="2211002" className="font-mono w-32" />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <Label className="text-xs">Meaning</Label>
+                  <Input value={newChargeMeaning} onChange={e => setNewChargeMeaning(e.target.value)} placeholder="Non-Pharmaceuticals" />
+                </div>
+                <Button variant="outline" size="sm" className="gap-2" onClick={addChargeItemCode}><Plus className="h-3.5 w-3.5"/>Add</Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Responsible Officer Name</Label>

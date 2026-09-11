@@ -1858,7 +1858,7 @@ app.post("/api/accounts/grns", requirePermission("managePurchases"), (req, res) 
       qtyReceived, unitCost, totalCost,
       batchNo: it.batchNo || null,
       expiryDate: it.expiryDate || null,
-      chargedTo: it.chargedTo || null,
+      chargeableVote: it.chargeableVote || null,
       folioNo: it.folioNo || null,
     };
   });
@@ -2117,6 +2117,7 @@ const DEFAULT_SETTINGS = {
   requireSupplierName: true,
   // Reports & Exports
   reportChargeItem: "2211002",
+  chargeItemCodes: [{ code: "2211002", meaning: "Non-Pharmaceuticals" }],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -2169,6 +2170,7 @@ app.get("/api/settings/public",(req,res)=>{
     shuffleIntervalSeconds:s.shuffleIntervalSeconds||30,
     allowSelfRegistration:s.allowSelfRegistration||false,
     selfRegistrationNote:s.selfRegistrationNote||'',
+    chargeItemCodes:s.chargeItemCodes||[],
   });
 });
 
