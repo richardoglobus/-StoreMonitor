@@ -175,6 +175,9 @@ export function useCreateCategory(options?: MutOpts<CatalogCategory, { data: { n
 export function useUpdateCategory(options?: MutOpts<CatalogCategory, { categoryId: number; data: { name?: string; chargeItemCode?: string } }>) {
   return useMutation({ mutationFn: ({ categoryId, data }) => apiFetch<CatalogCategory>(`/api/catalog/categories/${categoryId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
+export function useDeleteCategory(options?: MutOpts<void, { categoryId: number }>) {
+  return useMutation({ mutationFn: ({ categoryId }) => apiFetch<void>(`/api/catalog/categories/${categoryId}`, { method: "DELETE" }), ...options?.mutation });
+}
 
 export function useListItemStock(options?: QueryOpts<ItemStock[]>) {
   return useQuery({ queryKey: getListItemStockQueryKey(), queryFn: () => apiFetch<ItemStock[]>("/api/items/stock"), ...options?.query });

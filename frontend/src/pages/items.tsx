@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Layout } from "@/components/layout";
 import {
   useListItemStock, getListItemStockQueryKey,
-  useListCategories, getListCategoriesQueryKey, useCreateCategory,
+  useListCategories, getListCategoriesQueryKey,
   useCreateItem, useUpdateItem, useDeleteItem,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -80,8 +80,6 @@ export default function Items() {
   const [editItemId, setEditItemId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryChargeCode, setNewCategoryChargeCode] = useState("");
   const [newItem, setNewItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
   const [editItem, setEditItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
 
@@ -99,13 +97,6 @@ export default function Items() {
       return d.includes(q.slice(0, Math.max(3, q.length - 2))) || q.includes(d.slice(0, Math.max(3, d.length - 2)));
     }).slice(0, 3);
   }, [newItem.description, items]);
-
-  const createCategory = useCreateCategory({
-    mutation: {
-      onSuccess: () => { toast.success("Category added"); queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); setNewCategoryName(""); setNewCategoryChargeCode(""); },
-      onError: (err: any) => toast.error(err?.error || "Failed to add category"),
-    },
-  });
 
   const createItem = useCreateItem({
     mutation: {
@@ -245,11 +236,7 @@ export default function Items() {
         </div>
 
         <div className="border rounded-lg p-4 bg-card space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-end gap-2">
-            <div className="flex-1"><Label>New Category</Label><Input placeholder="e.g. PHARM, NON-PHARM, DRESSINGS" value={newCategoryName} onChange={e=>setNewCategoryName(e.target.value)}/></div>
-            <div className="flex-1"><Label>Charge Item Code</Label><Input placeholder="e.g. 221102" value={newCategoryChargeCode} onChange={e=>setNewCategoryChargeCode(e.target.value)}/></div>
-            {canManageCatalog && <Button onClick={()=>{ if(!newCategoryName.trim()) return toast.error("Category name is required"); createCategory.mutate({data:{name:newCategoryName,chargeItemCode:newCategoryChargeCode}}); }} disabled={createCategory.isPending}><Plus className="h-4 w-4 mr-1"/>Add Category</Button>}
-          </div>
+          <p className="text-sm text-muted-foreground">Filter items by category. Add, edit, and delete categories from the Catalog → Categories menu.</p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant={selectedCategoryId === null ? "default" : "outline"} onClick={()=>setSelectedCategoryId(null)}>All Items</Button>
             {(categories || []).map(c=><Button key={c.id} size="sm" variant={selectedCategoryId === c.id ? "default" : "outline"} onClick={()=>setSelectedCategoryId(c.id)}>{c.name} ({c.itemCount || 0}) · {c.chargeItemCode || "no code"}</Button>)}
