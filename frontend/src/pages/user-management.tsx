@@ -27,6 +27,7 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
     return {
       viewDashboard: true,
       issueItems: true,
+      viewCatalog: true, viewDepartments: true, viewPurchases: true, viewIssues: true,
       manageCatalog: true,
       manageDepartments: true,
       manageInventory: true,
@@ -49,6 +50,7 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
     return {
       viewDashboard: true,
       issueItems: true,
+      viewCatalog: true, viewDepartments: true, viewPurchases: true, viewIssues: true,
       manageCatalog: true,
       manageDepartments: true,
       manageInventory: true,
@@ -71,6 +73,7 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
     return {
       viewDashboard: true,
       issueItems: false,
+      viewCatalog: true, viewDepartments: true, viewPurchases: true, viewIssues: true,
       manageCatalog: false,
       manageDepartments: false,
       manageInventory: false,
@@ -93,6 +96,7 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
   return {
     viewDashboard: true,
     issueItems: true,
+    viewCatalog: true, viewDepartments: true, viewPurchases: true, viewIssues: true,
     manageCatalog: false,
     manageDepartments: false,
     manageInventory: false,
@@ -114,7 +118,11 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
 
 const PERMISSION_LABELS: Record<string, string> = {
   viewDashboard: "View Dashboard",
-  issueItems: "Issue Items",
+  issueItems: "Issue Items / Create Issues",
+  viewCatalog: "View Catalog",
+  viewDepartments: "View Departments",
+  viewPurchases: "View Purchases",
+  viewIssues: "View Issues",
   manageCatalog: "Manage Catalog (Add/Delete)",
   editCatalog: "Edit Catalog Items",
   manageDepartments: "Manage Departments",

@@ -9,6 +9,10 @@ interface User {
   role: "admin" | "manager" | "accountant" | "staff";
   permissions: {
     viewDashboard: boolean;
+    viewCatalog: boolean;
+    viewDepartments: boolean;
+    viewPurchases: boolean;
+    viewIssues: boolean;
     issueItems: boolean;
     manageCatalog: boolean;
     manageDepartments: boolean;

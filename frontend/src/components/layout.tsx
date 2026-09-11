@@ -25,18 +25,18 @@ const LOGO_ICONS: Record<AppLogo, React.FC<any>> = {
 
 const NAV_ITEMS = [
   { href: "/",                label: "Dashboard",      icon: LayoutDashboard, permission: "viewDashboard" },
-  { href: "/departments",     label: "Departments",    icon: Building2,       permission: "manageDepartments" },
+  { href: "/departments",     label: "Departments",    icon: Building2,       permission: "viewDepartments" },
   { href: "/assets",          label: "Asset Register", icon: Package2,        permission: "viewDashboard" },
   { href: "/digital-forms",   label: "Digital Forms",  icon: ClipboardList,   permission: "manageDigitalForms" },
   {
-    label: "Catalog", icon: PackageSearch, permission: "manageCatalog",
+    label: "Catalog", icon: PackageSearch, permission: "viewCatalog",
     children: [
-      { href: "/items",              label: "Item Catalog", icon: PackageSearch, permission: "manageCatalog" },
-      { href: "/items/categories",   label: "Categories",   icon: Tag,          permission: "manageCatalog" },
+      { href: "/items",              label: "Item Catalog", icon: PackageSearch, permission: "viewCatalog" },
+      { href: "/items/categories",   label: "Categories",   icon: Tag,          permission: "viewCatalog" },
     ],
   },
-  { href: "/purchases",       label: "Purchases",      icon: ShoppingCart,    permission: "managePurchases" },
-  { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "issueItems" },
+  { href: "/purchases",       label: "Purchases",      icon: ShoppingCart,    permission: "viewPurchases" },
+  { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "viewIssues" },
   { href: "/reports",         label: "Monthly Report", icon: BarChart3,       permission: "viewReports" },
   { href: "/stock-valuation", label: "Stock Valuation",icon: TrendingUp,      permission: "viewReports" },
   {

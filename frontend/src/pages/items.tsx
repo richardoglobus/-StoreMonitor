@@ -73,8 +73,10 @@ function UnitCombobox({ value, onChange, existingUnits }: { value: string; onCha
 export default function Items() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const canViewCatalog = !!user?.permissions?.viewCatalog || !!user?.permissions?.manageCatalog;
   const canManageCatalog = !!user?.permissions?.manageCatalog;
   const canEditCatalog = !!user?.permissions?.editCatalog;
+  if (!canViewCatalog) { setLocation("/"); return null; }
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editItemId, setEditItemId] = useState<number | null>(null);

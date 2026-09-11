@@ -1214,6 +1214,7 @@ function getDefaultPermissions(role) {
   if (role === "manager") {
     return {
       viewDashboard: true,
+      viewCatalog: true, viewDepartments: true, viewPurchases: true, viewIssues: true,
       issueItems: true,
       manageCatalog: true,
       manageDepartments: true,
@@ -1236,6 +1237,7 @@ function getDefaultPermissions(role) {
   if (role === "accountant") {
     return {
       viewDashboard: true,
+      viewCatalog: true, viewDepartments: true, viewPurchases: true, viewIssues: true,
       issueItems: false,
       manageCatalog: false,
       manageDepartments: false,
@@ -1258,6 +1260,7 @@ function getDefaultPermissions(role) {
   }
   return {
     viewDashboard: true,
+    viewCatalog: false, viewDepartments: false, viewPurchases: false, viewIssues: false,
     issueItems: true,
     manageCatalog: false,
     manageDepartments: false,
@@ -1283,6 +1286,10 @@ function normalizePermissions(role, permissions) {
   if (!permissions || typeof permissions !== "object") return defaults;
   return {
     viewDashboard: permissions.viewDashboard !== undefined ? !!permissions.viewDashboard : defaults.viewDashboard,
+    viewCatalog: permissions.viewCatalog !== undefined ? !!permissions.viewCatalog : defaults.viewCatalog,
+    viewDepartments: permissions.viewDepartments !== undefined ? !!permissions.viewDepartments : defaults.viewDepartments,
+    viewPurchases: permissions.viewPurchases !== undefined ? !!permissions.viewPurchases : defaults.viewPurchases,
+    viewIssues: permissions.viewIssues !== undefined ? !!permissions.viewIssues : defaults.viewIssues,
     issueItems: permissions.issueItems !== undefined ? !!permissions.issueItems : defaults.issueItems,
     manageCatalog: permissions.manageCatalog !== undefined ? !!permissions.manageCatalog : defaults.manageCatalog,
     manageDepartments: permissions.manageDepartments !== undefined ? !!permissions.manageDepartments : defaults.manageDepartments,
@@ -1650,7 +1657,7 @@ app.delete("/api/auth/users/:userId",requireAdmin,(req,res)=>{
 app.use(["/api/departments","/api/items","/api/inventory","/api/receipts","/api/issues","/api/purchases","/api/dashboard","/api/reports","/api/export","/api/activity"],requireAuth);
 
 // DEPARTMENTS
-app.get("/api/departments",(_,res)=>res.json(db.get("departments").orderBy("name","asc").value()));
+app.get("/api/departments",requireAnyPermission("viewDepartments", "manageDepartments"),(_,res)=>res.json(db.get("departments").orderBy("name","asc").value()));
 app.post("/api/departments",requirePermission("manageDepartments"),(req,res)=>{
   const {name}=req.body; if(!name) return res.status(400).json({error:"Name required"});
   if(db.get("departments").find({name}).value()) return res.status(400).json({error:"Already exists"});
@@ -1724,8 +1731,8 @@ app.delete("/api/catalog/categories/:id", requirePermission("manageCatalog"), (r
 });
 
 // ITEMS
-app.get("/api/items",(_,res)=>res.json(db.get("items").orderBy("description","asc").value()));
-app.get("/api/items/stock",(_,res)=>{
+app.get("/api/items",requireAnyPermission("viewCatalog", "manageCatalog"),(_,res)=>res.json(db.get("items").orderBy("description","asc").value()));
+app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),(_,res)=>{
   const items=db.get("items").orderBy("description","asc").value();
   const movementRows=db.get("stockMovements").value();
   const pMap=new Map(),aMap=new Map(),iMap=new Map();
@@ -1816,7 +1823,7 @@ app.post("/api/receipts",(req,res)=>{
 });
 
 // ISSUES
-app.get("/api/issues",requirePermission("issueItems"),(req,res)=>{
+app.get("/api/issues",requireAnyPermission("viewIssues", "issueItems"),(req,res)=>{
   const departmentId=req.query.departmentId?Number(req.query.departmentId):null,month=req.query.month,limit=req.query.limit?Number(req.query.limit):null;
   // Support ?from=YYYY-MM-DD&to=YYYY-MM-DD OR ?month=YYYY-MM
   let start=null, end=null;
@@ -1934,7 +1941,7 @@ function createMatchingGrnForPurchase(purchase, supplier, item, req) {
 }
 
 // PURCHASES
-app.get("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
+app.get("/api/purchases",requireAnyPermission("viewPurchases", "managePurchases"),(req,res)=>{
   const itemId=req.query.itemId?Number(req.query.itemId):null;
   const itemMap=getItemMap();
   const supplierMap=new Map(db.get("suppliers").value().map(s=>[s.id,s]));
@@ -3190,7 +3197,7 @@ app.post("/api/auth/register",(req,res)=>{
   if(password.length<6) return res.status(400).json({error:"Password must be at least 6 characters"});
   if(db.get("users").find({username}).value()) return res.status(400).json({error:"Username already taken"});
   const hash=bcrypt.hashSync(password,10);
-  const defaultPerms={viewDashboard:true,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
+  const defaultPerms={viewDashboard:true,viewCatalog:false,viewDepartments:false,viewPurchases:false,viewIssues:false,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
   const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});

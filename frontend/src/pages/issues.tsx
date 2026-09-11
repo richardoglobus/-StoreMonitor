@@ -152,7 +152,8 @@ export default function Issues() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  if (!user?.permissions?.issueItems) { setLocation("/"); return null; }
+  if (!user?.permissions?.viewIssues && !user?.permissions?.issueItems) { setLocation("/"); return null; }
+  const canCreateIssues = !!user?.permissions?.issueItems;
 
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());
@@ -312,6 +313,7 @@ export default function Issues() {
         </div>
 
         <div className="flex gap-2">
+          {canCreateIssues && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2"><Plus className="h-4 w-4" />New Issue Voucher</Button>
@@ -373,6 +375,7 @@ export default function Issues() {
               </form>
             </DialogContent>
           </Dialog>
+          )}
 
           <Button variant="outline" onClick={async () => {
             const res = await fetch(downloadUrl, { credentials: "include" });

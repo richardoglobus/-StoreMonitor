@@ -54,7 +54,8 @@ export default function Purchases() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  if (!user?.permissions?.managePurchases) { setLocation("/"); return null; }
+  if (!user?.permissions?.viewPurchases && !user?.permissions?.managePurchases) { setLocation("/"); return null; }
+  const canManagePurchases = !!user?.permissions?.managePurchases;
 
   const canDelete = !!user?.permissions?.deleteTransactions;
   const canEdit = !!user?.permissions?.editPurchases;
@@ -231,6 +232,7 @@ export default function Purchases() {
 
         {/* Add Purchase Voucher */}
         <div>
+          {canManagePurchases && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2"><Plus className="h-4 w-4"/>New Purchase Voucher</Button>
@@ -358,6 +360,7 @@ export default function Purchases() {
               </form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
 
         {/* Table */}

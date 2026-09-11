@@ -17,6 +17,10 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
 
 export type Permissions = {
   viewDashboard: boolean;
+  viewCatalog: boolean;
+  viewDepartments: boolean;
+  viewPurchases: boolean;
+  viewIssues: boolean;
   issueItems: boolean;
   manageCatalog: boolean;
   manageDepartments: boolean;

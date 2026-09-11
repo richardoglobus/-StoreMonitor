@@ -22,7 +22,8 @@ export default function Departments() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  if (!user?.permissions?.manageDepartments) { setLocation("/"); return null; }
+  if (!user?.permissions?.viewDepartments && !user?.permissions?.manageDepartments) { setLocation("/"); return null; }
+  const canManageDepartments = !!user?.permissions?.manageDepartments;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
@@ -115,7 +116,7 @@ export default function Departments() {
             <h1 className="text-3xl font-bold tracking-tight">Departments</h1>
             <p className="text-muted-foreground">Manage hospital wards and departments. Hover a card to rename or delete it.</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          {canManageDepartments && <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="h-4 w-4 mr-2"/>Add Department</Button>
             </DialogTrigger>
@@ -137,7 +138,7 @@ export default function Departments() {
                 </DialogFooter>
               </form>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
         </div>
 
         {/* Search */}
@@ -211,7 +212,7 @@ export default function Departments() {
                   </Link>
                 )}
 
-                {renamingId !== dept.id && (
+                {canManageDepartments && renamingId !== dept.id && (
                   <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       title="Rename department"
