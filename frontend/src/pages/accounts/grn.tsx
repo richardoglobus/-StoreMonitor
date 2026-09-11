@@ -3,14 +3,14 @@ import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import {
   useListGrns, getListGrnsQueryKey,
-  useCreateGrn, useApproveGrn, useDeleteGrn,
+  useCreateGrn, useApproveGrn, useUpdateGrn, useVoidGrn, useDeleteGrn,
   useListSuppliers,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, CheckCircle2, ReceiptText, X } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, ReceiptText, X, Pencil, Ban } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,7 @@ export default function GrnPage() {
   const [submitting, setSubmitting] = useState(false);
   const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), lpoNo: "", supplierId: "", invoiceNo: "" });
   const [lines, setLines] = useState([emptyLine()]);
+  const [editingGrnId, setEditingGrnId] = useState<number | null>(null);
 
   const { data: grns, isLoading } = useListGrns({}, { query: { queryKey: getListGrnsQueryKey({}) } });
   const { data: suppliers } = useListSuppliers();
@@ -62,8 +63,27 @@ export default function GrnPage() {
       onError: (e: any) => toast.error(e?.error || "Failed to delete GRN"),
     },
   });
+  const updateGrn = useUpdateGrn({
+    mutation: {
+      onSuccess: () => { toast.success("Pending GRN updated"); invalidate(); resetForm(); setIsDialogOpen(false); },
+      onError: (e: any) => toast.error(e?.error || "Failed to update GRN"),
+      onSettled: () => setSubmitting(false),
+    },
+  });
+  const voidGrn = useVoidGrn({
+    mutation: {
+      onSuccess: () => { toast.success("Approved GRN voided and stock reversed"); invalidate(); },
+      onError: (e: any) => toast.error(e?.error || "Failed to void GRN"),
+    },
+  });
 
-  const resetForm = () => { setHeader({ date: format(new Date(), "yyyy-MM-dd"), lpoNo: "", supplierId: "", invoiceNo: "" }); setLines([emptyLine()]); };
+  const resetForm = () => { setEditingGrnId(null); setHeader({ date: format(new Date(), "yyyy-MM-dd"), lpoNo: "", supplierId: "", invoiceNo: "" }); setLines([emptyLine()]); };
+  const openEdit = (g: any) => {
+    setEditingGrnId(g.id);
+    setHeader({ date: g.date, lpoNo: g.lpoNo || "", supplierId: String(g.supplierId), invoiceNo: g.invoiceNo || "" });
+    setLines((g.items || []).map((l: any) => ({ ...l, itemCode: l.itemCode || "", description: l.description || "", unit: l.unit || "", qtyReceived: String(l.qtyReceived ?? ""), unitCost: String(l.unitCost ?? ""), batchNo: l.batchNo || "", expiryDate: l.expiryDate || "", chargedTo: l.chargedTo || "", folioNo: l.folioNo || "" })));
+    setIsDialogOpen(true);
+  };
   const updateLine = (i: number, field: string, value: string) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
   const addLine = () => setLines(ls => [...ls, emptyLine()]);
   const removeLine = (i: number) => setLines(ls => ls.filter((_, idx) => idx !== i));
@@ -75,7 +95,9 @@ export default function GrnPage() {
     const validLines = lines.filter(l => l.description.trim() && Number(l.qtyReceived) > 0);
     if (validLines.length === 0) { toast.error("Add at least one valid item line"); return; }
     setSubmitting(true);
-    createGrn.mutate({ data: { ...header, supplierId: Number(header.supplierId), items: validLines.map(l => ({ ...l, qtyReceived: Number(l.qtyReceived), unitCost: Number(l.unitCost) })) } });
+    const data = { ...header, supplierId: Number(header.supplierId), items: validLines.map(l => ({ ...l, qtyReceived: Number(l.qtyReceived), unitCost: Number(l.unitCost) })) };
+    if (editingGrnId) updateGrn.mutate({ grnId: editingGrnId, data });
+    else createGrn.mutate({ data });
   };
 
   return (
@@ -88,10 +110,10 @@ export default function GrnPage() {
         {canManage && (
           <Dialog open={isDialogOpen} onOpenChange={(v) => { setIsDialogOpen(v); if (!v) resetForm(); }}>
             <DialogTrigger asChild>
-              <Button className="gap-2"><Plus className="h-4 w-4"/>New GRN</Button>
+              <Button className="gap-2" onClick={() => { resetForm(); }}><Plus className="h-4 w-4"/>New GRN</Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>New Goods Received Note</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editingGrnId ? "Edit Pending GRN" : "New Goods Received Note"}</DialogTitle></DialogHeader>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-2">
                 <div className="space-y-1"><Label>Date</Label><input type="date" className={dateCls} value={header.date} onChange={e => setHeader(h => ({ ...h, date: e.target.value }))}/></div>
                 <div className="space-y-1"><Label>LPO No.</Label><Input value={header.lpoNo} onChange={e => setHeader(h => ({ ...h, lpoNo: e.target.value }))}/></div>
@@ -133,7 +155,7 @@ export default function GrnPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleSubmit} disabled={submitting}>{submitting ? "Saving..." : "Save GRN"}</Button>
+                <Button onClick={handleSubmit} disabled={submitting}>{submitting ? "Saving..." : editingGrnId ? "Update GRN" : "Save GRN"}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -158,10 +180,16 @@ export default function GrnPage() {
                 <TableCell>{g.supplier?.name ?? "—"}</TableCell>
                 <TableCell>{g.invoiceNo ?? "—"}</TableCell>
                 <TableCell>{g.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
-                <TableCell>{g.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : <Badge variant="secondary">Pending</Badge>}</TableCell>
+                <TableCell>{g.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : g.status === "voided" ? <Badge variant="destructive">Voided</Badge> : <Badge variant="secondary">Pending</Badge>}</TableCell>
                 <TableCell className="text-right space-x-1">
                   {canManage && g.status === "pending" && (
-                    <Button size="sm" variant="outline" className="gap-1" onClick={() => approveGrn.mutate({ grnId: g.id })}><CheckCircle2 className="h-3.5 w-3.5"/>Approve</Button>
+                    <>
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => openEdit(g)}><Pencil className="h-3.5 w-3.5"/>Edit</Button>
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => approveGrn.mutate({ grnId: g.id })}><CheckCircle2 className="h-3.5 w-3.5"/>Approve</Button>
+                    </>
+                  )}
+                  {canManage && g.status === "approved" && (
+                    <Button size="sm" variant="outline" className="gap-1 text-destructive" onClick={() => { const reason = prompt("Why are you voiding this approved GRN?"); if (reason?.trim()) voidGrn.mutate({ grnId: g.id, reason: reason.trim() }); }}><Ban className="h-3.5 w-3.5"/>Void</Button>
                   )}
                   {canDelete && g.status === "pending" && (
                     <Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => { if (confirm("Delete this GRN?")) deleteGrn.mutate({ grnId: g.id }); }}><Trash2 className="h-4 w-4"/></Button>

@@ -39,7 +39,7 @@ export type Permissions = {
 export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
 export type Department = { id: number; name: string; slug: string };
 export type Item = { id: number; description: string; unit: string; quantity: number };
-export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; stockBalance: number };
+export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; adjustmentTotal: number; stockBalance: number };
 export type InventoryRow = { id: number; departmentId: number; itemId: number; month: string; physicalCount: number; receivedKemsa: number; receivedMeds: number; totalUsed: number; balance: number; item: Item };
 export type Issue = { id: number; voucherId: string | null; folioNo: string | null; s11No: string | null; departmentId: number; itemId: number; quantity: number; issuedAt: string; weekday: string; note: string | null; item: Item; department: Department };
 export type Receipt = { id: number; departmentId: number; itemId: number; source: string; quantity: number; receivedAt: string; item: Item; department: Department };
@@ -271,8 +271,8 @@ export function useListActivity(params?: any, options?: QueryOpts<ActivityLog[]>
 
 export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; balance: number; createdAt: string };
 export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargedTo: string | null; folioNo: string | null };
-export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved"; createdBy: number; createdAt: string; approvedBy: number | null; approvedAt: string | null; supplier?: Supplier | null };
-export type StockMovement = { id: number; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "GRN" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
+export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved" | "voided"; createdBy: number | null; createdAt: string; approvedBy: number | null; approvedAt: string | null; sourcePurchaseId?: number | null; voidedBy?: number | null; voidedAt?: string | null; voidReason?: string | null; supplier?: Supplier | null };
+export type StockMovement = { id: number | string; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "OPENING" | "GRN" | "GRN_REVERSAL" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
 export type PaymentEntry = { id: number; date: string; supplierId: number; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };
 export type ChartAccount = { id: number; code: string; name: string; type: string; balance: number; isDefault: boolean };
 export type JournalEntry = { id: number; date: string; reference: string; description: string; debitAccount: string; creditAccount: string; amount: number };
@@ -287,6 +287,12 @@ export function useCreateGrn(options?: MutOpts<Grn, { data: any }>) {
 }
 export function useApproveGrn(options?: MutOpts<Grn, { grnId: number }>) {
   return useMutation({ mutationFn: ({ grnId }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}/approve`, { method: "PATCH" }), ...options?.mutation });
+}
+export function useUpdateGrn(options?: MutOpts<Grn, { grnId: number; data: any }>) {
+  return useMutation({ mutationFn: ({ grnId, data }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useVoidGrn(options?: MutOpts<Grn, { grnId: number; reason: string }>) {
+  return useMutation({ mutationFn: ({ grnId, reason }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}/void`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }) }), ...options?.mutation });
 }
 export function useDeleteGrn(options?: MutOpts<void, { grnId: number }>) {
   return useMutation({ mutationFn: ({ grnId }) => apiFetch<void>(`/api/accounts/grns/${grnId}`, { method: "DELETE" }), ...options?.mutation });

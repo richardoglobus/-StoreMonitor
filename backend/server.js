@@ -1380,8 +1380,20 @@ function migratePurchasesToSuppliers() {
   }
 }
 
+function migratePurchasesToGrns() {
+  const existing = new Set(db.get("grns").value().filter(g => g.sourcePurchaseId != null).map(g => Number(g.sourcePurchaseId)));
+  for (const purchase of db.get("purchases").value()) {
+    if (existing.has(Number(purchase.id))) continue;
+    const supplier = db.get("suppliers").find({ id: Number(purchase.supplierId) }).value();
+    const item = db.get("items").find({ id: Number(purchase.itemId) }).value();
+    if (!supplier || !item) continue;
+    createMatchingGrnForPurchase(purchase, supplier, item, { session: { userId: null } });
+    existing.add(Number(purchase.id));
+  }
+}
 function runMigrations() {
   migratePurchasesToSuppliers();
+  migratePurchasesToGrns();
   for (const user of db.get("users").value()) {
     const perms = user.permissions || {};
     const updates = {};
@@ -1668,18 +1680,17 @@ app.delete("/api/departments/:id", requirePermission("manageDepartments"), (req,
 app.get("/api/items",(_,res)=>res.json(db.get("items").orderBy("description","asc").value()));
 app.get("/api/items/stock",(_,res)=>{
   const items=db.get("items").orderBy("description","asc").value();
-  const pMap=new Map(),iMap=new Map();
-  for(const p of db.get("purchases").value()) pMap.set(p.itemId,(pMap.get(p.itemId)||0)+p.quantity);
-  for(const i of db.get("issues").value()) iMap.set(i.itemId,(iMap.get(i.itemId)||0)+i.quantity);
-  res.json(items.map(it=>({
-    id:it.id,
-    description:it.description,
-    unit:it.unit,
-    quantity:it.quantity ?? 0,
-    purchasedTotal:pMap.get(it.id)??0,
-    issuedTotal:iMap.get(it.id)??0,
-    stockBalance:(it.quantity ?? 0)+(pMap.get(it.id)??0)-(iMap.get(it.id)??0)
-  })));
+  const movementRows=db.get("stockMovements").value();
+  const pMap=new Map(),aMap=new Map(),iMap=new Map();
+  for(const m of movementRows){
+    if(m.transactionType === "GRN") pMap.set(String(m.itemCode),(pMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0));
+    if(m.transactionType === "ADJUSTMENT" || m.transactionType === "GRN_REVERSAL") aMap.set(String(m.itemCode),(aMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0)-Number(m.qtyOut||0));
+  }
+  for(const i of db.get("issues").value()) iMap.set(String(i.itemId),(iMap.get(String(i.itemId))||0)+Number(i.quantity||0));
+  res.json(items.map(it=>{
+    const opening=Number(it.quantity)||0, purchased=pMap.get(String(it.id))||0, issued=iMap.get(String(it.id))||0, adjustments=aMap.get(String(it.id))||0;
+    return { id:it.id, description:it.description, unit:it.unit, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:opening+purchased+adjustments-issued };
+  }));
 });
 app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
   const {description,unit,quantity}=req.body; if(!description||!unit) return res.status(400).json({error:"Missing fields"});
@@ -1850,7 +1861,7 @@ function createMatchingGrnForPurchase(purchase, supplier, item, req) {
     id: nextId("grns"),
     grnNo: genSequentialNo("GRN", "grns"),
     date: purchase.purchasedAt,
-    lpoNo: null,
+    lpoNo: purchase.lpoNo || null,
     supplierId: supplier.id,
     invoiceNo: purchase.invoiceNo || null,
     items: [{
@@ -1895,7 +1906,7 @@ app.get("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   res.json(rows.map(r=>({...r, supplier: supplierMap.get(Number(r.supplierId))?.name || r.supplier || "", supplierRecord: supplierMap.get(Number(r.supplierId)) || null, item:itemMap.get(r.itemId)})));
 });
 app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
-  const {supplierId, supplier: legacySupplier, itemId, quantity, unitPrice, purchasedAt, note, invoiceNo}=req.body;
+  const {supplierId, supplier: legacySupplier, itemId, quantity, unitPrice, purchasedAt, note, invoiceNo, lpoNo}=req.body;
   const supplier = supplierId
     ? db.get("suppliers").find({ id: Number(supplierId) }).value()
     : ensureSupplierByName(legacySupplier);
@@ -1906,7 +1917,7 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   if(!purchasedAt) return res.status(400).json({error:"Purchase date is required"});
   if(!(Number(quantity) > 0) || !(Number(unitPrice) >= 0)) return res.status(400).json({error:"Quantity and unit price must be valid"});
   const {batchNo,expiryDate}=req.body;
-  const row={id:nextId("purchases"),supplierId:supplier.id,itemId:Number(itemId),quantity:Number(quantity),unitPrice:Number(unitPrice),invoiceNo:String(invoiceNo).trim(),purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
+  const row={id:nextId("purchases"),supplierId:supplier.id,itemId:Number(itemId),quantity:Number(quantity),unitPrice:Number(unitPrice),invoiceNo:String(invoiceNo).trim(),lpoNo:lpoNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
   db.get("purchases").push(row).write();
   const grn = createMatchingGrnForPurchase(row, supplier, item, req);
   logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplierId: supplier.id, itemId: row.itemId, quantity: row.quantity, invoiceNo: row.invoiceNo, grnId: grn.id });
@@ -1919,7 +1930,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
   if (!row.value()) return res.status(404).json({ error: "Purchase not found" });
   const linkedGrn = db.get("grns").find({ sourcePurchaseId: id });
   if (linkedGrn.value()?.status === "approved") return res.status(400).json({ error: "This purchase is linked to an approved GRN and cannot be edited" });
-  const { supplierId, supplier: legacySupplier, invoiceNo, quantity, unitPrice, purchasedAt, batchNo, expiryDate, note } = req.body;
+  const { supplierId, supplier: legacySupplier, invoiceNo, lpoNo, quantity, unitPrice, purchasedAt, batchNo, expiryDate, note } = req.body;
   const updates = {};
   if (supplierId !== undefined || legacySupplier !== undefined) {
     const supplier = supplierId ? db.get("suppliers").find({ id: Number(supplierId) }).value() : ensureSupplierByName(legacySupplier);
@@ -1927,6 +1938,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
     updates.supplierId = supplier.id;
   }
   if (invoiceNo !== undefined) updates.invoiceNo = invoiceNo || null;
+  if (lpoNo !== undefined) updates.lpoNo = lpoNo || null;
   if (quantity !== undefined) updates.quantity = Number(quantity);
   if (unitPrice !== undefined) updates.unitPrice = Number(unitPrice);
   if (purchasedAt !== undefined) updates.purchasedAt = purchasedAt;
@@ -1943,7 +1955,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
     if (item && supplier) {
       const totalAmount = Number((Number(updated.quantity) * Number(updated.unitPrice)).toFixed(2));
       linkedGrn.assign({
-        date: updated.purchasedAt, supplierId: supplier.id, invoiceNo: updated.invoiceNo || null,
+        date: updated.purchasedAt, lpoNo: updated.lpoNo || null, supplierId: supplier.id, invoiceNo: updated.invoiceNo || null,
         items: [{ itemCode: String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargedTo: null, folioNo: null }],
         totalAmount,
       }).write();
@@ -2048,6 +2060,28 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
   logActivity(req, "CREATE_GRN", "GRN", row.id, { grnNo: row.grnNo, supplierId: row.supplierId, totalAmount: row.totalAmount });
   res.status(201).json(row);
 });
+app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, res) => {
+  const id = Number(req.params.id);
+  const ref = db.get("grns").find({ id });
+  const current = ref.value();
+  if (!current) return res.status(404).json({ error: "GRN not found" });
+  if (current.status !== "pending") return res.status(400).json({ error: "Only pending GRNs can be edited" });
+  const { date, lpoNo, supplierId, invoiceNo, items } = req.body;
+  if (!date || !supplierId || !Array.isArray(items) || !items.length) return res.status(400).json({ error: "Date, supplier and at least one item are required" });
+  const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
+  if (!supplier) return res.status(400).json({ error: "Supplier not found" });
+  let totalAmount = 0;
+  const cleanItems = items.map(it => {
+    const qtyReceived = Number(it.qtyReceived) || 0;
+    const unitCost = Number(it.unitCost) || 0;
+    const totalCost = Number((qtyReceived * unitCost).toFixed(2));
+    totalAmount += totalCost;
+    return { itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargedTo: it.chargedTo || null, folioNo: it.folioNo || null };
+  });
+  ref.assign({ date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount: Number(totalAmount.toFixed(2)), updatedAt: new Date().toISOString() }).write();
+  logActivity(req, "UPDATE_GRN", "GRN", id, { grnNo: current.grnNo, totalAmount });
+  res.json(ref.value());
+});
 app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
   const rowRef = db.get("grns").find({ id });
@@ -2082,30 +2116,63 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
   logActivity(req, "APPROVE_GRN", "GRN", id, { grnNo: row.grnNo, totalAmount: row.totalAmount });
   res.json(rowRef.value());
 });
+app.patch("/api/accounts/grns/:id/void", requirePermission("manageAccounts"), (req, res) => {
+  const id = Number(req.params.id);
+  const ref = db.get("grns").find({ id });
+  const row = ref.value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  if (row.status !== "approved") return res.status(400).json({ error: "Only approved GRNs can be voided" });
+  const reason = String(req.body.reason || "").trim();
+  if (!reason) return res.status(400).json({ error: "Void reason is required" });
+  for (const it of row.items || []) {
+    if (!it.itemCode && !it.description) continue;
+    pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal of ${row.grnNo}: ${reason}` });
+  }
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `VOID-${row.grnNo}`, description: `Void goods received — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount });
+  const supplierRef = db.get("suppliers").find({ id: row.supplierId });
+  if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - row.totalAmount).toFixed(2)) }).write();
+  ref.assign({ status: "voided", voidedBy: req.session.userId, voidedAt: new Date().toISOString(), voidReason: reason }).write();
+  if (row.sourcePurchaseId != null) db.get("purchases").find({ id: Number(row.sourcePurchaseId) }).assign({ status: "voided", voidedAt: new Date().toISOString() }).write();
+  logActivity(req, "VOID_GRN", "GRN", id, { grnNo: row.grnNo, reason });
+  res.json(ref.value());
+});
 app.delete("/api/accounts/grns/:id", requirePermission("deleteTransactions"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("grns").find({ id }).value();
   if (!row) return res.status(404).json({ error: "GRN not found" });
-  if (row.status === "approved") return res.status(400).json({ error: "Cannot delete an approved GRN. It is already posted to stock and accounts." });
+  if (row.status !== "pending") return res.status(400).json({ error: "Approved GRNs must be voided, not deleted" });
   db.get("grns").remove({ id }).write();
   logActivity(req, "DELETE_GRN", "GRN", id, null);
   res.status(204).send();
 });
-
 // ── Stock Movement (ledger) ─────────────────────────────────────────────
+function unifiedStockMovements(itemCodeFilter) {
+  const itemMap = new Map(db.get("items").value().map(i => [String(i.id), i]));
+  const base = db.get("stockMovements").value().map(r => ({ ...r }));
+  for (const item of itemMap.values()) {
+    base.push({ id: `opening-${item.id}`, date: "0000-01-01", itemCode: String(item.id), description: item.description, unit: item.unit || null, reference: "OPENING", transactionType: "OPENING", qtyIn: Number(item.quantity) || 0, qtyOut: 0, balance: 0, note: "Opening stock" });
+  }
+  for (const issue of db.get("issues").value()) {
+    const item = itemMap.get(String(issue.itemId));
+    const code = String(issue.itemId);
+    base.push({ id: `issue-${issue.id}`, date: issue.issuedAt, itemCode: code, description: item?.description || code, unit: item?.unit || null, reference: issue.s11No || `ISSUE-${issue.id}`, transactionType: "ISSUE", qtyIn: 0, qtyOut: Number(issue.quantity) || 0, balance: 0, note: issue.note || "Issued to department" });
+  }
+  const rows = base.filter(r => !itemCodeFilter || String(r.itemCode) === String(itemCodeFilter)).sort((a,b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)));
+  const running = new Map();
+  return rows.map(r => { const prev = Number(running.get(String(r.itemCode)) || 0); const balance = prev + Number(r.qtyIn || 0) - Number(r.qtyOut || 0); running.set(String(r.itemCode), balance); return { ...r, balance }; });
+}
 app.get("/api/accounts/stock-movements", requirePermission("viewAccounts"), (req, res) => {
-  let rows = db.get("stockMovements").value();
-  if (req.query.itemCode) rows = rows.filter(r => r.itemCode === req.query.itemCode);
+  let rows = unifiedStockMovements(req.query.itemCode);
   if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
   if (req.query.to) rows = rows.filter(r => r.date <= req.query.to);
-  rows = [...rows].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   res.json(rows);
 });
 app.get("/api/accounts/stock-movements/balances", requirePermission("viewAccounts"), (req, res) => {
-  const rows = db.get("stockMovements").value();
+  const rows = unifiedStockMovements();
   const map = new Map();
-  for (const r of rows) map.set(r.itemCode, { itemCode: r.itemCode, description: r.description, unit: r.unit, balance: r.balance });
-  res.json([...map.values()].sort((a, b) => a.description?.localeCompare(b.description)));
+  for (const r of rows) map.set(String(r.itemCode), { itemCode: r.itemCode, description: r.description, unit: r.unit, balance: r.balance });
+  for (const item of db.get("items").value()) if (!map.has(String(item.id))) map.set(String(item.id), { itemCode: String(item.id), description: item.description, unit: item.unit, balance: Number(item.quantity) || 0 });
+  res.json([...map.values()].sort((a,b) => String(a.description || "").localeCompare(String(b.description || ""))));
 });
 app.post("/api/accounts/stock-movements/adjustment", requirePermission("manageAccounts"), (req, res) => {
   const { date, itemCode, description, unit, adjustmentQty, reason, approvedBy } = req.body;
@@ -2302,6 +2369,7 @@ const DEFAULT_SETTINGS = {
   financialYear: "2025/2026",
   allowDataExports: true,
   exportIncludeZeroStock: false,
+  lastManualBackupAt: null,
   // Appearance
   appLogo: "Building2",
   appTheme: "indigo",
@@ -2329,6 +2397,7 @@ app.patch("/api/settings",requirePermission("manageUsers"),(req,res)=>{
   logActivity(req,"UPDATE_SETTINGS","SETTINGS",null,updates);
   res.json(next);
 });
+app.get("/api/version", (_req, res) => res.json({ version: process.env.RENDER_GIT_COMMIT || process.env.APP_VERSION || "dev" }));
 app.get("/api/settings/public",(req,res)=>{
   const s=getSettings();
   res.json({
@@ -3032,7 +3101,9 @@ app.get("/api/export/stock-valuation.xlsx", requirePermission("exportData"), asy
 
 // ── Feature 6: Backup & Restore ──────────────────────────────────────────
 app.get("/api/admin/backup", requirePermission("manageUsers"), (req, res) => {
-  const data = db.getState();
+  const backupAt = new Date().toISOString();
+  db.set("settings.lastManualBackupAt", backupAt).write();
+  const data = { ...db.getState(), _backupMeta: { createdAt: backupAt, source: "StoreMonitor" } };
   const json = JSON.stringify(data, null, 2);
   const date = new Date().toISOString().slice(0,10);
   res.setHeader("Content-Type","application/json");

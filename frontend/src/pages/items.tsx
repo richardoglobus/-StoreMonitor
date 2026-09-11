@@ -267,9 +267,10 @@ export default function Items() {
                 <TableRow>
                   <TableHead>Description</TableHead>
                   <TableHead className="w-24 text-center">Unit</TableHead>
-                  <TableHead className="w-28 text-right">Physical Qty</TableHead>
+                  <TableHead className="w-28 text-right">Opening Stock</TableHead>
                   <TableHead className="w-28 text-right">Purchased</TableHead>
                   <TableHead className="w-28 text-right">Issued</TableHead>
+                  <TableHead className="w-28 text-right">Adjustments</TableHead>
                   <TableHead className="w-28 text-right">In Stock</TableHead>
                   <TableHead className="w-20 text-right">Alert At</TableHead>
                   {canManageCatalog && <TableHead className="w-24 text-right">Actions</TableHead>}
@@ -301,6 +302,7 @@ export default function Items() {
                     <TableCell className={`text-right font-mono ${isNegative?"text-red-100":""}`}>{item.quantity??0}</TableCell>
                     <TableCell className={`text-right font-mono ${isNegative?"text-red-100":""}`}>{item.purchasedTotal}</TableCell>
                     <TableCell className={`text-right font-mono ${isNegative?"text-yellow-200 font-bold":""}`}>{item.issuedTotal}</TableCell>
+                    <TableCell className={`text-right font-mono ${isNegative?"text-red-100":""}`}>{item.adjustmentTotal ?? 0}</TableCell>
                     <TableCell className={`text-right font-mono ${isNegative?"text-yellow-300 font-black text-base":""}${!isNegative?" "+getStockColorClass(item.stockBalance):""}`}>
                       {isNegative ? item.stockBalance : item.stockBalance<=0 ? "OUT" : item.stockBalance}
                     </TableCell>

@@ -52,6 +52,7 @@ function AppWithAuth() {
   const [warningSeconds, setWarningSeconds] = useState<number | null>(null);
   const [timeoutMs, setTimeoutMs] = useState(60_000);
   const [warnBeforeMs, setWarnBeforeMs] = useState(10_000);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/settings/public`)
@@ -61,6 +62,23 @@ function AppWithAuth() {
         if (s.warningBeforeSeconds) setWarnBeforeMs(s.warningBeforeSeconds * 1_000);
       })
       .catch(() => {});
+  }, [isAuthenticated]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    const checkVersion = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/version`, { cache: "no-store" });
+        const data = await res.json();
+        const version = String(data.version || "dev");
+        const previous = localStorage.getItem("storemonitor-deployment-version");
+        if (previous && previous !== version && !cancelled) setUpdateAvailable(true);
+        localStorage.setItem("storemonitor-deployment-version", version);
+      } catch {}
+    };
+    checkVersion();
+    const timer = window.setInterval(checkVersion, 5 * 60 * 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, [isAuthenticated]);
 
   const handleLogout = useCallback(() => {
@@ -94,6 +112,7 @@ function AppWithAuth() {
 
   return (
     <>
+      {updateAvailable && <div className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 bg-blue-600 px-4 py-2 text-sm text-white shadow-lg"><span>A newer StoreMonitor version is available.</span><button className="rounded bg-white px-3 py-1 font-semibold text-blue-700" onClick={() => window.location.reload()}>Reload now</button><button className="text-white/80" onClick={() => setUpdateAvailable(false)}>Later</button></div>}
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/departments" component={Departments} />

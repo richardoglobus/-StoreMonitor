@@ -70,7 +70,7 @@ export default function Purchases() {
   const [submitting, setSubmitting] = useState(false);
 
   // Multi-line voucher state
-  const [header, setHeader] = useState({ supplierId: "", invoiceNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
+  const [header, setHeader] = useState({ supplierId: "", invoiceNo: "", lpoNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
   const [lines, setLines] = useState([emptyLine()]);
 
   const { data: items } = useListItems({ query: { queryKey: getListItemsQueryKey() } });
@@ -129,6 +129,7 @@ export default function Purchases() {
           body: JSON.stringify({
             supplierId: Number(header.supplierId),
             invoiceNo: header.invoiceNo.trim() || undefined,
+            lpoNo: header.lpoNo.trim() || undefined,
             purchasedAt: header.purchasedAt,
             itemId: Number(line.itemId),
             quantity: Number(line.quantity),
@@ -144,7 +145,7 @@ export default function Purchases() {
       toast.success(`${lines.length} purchase line${lines.length > 1 ? "s" : ""} recorded successfully`);
       queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) });
       setIsDialogOpen(false);
-      setHeader({ supplierId: "", invoiceNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
+      setHeader({ supplierId: "", invoiceNo: "", lpoNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
       setLines([emptyLine()]);
     } catch { toast.error("Failed to record purchases"); }
     finally { setSubmitting(false); }
@@ -159,7 +160,7 @@ export default function Purchases() {
       const res = await fetch(`${API_BASE}/api/purchases/${editForm.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierId: Number(editForm.supplierId), invoiceNo: editForm.invoiceNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
+        body: JSON.stringify({ supplierId: Number(editForm.supplierId), invoiceNo: editForm.invoiceNo, lpoNo: editForm.lpoNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
       });
       if (!res.ok) { const d = await res.json(); toast.error(d.error || "Update failed"); return; }
       toast.success("Purchase updated");
@@ -170,7 +171,7 @@ export default function Purchases() {
   };
 
   const openEdit = (p: any) => {
-    setEditForm({ id: p.id, supplierId: String(p.supplierId || ""), invoiceNo: p.invoiceNo||"", quantity: p.quantity, unitPrice: p.unitPrice, purchasedAt: p.purchasedAt, batchNo: (p as any).batchNo||"", expiryDate: (p as any).expiryDate||"", note: p.note||"", itemDescription: p.item?.description||"" });
+    setEditForm({ id: p.id, supplierId: String(p.supplierId || ""), invoiceNo: p.invoiceNo||"", lpoNo: p.lpoNo||"", quantity: p.quantity, unitPrice: p.unitPrice, purchasedAt: p.purchasedAt, batchNo: (p as any).batchNo||"", expiryDate: (p as any).expiryDate||"", note: p.note||"", itemDescription: p.item?.description||"" });
     setEditDialogOpen(true);
   };
 
@@ -254,6 +255,7 @@ export default function Purchases() {
                   <div className="space-y-2">
                     <Label>Invoice No</Label>
                     <Input placeholder="e.g. INV-001" value={header.invoiceNo} onChange={e => setHeader({...header, invoiceNo: e.target.value})}/>
+                    <Label className="text-xs">LPO No.</Label><Input placeholder="Optional" value={header.lpoNo} onChange={e => setHeader({...header, lpoNo: e.target.value})}/>
                   </div>
                   <div className="space-y-2">
                     <Label>Purchase Date <span className="text-destructive">*</span></Label>
@@ -426,6 +428,7 @@ export default function Purchases() {
                     <div className="space-y-2">
                       <Label>Invoice No</Label>
                       <Input value={editForm.invoiceNo} onChange={e => setEditForm({...editForm,invoiceNo:e.target.value})}/>
+                      <Label>LPO No.</Label><Input value={editForm.lpoNo || ""} onChange={e => setEditForm({...editForm,lpoNo:e.target.value})}/>
                     </div>
                     <div className="space-y-2">
                       <Label>Purchase Date</Label>
