@@ -15,10 +15,16 @@ interface User {
     manageInventory: boolean;
     managePurchases: boolean;
     viewReports: boolean;
+    viewAccounts: boolean;
+    manageAccounts: boolean;
     exportData: boolean;
     deleteTransactions: boolean;
+    editCatalog: boolean;
+    editPurchases: boolean;
+    editIssues: boolean;
     viewActivityLogs: boolean;
     manageUsers: boolean;
+    viewAssets: boolean;
     manageAssets: boolean;
     manageDigitalForms: boolean;
   };

@@ -6,7 +6,7 @@ import type { UseQueryOptions, UseMutationOptions } from "@tanstack/react-query"
 export const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${url}`, { credentials: "include", ...options });
+  const res = await fetch(`${API_BASE}${url}`, { credentials: "include", cache: "no-store", ...options });
   if (res.status === 204) return undefined as T;
   const data = await res.json();
   if (!res.ok) throw data;
@@ -23,10 +23,18 @@ export type Permissions = {
   manageInventory: boolean;
   managePurchases: boolean;
   viewReports: boolean;
+  viewAccounts: boolean;
+  manageAccounts: boolean;
   exportData: boolean;
   deleteTransactions: boolean;
+  editCatalog: boolean;
+  editPurchases: boolean;
+  editIssues: boolean;
   viewActivityLogs: boolean;
   manageUsers: boolean;
+  viewAssets: boolean;
+  manageAssets: boolean;
+  manageDigitalForms: boolean;
 };
 export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
 export type Department = { id: number; name: string; slug: string };
@@ -35,7 +43,7 @@ export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; st
 export type InventoryRow = { id: number; departmentId: number; itemId: number; month: string; physicalCount: number; receivedKemsa: number; receivedMeds: number; totalUsed: number; balance: number; item: Item };
 export type Issue = { id: number; voucherId: string | null; folioNo: string | null; s11No: string | null; departmentId: number; itemId: number; quantity: number; issuedAt: string; weekday: string; note: string | null; item: Item; department: Department };
 export type Receipt = { id: number; departmentId: number; itemId: number; source: string; quantity: number; receivedAt: string; item: Item; department: Department };
-export type Purchase = { id: number; supplier: string; itemId: number; quantity: number; unitPrice: number; invoiceNo: string | null; purchasedAt: string; note: string | null; item: Item };
+export type Purchase = { id: number; supplierId: number; supplier: string; supplierRecord?: Supplier | null; itemId: number; quantity: number; unitPrice: number; invoiceNo: string | null; purchasedAt: string; note: string | null; batchNo?: string | null; expiryDate?: string | null; item: Item };
 export type DashboardSummary = { month: string; totalDepartments: number; totalItems: number; totalIssuedThisMonth: number; totalReceivedThisMonth: number; lowStockCount: number; outOfStockCount: number; nextIssueDate: string | null; nextIssueWeekday: string | null };
 export type LowStockRow = { departmentId: number; departmentName: string; itemId: number; itemDescription: string; unit: string; balance: number };
 export type DepartmentUsage = { departmentId: number; departmentName: string; totalIssued: number; issueCount: number };
@@ -262,7 +270,7 @@ export function useListActivity(params?: any, options?: QueryOpts<ActivityLog[]>
 // ─── Accounts Section ───────────────────────────────────────────────────────
 
 export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; balance: number; createdAt: string };
-export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargeableVote: string | null; folioNo: string | null };
+export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargedTo: string | null; folioNo: string | null };
 export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved"; createdBy: number; createdAt: string; approvedBy: number | null; approvedAt: string | null; supplier?: Supplier | null };
 export type StockMovement = { id: number; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "GRN" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
 export type PaymentEntry = { id: number; date: string; supplierId: number; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };

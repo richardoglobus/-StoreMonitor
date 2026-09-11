@@ -26,32 +26,76 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 
 const dataPath = process.env.DATA_PATH || path.join(__dirname, "store.json");
 
-// Download on startup — called once before server starts (via spawn trick below)
+let syncTimer = null;
+let syncQueue = Promise.resolve();
+
 async function downloadFromSupabase() {
   if (!supabase) return;
   try {
     const { data, error } = await supabase.storage.from(BUCKET).download(BACKUP_FILE);
     if (error) { console.log("No Supabase backup yet — starting fresh"); return; }
     const text = await data.text();
+    let remoteMeta = null;
+    let localMeta = null;
+    const hasLocalStore = fs.existsSync(dataPath) && fs.statSync(dataPath).size > 0;
+    try { remoteMeta = JSON.parse(text)?._storeMeta || null; } catch {}
+    try {
+      if (hasLocalStore) {
+        localMeta = JSON.parse(fs.readFileSync(dataPath, "utf8"))?._storeMeta || null;
+      }
+    } catch {}
+    // Newer app versions stamp every local write. Preserve whichever copy has
+    // the newer stamp; old un-stamped stores fall back to the remote backup so
+    // an ephemeral Render filesystem can recover after a restart.
+    if (localMeta?.updatedAt && remoteMeta?.updatedAt && localMeta.updatedAt >= remoteMeta.updatedAt) {
+      console.log("✓ Local store is newer than Supabase backup; keeping local data");
+      syncToSupabase();
+      return;
+    }
+    if (localMeta?.updatedAt && !remoteMeta?.updatedAt) {
+      console.log("✓ Local store has a newer version marker; keeping local data");
+      syncToSupabase();
+      return;
+    }
+    if (hasLocalStore && !localMeta && !remoteMeta) {
+      console.log("✓ Preserving existing legacy local store; no versioned remote backup found");
+      syncToSupabase();
+      return;
+    }
     fs.mkdirSync(path.dirname(dataPath), { recursive: true });
     fs.writeFileSync(dataPath, text, "utf8");
     console.log("✓ Store data restored from Supabase");
   } catch (e) { console.error("Supabase download error:", e.message); }
 }
 
-async function syncToSupabase() {
+function syncToSupabase() {
   if (!supabase) return;
-  try {
-    const content = fs.readFileSync(dataPath, "utf8");
-    const { error } = await supabase.storage.from(BUCKET).upload(BACKUP_FILE,
-      Buffer.from(content, "utf8"),
-      { contentType: "application/json", upsert: true }
-    );
-    if (error) console.error("Supabase sync failed:", error.message);
-  } catch (e) { console.error("Supabase sync error:", e.message); }
+  // Coalesce bursts of lowdb writes and serialize uploads. Without this, an
+  // older upload can finish after a newer upload and overwrite it in Storage.
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    let content;
+    try {
+      content = fs.readFileSync(dataPath, "utf8");
+    } catch (e) {
+      console.error("Supabase sync read error:", e.message);
+      return;
+    }
+    syncQueue = syncQueue.catch(() => {}).then(async () => {
+      try {
+        const { error } = await supabase.storage.from(BUCKET).upload(BACKUP_FILE,
+          Buffer.from(content, "utf8"),
+          { contentType: "application/json", upsert: true }
+        );
+        if (error) console.error("Supabase sync failed:", error.message);
+      } catch (e) { console.error("Supabase sync error:", e.message); }
+    });
+  }, 250);
 }
 // ──────────────────────────────────────────────────────────────────────────
 
+fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 const adapter = new FileSync(dataPath);
 const db = low(adapter);
 
@@ -1057,7 +1101,9 @@ const pathsToTry = [
 
 
 function nextId(table) {
-  const id = (db.get(`_seq.${table}`).value() || 0) + 1;
+  const sequence = Number(db.get(`_seq.${table}`).value() || 0);
+  const maxExisting = (db.get(table).value() || []).reduce((max, row) => Math.max(max, Number(row.id) || 0), 0);
+  const id = Math.max(sequence, maxExisting) + 1;
   db.set(`_seq.${table}`, id).write();
   return id;
 }
@@ -1150,6 +1196,8 @@ const ALL_PERMISSIONS = {
   manageInventory: true,
   managePurchases: true,
   viewReports: true,
+  viewAccounts: true,
+  manageAccounts: true,
   exportData: true,
   deleteTransactions: true,
   editCatalog: true,
@@ -1172,6 +1220,8 @@ function getDefaultPermissions(role) {
       manageInventory: true,
       managePurchases: true,
       viewReports: true,
+      viewAccounts: true,
+      manageAccounts: true,
       exportData: true,
       deleteTransactions: true,
       editCatalog: true,
@@ -1192,6 +1242,8 @@ function getDefaultPermissions(role) {
       manageInventory: false,
       managePurchases: true,
       viewReports: true,
+      viewAccounts: true,
+      manageAccounts: true,
       exportData: true,
       deleteTransactions: false,
       editCatalog: false,
@@ -1215,6 +1267,8 @@ function getDefaultPermissions(role) {
     editIssues: false,
     managePurchases: false,
     viewReports: false,
+    viewAccounts: false,
+    manageAccounts: false,
     exportData: false,
     deleteTransactions: false,
     viewActivityLogs: false,
@@ -1235,6 +1289,8 @@ function normalizePermissions(role, permissions) {
     manageInventory: permissions.manageInventory !== undefined ? !!permissions.manageInventory : defaults.manageInventory,
     managePurchases: permissions.managePurchases !== undefined ? !!permissions.managePurchases : defaults.managePurchases,
     viewReports: permissions.viewReports !== undefined ? !!permissions.viewReports : defaults.viewReports,
+    viewAccounts: permissions.viewAccounts !== undefined ? !!permissions.viewAccounts : defaults.viewAccounts,
+    manageAccounts: permissions.manageAccounts !== undefined ? !!permissions.manageAccounts : defaults.manageAccounts,
     exportData: permissions.exportData !== undefined ? !!permissions.exportData : defaults.exportData,
     deleteTransactions: permissions.deleteTransactions !== undefined ? !!permissions.deleteTransactions : defaults.deleteTransactions,
     editCatalog: permissions.editCatalog !== undefined ? !!permissions.editCatalog : defaults.editCatalog,
@@ -1297,7 +1353,35 @@ function seedAdmin() {
   }
 }
 
+function migratePurchasesToSuppliers() {
+  const supplierByName = new Map(
+    db.get("suppliers").value().map(s => [String(s.name || "").trim().toUpperCase(), s])
+  );
+  for (const purchase of db.get("purchases").value()) {
+    const legacyName = String(purchase.supplier || "").trim().toUpperCase();
+    let supplier = purchase.supplierId
+      ? db.get("suppliers").find({ id: Number(purchase.supplierId) }).value()
+      : null;
+    if (!supplier && legacyName) {
+      supplier = supplierByName.get(legacyName);
+      if (!supplier) {
+        supplier = {
+          id: nextId("suppliers"), name: legacyName,
+          contactPerson: null, phone: null, email: null, address: null,
+          balance: 0, createdAt: new Date().toISOString(),
+        };
+        db.get("suppliers").push(supplier).write();
+        supplierByName.set(legacyName, supplier);
+      }
+    }
+    if (supplier && Number(purchase.supplierId) !== supplier.id) {
+      db.get("purchases").find({ id: purchase.id }).assign({ supplierId: supplier.id }).write();
+    }
+  }
+}
+
 function runMigrations() {
+  migratePurchasesToSuppliers();
   for (const user of db.get("users").value()) {
     const perms = user.permissions || {};
     const updates = {};
@@ -1738,11 +1822,62 @@ app.patch("/api/issues/:id", requirePermission("editIssues"), (req, res) => {
 });
 
 app.delete("/api/issues/:id",requirePermission("deleteTransactions"),(req,res)=>{ const id=Number(req.params.id); db.get("issues").remove({id}).write(); logActivity(req, "DELETE_ISSUE", "ISSUE", id, null); res.status(204).send(); });
+function ensureSupplierByName(name) {
+  const normalized = String(name || "").trim().toUpperCase();
+  if (!normalized) return null;
+  const existing = db.get("suppliers").value().find(s => String(s.name || "").trim().toUpperCase() === normalized);
+  if (existing) return existing;
+  const supplier = {
+    id: nextId("suppliers"), name: normalized,
+    contactPerson: null, phone: null, email: null, address: null,
+    balance: 0, createdAt: new Date().toISOString(),
+  };
+  db.get("suppliers").push(supplier).write();
+  return supplier;
+}
+
+function supplierNameForPurchase(purchase) {
+  if (purchase?.supplierId) {
+    const supplier = db.get("suppliers").find({ id: Number(purchase.supplierId) }).value();
+    if (supplier?.name) return supplier.name;
+  }
+  return purchase?.supplier || "";
+}
+
+function createMatchingGrnForPurchase(purchase, supplier, item, req) {
+  const totalAmount = Number((Number(purchase.quantity) * Number(purchase.unitPrice)).toFixed(2));
+  const grn = {
+    id: nextId("grns"),
+    grnNo: genSequentialNo("GRN", "grns"),
+    date: purchase.purchasedAt,
+    lpoNo: null,
+    supplierId: supplier.id,
+    invoiceNo: purchase.invoiceNo || null,
+    items: [{
+      itemCode: String(item.id), description: item.description,
+      unit: item.unit || null, qtyReceived: Number(purchase.quantity),
+      unitCost: Number(purchase.unitPrice), totalCost: totalAmount,
+      batchNo: purchase.batchNo || null, expiryDate: purchase.expiryDate || null,
+      chargedTo: null, folioNo: null,
+    }],
+    totalAmount,
+    status: "pending",
+    sourcePurchaseId: purchase.id,
+    autoCreated: true,
+    createdBy: req.session.userId,
+    createdAt: new Date().toISOString(),
+    approvedBy: null,
+    approvedAt: null,
+  };
+  db.get("grns").push(grn).write();
+  return grn;
+}
 
 // PURCHASES
 app.get("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   const itemId=req.query.itemId?Number(req.query.itemId):null;
   const itemMap=getItemMap();
+  const supplierMap=new Map(db.get("suppliers").value().map(s=>[s.id,s]));
   // Support ?from=YYYY-MM-DD&to=YYYY-MM-DD OR ?month=YYYY-MM
   let start, end;
   if (req.query.from && req.query.to) {
@@ -1757,26 +1892,40 @@ app.get("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   if(itemId) rows=rows.filter(r=>r.itemId===itemId);
   if(start) rows=rows.filter(r=>r.purchasedAt>=start&&r.purchasedAt<=end);
   rows=rows.sort((a,b)=>b.purchasedAt.localeCompare(a.purchasedAt)||b.id-a.id);
-  res.json(rows.map(r=>({...r,item:itemMap.get(r.itemId)})));
+  res.json(rows.map(r=>({...r, supplier: supplierMap.get(Number(r.supplierId))?.name || r.supplier || "", supplierRecord: supplierMap.get(Number(r.supplierId)) || null, item:itemMap.get(r.itemId)})));
 });
 app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
-  const {supplier,itemId,quantity,unitPrice,purchasedAt,note,invoiceNo}=req.body;
-  if(!supplier||!String(supplier).trim()) return res.status(400).json({error:"Supplier is required"});
+  const {supplierId, supplier: legacySupplier, itemId, quantity, unitPrice, purchasedAt, note, invoiceNo}=req.body;
+  const supplier = supplierId
+    ? db.get("suppliers").find({ id: Number(supplierId) }).value()
+    : ensureSupplierByName(legacySupplier);
+  if(!supplier) return res.status(400).json({error:"Supplier is required"});
   if(!invoiceNo||!String(invoiceNo).trim()) return res.status(400).json({error:"Invoice number is required"});
+  const item = db.get("items").find({ id: Number(itemId) }).value();
+  if(!item) return res.status(400).json({error:"Item not found"});
+  if(!purchasedAt) return res.status(400).json({error:"Purchase date is required"});
+  if(!(Number(quantity) > 0) || !(Number(unitPrice) >= 0)) return res.status(400).json({error:"Quantity and unit price must be valid"});
   const {batchNo,expiryDate}=req.body;
-  const row={id:nextId("purchases"),supplier:String(supplier).trim().toUpperCase(),itemId,quantity,unitPrice:Number(unitPrice),invoiceNo:invoiceNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
+  const row={id:nextId("purchases"),supplierId:supplier.id,itemId:Number(itemId),quantity:Number(quantity),unitPrice:Number(unitPrice),invoiceNo:String(invoiceNo).trim(),purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
   db.get("purchases").push(row).write();
-  logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplier, itemId, quantity, invoiceNo: row.invoiceNo });
-  res.status(201).json(row);
+  const grn = createMatchingGrnForPurchase(row, supplier, item, req);
+  logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplierId: supplier.id, itemId: row.itemId, quantity: row.quantity, invoiceNo: row.invoiceNo, grnId: grn.id });
+  res.status(201).json({...row, supplier: supplier.name, supplierRecord: supplier, item, grnId: grn.id});
 });
 
 app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("purchases").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Purchase not found" });
-  const { supplier, invoiceNo, quantity, unitPrice, purchasedAt, batchNo, expiryDate, note } = req.body;
+  const linkedGrn = db.get("grns").find({ sourcePurchaseId: id });
+  if (linkedGrn.value()?.status === "approved") return res.status(400).json({ error: "This purchase is linked to an approved GRN and cannot be edited" });
+  const { supplierId, supplier: legacySupplier, invoiceNo, quantity, unitPrice, purchasedAt, batchNo, expiryDate, note } = req.body;
   const updates = {};
-  if (supplier !== undefined) updates.supplier = String(supplier).trim().toUpperCase();
+  if (supplierId !== undefined || legacySupplier !== undefined) {
+    const supplier = supplierId ? db.get("suppliers").find({ id: Number(supplierId) }).value() : ensureSupplierByName(legacySupplier);
+    if (!supplier) return res.status(400).json({ error: "Supplier not found" });
+    updates.supplierId = supplier.id;
+  }
   if (invoiceNo !== undefined) updates.invoiceNo = invoiceNo || null;
   if (quantity !== undefined) updates.quantity = Number(quantity);
   if (unitPrice !== undefined) updates.unitPrice = Number(unitPrice);
@@ -1784,12 +1933,36 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
   if (batchNo !== undefined) updates.batchNo = batchNo || null;
   if (expiryDate !== undefined) updates.expiryDate = expiryDate || null;
   if (note !== undefined) updates.note = note || null;
+  if (updates.quantity !== undefined && !(updates.quantity > 0)) return res.status(400).json({ error: "Quantity must be greater than zero" });
+  if (updates.unitPrice !== undefined && !(updates.unitPrice >= 0)) return res.status(400).json({ error: "Unit price must be valid" });
   row.assign(updates).write();
+  const updated = row.value();
+  if (linkedGrn.value()) {
+    const item = db.get("items").find({ id: Number(updated.itemId) }).value();
+    const supplier = db.get("suppliers").find({ id: Number(updated.supplierId) }).value();
+    if (item && supplier) {
+      const totalAmount = Number((Number(updated.quantity) * Number(updated.unitPrice)).toFixed(2));
+      linkedGrn.assign({
+        date: updated.purchasedAt, supplierId: supplier.id, invoiceNo: updated.invoiceNo || null,
+        items: [{ itemCode: String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargedTo: null, folioNo: null }],
+        totalAmount,
+      }).write();
+    }
+  }
   logActivity(req, "UPDATE_PURCHASE", "PURCHASE", id, updates);
-  res.json(row.value());
+  const supplier = db.get("suppliers").find({ id: Number(updated.supplierId) }).value();
+  res.json({...updated, supplier: supplier?.name || "", supplierRecord: supplier || null});
 });
 
-app.delete("/api/purchases/:id",requirePermission("deleteTransactions"),(req,res)=>{ const id=Number(req.params.id); db.get("purchases").remove({id}).write(); logActivity(req, "DELETE_PURCHASE", "PURCHASE", id, null); res.status(204).send(); });
+app.delete("/api/purchases/:id",requirePermission("deleteTransactions"),(req,res)=>{
+  const id=Number(req.params.id);
+  const linkedGrn=db.get("grns").find({ sourcePurchaseId: id }).value();
+  if(linkedGrn?.status === "approved") return res.status(400).json({error:"This purchase is linked to an approved GRN and cannot be deleted"});
+  if(linkedGrn) db.get("grns").remove({id: linkedGrn.id}).write();
+  db.get("purchases").remove({id}).write();
+  logActivity(req, "DELETE_PURCHASE", "PURCHASE", id, null);
+  res.status(204).send();
+});
 
 // ══════════════════════════════════════════════════════════════════════════
 // ACCOUNTS SECTION — GRN, Stock Movement, Suppliers, Payments, Chart of Accounts
@@ -1825,20 +1998,20 @@ function genSequentialNo(prefix, table) {
 }
 
 // ── GRN (Goods Received Note) ───────────────────────────────────────────
-app.get("/api/accounts/grns", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/grns", requirePermission("viewAccounts"), (req, res) => {
   const supplierMap = new Map(db.get("suppliers").value().map(s => [s.id, s]));
   let rows = db.get("grns").value().sort((a, b) => b.id - a.id);
   if (req.query.status) rows = rows.filter(r => r.status === req.query.status);
   if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
   res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null })));
 });
-app.get("/api/accounts/grns/:id", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/grns/:id", requirePermission("viewAccounts"), (req, res) => {
   const row = db.get("grns").find({ id: Number(req.params.id) }).value();
   if (!row) return res.status(404).json({ error: "GRN not found" });
   const supplier = db.get("suppliers").find({ id: row.supplierId }).value();
   res.json({ ...row, supplier: supplier || null });
 });
-app.post("/api/accounts/grns", requirePermission("managePurchases"), (req, res) => {
+app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) => {
   const { date, lpoNo, supplierId, invoiceNo, items } = req.body;
   if (!date) return res.status(400).json({ error: "Date is required" });
   if (!supplierId) return res.status(400).json({ error: "Supplier is required" });
@@ -1858,7 +2031,7 @@ app.post("/api/accounts/grns", requirePermission("managePurchases"), (req, res) 
       qtyReceived, unitCost, totalCost,
       batchNo: it.batchNo || null,
       expiryDate: it.expiryDate || null,
-      chargeableVote: it.chargeableVote || null,
+      chargedTo: it.chargedTo || null,
       folioNo: it.folioNo || null,
     };
   });
@@ -1875,7 +2048,7 @@ app.post("/api/accounts/grns", requirePermission("managePurchases"), (req, res) 
   logActivity(req, "CREATE_GRN", "GRN", row.id, { grnNo: row.grnNo, supplierId: row.supplierId, totalAmount: row.totalAmount });
   res.status(201).json(row);
 });
-app.patch("/api/accounts/grns/:id/approve", requirePermission("managePurchases"), (req, res) => {
+app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
   const rowRef = db.get("grns").find({ id });
   const row = rowRef.value();
@@ -1920,7 +2093,7 @@ app.delete("/api/accounts/grns/:id", requirePermission("deleteTransactions"), (r
 });
 
 // ── Stock Movement (ledger) ─────────────────────────────────────────────
-app.get("/api/accounts/stock-movements", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/stock-movements", requirePermission("viewAccounts"), (req, res) => {
   let rows = db.get("stockMovements").value();
   if (req.query.itemCode) rows = rows.filter(r => r.itemCode === req.query.itemCode);
   if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
@@ -1928,13 +2101,13 @@ app.get("/api/accounts/stock-movements", requirePermission("viewReports"), (req,
   rows = [...rows].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   res.json(rows);
 });
-app.get("/api/accounts/stock-movements/balances", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/stock-movements/balances", requirePermission("viewAccounts"), (req, res) => {
   const rows = db.get("stockMovements").value();
   const map = new Map();
   for (const r of rows) map.set(r.itemCode, { itemCode: r.itemCode, description: r.description, unit: r.unit, balance: r.balance });
   res.json([...map.values()].sort((a, b) => a.description?.localeCompare(b.description)));
 });
-app.post("/api/accounts/stock-movements/adjustment", requirePermission("managePurchases"), (req, res) => {
+app.post("/api/accounts/stock-movements/adjustment", requirePermission("manageAccounts"), (req, res) => {
   const { date, itemCode, description, unit, adjustmentQty, reason, approvedBy } = req.body;
   if (!date || !itemCode) return res.status(400).json({ error: "Date and item are required" });
   const qty = Number(adjustmentQty);
@@ -1953,24 +2126,30 @@ app.post("/api/accounts/stock-movements/adjustment", requirePermission("managePu
 });
 
 // ── Suppliers ────────────────────────────────────────────────────────────
-app.get("/api/accounts/suppliers", requirePermission("viewReports"), (_req, res) => {
+app.get("/api/accounts/suppliers", requireAnyPermission("viewAccounts", "managePurchases"), (_req, res) => {
   res.json(db.get("suppliers").orderBy("name", "asc").value());
 });
-app.post("/api/accounts/suppliers", requirePermission("managePurchases"), (req, res) => {
+app.post("/api/accounts/suppliers", requirePermission("manageAccounts"), (req, res) => {
   const { name, contactPerson, phone, email, address } = req.body;
   if (!name || !String(name).trim()) return res.status(400).json({ error: "Supplier name is required" });
-  const row = { id: nextId("suppliers"), name: String(name).trim().toUpperCase(), contactPerson: contactPerson || null, phone: phone || null, email: email || null, address: address || null, balance: 0, createdAt: new Date().toISOString() };
+  const normalizedName = String(name).trim().toUpperCase();
+  if (db.get("suppliers").value().some(s => String(s.name || "").trim().toUpperCase() === normalizedName)) return res.status(409).json({ error: "A supplier with this name already exists" });
+  const row = { id: nextId("suppliers"), name: normalizedName, contactPerson: contactPerson || null, phone: phone || null, email: email || null, address: address || null, balance: 0, createdAt: new Date().toISOString() };
   db.get("suppliers").push(row).write();
   logActivity(req, "CREATE_SUPPLIER", "SUPPLIER", row.id, { name: row.name });
   res.status(201).json(row);
 });
-app.patch("/api/accounts/suppliers/:id", requirePermission("managePurchases"), (req, res) => {
+app.patch("/api/accounts/suppliers/:id", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("suppliers").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Supplier not found" });
   const { name, contactPerson, phone, email, address } = req.body;
   const updates = {};
-  if (name !== undefined) updates.name = String(name).trim().toUpperCase();
+  if (name !== undefined) {
+    const normalizedName = String(name).trim().toUpperCase();
+    if (db.get("suppliers").value().some(s => s.id !== id && String(s.name || "").trim().toUpperCase() === normalizedName)) return res.status(409).json({ error: "A supplier with this name already exists" });
+    updates.name = normalizedName;
+  }
   if (contactPerson !== undefined) updates.contactPerson = contactPerson || null;
   if (phone !== undefined) updates.phone = phone || null;
   if (email !== undefined) updates.email = email || null;
@@ -1987,7 +2166,7 @@ app.delete("/api/accounts/suppliers/:id", requirePermission("deleteTransactions"
   logActivity(req, "DELETE_SUPPLIER", "SUPPLIER", id, null);
   res.status(204).send();
 });
-app.get("/api/accounts/suppliers/:id/ledger", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/suppliers/:id/ledger", requirePermission("viewAccounts"), (req, res) => {
   const id = Number(req.params.id);
   const supplier = db.get("suppliers").find({ id }).value();
   if (!supplier) return res.status(404).json({ error: "Supplier not found" });
@@ -2000,13 +2179,13 @@ app.get("/api/accounts/suppliers/:id/ledger", requirePermission("viewReports"), 
 });
 
 // ── Payment Entries ──────────────────────────────────────────────────────
-app.get("/api/accounts/payments", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/payments", requirePermission("viewAccounts"), (req, res) => {
   const supplierMap = new Map(db.get("suppliers").value().map(s => [s.id, s]));
   let rows = db.get("paymentEntries").value().sort((a, b) => b.id - a.id);
   if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
   res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null })));
 });
-app.post("/api/accounts/payments", requirePermission("managePurchases"), (req, res) => {
+app.post("/api/accounts/payments", requirePermission("manageAccounts"), (req, res) => {
   const { date, supplierId, amount, method, reference, note } = req.body;
   if (!date || !supplierId || !amount) return res.status(400).json({ error: "Date, supplier and amount are required" });
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
@@ -2036,10 +2215,10 @@ app.delete("/api/accounts/payments/:id", requirePermission("deleteTransactions")
 });
 
 // ── Chart of Accounts ────────────────────────────────────────────────────
-app.get("/api/accounts/chart-of-accounts", requirePermission("viewReports"), (_req, res) => {
+app.get("/api/accounts/chart-of-accounts", requirePermission("viewAccounts"), (_req, res) => {
   res.json(db.get("chartOfAccounts").orderBy("code", "asc").value());
 });
-app.post("/api/accounts/chart-of-accounts", requirePermission("managePurchases"), (req, res) => {
+app.post("/api/accounts/chart-of-accounts", requirePermission("manageAccounts"), (req, res) => {
   const { code, name, type } = req.body;
   if (!code || !name || !type) return res.status(400).json({ error: "Code, name and type are required" });
   if (db.get("chartOfAccounts").find({ code }).value()) return res.status(400).json({ error: "Account code already exists" });
@@ -2048,7 +2227,7 @@ app.post("/api/accounts/chart-of-accounts", requirePermission("managePurchases")
   logActivity(req, "CREATE_ACCOUNT", "ACCOUNT", row.id, { code: row.code, name: row.name });
   res.status(201).json(row);
 });
-app.delete("/api/accounts/chart-of-accounts/:id", requirePermission("manageUsers"), (req, res) => {
+app.delete("/api/accounts/chart-of-accounts/:id", requirePermission("deleteTransactions"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("chartOfAccounts").find({ id }).value();
   if (!row) return res.status(404).json({ error: "Account not found" });
@@ -2057,7 +2236,7 @@ app.delete("/api/accounts/chart-of-accounts/:id", requirePermission("manageUsers
   logActivity(req, "DELETE_ACCOUNT", "ACCOUNT", id, null);
   res.status(204).send();
 });
-app.get("/api/accounts/journal-entries", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/journal-entries", requirePermission("viewAccounts"), (req, res) => {
   let rows = db.get("journalEntries").value().sort((a, b) => b.id - a.id);
   if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
   if (req.query.to) rows = rows.filter(r => r.date <= req.query.to);
@@ -2065,7 +2244,7 @@ app.get("/api/accounts/journal-entries", requirePermission("viewReports"), (req,
 });
 
 // ── Financial Reports ────────────────────────────────────────────────────
-app.get("/api/accounts/reports/summary", requirePermission("viewReports"), (req, res) => {
+app.get("/api/accounts/reports/summary", requirePermission("viewAccounts"), (req, res) => {
   const { start, end } = req.query.from && req.query.to ? { start: req.query.from, end: req.query.to } : monthRange(currentMonth());
   const grns = db.get("grns").value();
   const grnsApproved = grns.filter(g => g.status === "approved");
@@ -2117,7 +2296,6 @@ const DEFAULT_SETTINGS = {
   requireSupplierName: true,
   // Reports & Exports
   reportChargeItem: "2211002",
-  chargeItemCodes: [{ code: "2211002", meaning: "Non-Pharmaceuticals" }],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -2170,7 +2348,6 @@ app.get("/api/settings/public",(req,res)=>{
     shuffleIntervalSeconds:s.shuffleIntervalSeconds||30,
     allowSelfRegistration:s.allowSelfRegistration||false,
     selfRegistrationNote:s.selfRegistrationNote||'',
-    chargeItemCodes:s.chargeItemCodes||[],
   });
 });
 
@@ -2298,7 +2475,8 @@ function buildReport(startMonth,endMonth,itemId){
         const price=Number(p.unitPrice||0);
         runBal+=Number(p.quantity||0);
         lastPrice.set(item.id,price||lastPrice.get(item.id)||0);
-        commodity.rows.push({rowType:"additions",month,date:p.purchasedAt,units:null,unitPrice:price||null,openingTotalCost:null,additionsUnits:Number(p.quantity||0),additionsUnitCost:price?Number(p.quantity||0)*price:null,itemsIssued:null,balance:runBal,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:p.note||(p.supplier?"From "+p.supplier:"Additions")});
+        const supplierName = supplierNameForPurchase(p);
+        commodity.rows.push({rowType:"additions",month,date:p.purchasedAt,units:null,unitPrice:price||null,openingTotalCost:null,additionsUnits:Number(p.quantity||0),additionsUnitCost:price?Number(p.quantity||0)*price:null,itemsIssued:null,balance:runBal,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:p.note||(supplierName?"From "+supplierName:"Additions")});
       }
       commodity.rows.push({rowType:"closing",month,date:lastDay,units:null,unitPrice:null,openingTotalCost:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:totalIssued||null,balance:closingBalance,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:"Closing balance"});
       running.set(item.id,closingBalance);
@@ -2653,7 +2831,7 @@ app.get("/api/export/purchases.csv", requirePermission("exportData"), (req, res)
   for (const p of rows) {
     const item = db.get("items").find({id:p.itemId}).value();
     const total = Number(p.quantity) * Number(p.unitPrice);
-    lines.push([p.purchasedAt, p.supplier||"", p.invoiceNo||"", item?.description||"", item?.unit||"", p.quantity, p.unitPrice, total.toFixed(2), p.batchNo||"", p.expiryDate||"", p.note||""].map(csvEscape).join(","));
+    lines.push([p.purchasedAt, supplierNameForPurchase(p), p.invoiceNo||"", item?.description||"", item?.unit||"", p.quantity, p.unitPrice, total.toFixed(2), p.batchNo||"", p.expiryDate||"", p.note||""].map(csvEscape).join(","));
   }
   res.setHeader("Content-Type","text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="purchases_${start}_to_${end}.csv"`);
@@ -2691,7 +2869,7 @@ app.get("/api/export/purchases.xlsx", requirePermission("exportData"), async (re
       const total = Number(p.quantity) * Number(p.unitPrice);
       grandTotal += total;
       const row = ws.addRow([
-        p.purchasedAt, p.supplier||"", p.invoiceNo||"",
+        p.purchasedAt, supplierNameForPurchase(p), p.invoiceNo||"",
         item?.description||"", item?.unit||"",
         p.quantity, Number(p.unitPrice), total,
         p.batchNo||"", p.expiryDate||"", p.note||""
@@ -2771,7 +2949,7 @@ app.get("/api/reports/stock-valuation", requirePermission("viewReports"), (req, 
       unitPrice,
       totalValue: value,
       lastPurchaseDate: lastPurchase?.purchasedAt || null,
-      lastSupplier: lastPurchase?.supplier || null,
+      lastSupplier: lastPurchase ? supplierNameForPurchase(lastPurchase) : null,
       stockStatus: stockAsAt <= 0 ? "OUT" : stockAsAt <= thr ? "LOW" : "OK",
       threshold: thr,
     });
@@ -2806,7 +2984,7 @@ app.get("/api/export/stock-valuation.xlsx", requirePermission("exportData"), asy
         const value = stockAsAt > 0 ? stockAsAt * unitPrice : 0;
         grandTotal += value;
         const thr = item.lowStockThreshold != null ? Number(item.lowStockThreshold) : (s.lowStockDefaultThreshold||10);
-        rows.push({description:item.description,unit:item.unit,currentStock:stockAsAt,unitPrice,totalValue:value,lastPurchaseDate:lastPurchase?.purchasedAt||"-",lastSupplier:lastPurchase?.supplier||"-",stockStatus:stockAsAt<=0?"OUT":stockAsAt<=thr?"LOW":"OK"});
+        rows.push({description:item.description,unit:item.unit,currentStock:stockAsAt,unitPrice,totalValue:value,lastPurchaseDate:lastPurchase?.purchasedAt||"-",lastSupplier:lastPurchase?supplierNameForPurchase(lastPurchase):"-",stockStatus:stockAsAt<=0?"OUT":stockAsAt<=thr?"LOW":"OK"});
       }
       resolve({rows,grandTotal,asAt,currency:s.defaultCurrency||"KES",hospitalName:s.hospitalName,officer:s.responsibleOfficer});
     });
@@ -2889,7 +3067,7 @@ app.post("/api/auth/register",(req,res)=>{
   if(password.length<6) return res.status(400).json({error:"Password must be at least 6 characters"});
   if(db.get("users").find({username}).value()) return res.status(400).json({error:"Username already taken"});
   const hash=bcrypt.hashSync(password,10);
-  const defaultPerms={viewDashboard:true,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
+  const defaultPerms={viewDashboard:true,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
   const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
@@ -2981,6 +3159,9 @@ const PORT = process.env.PORT || 3001;
 // Patch adapter so every write syncs to Supabase in background
 const _origWrite = adapter.write.bind(adapter);
 adapter.write = function(data) {
+  if (data && typeof data === "object") {
+    data._storeMeta = { ...(data._storeMeta || {}), updatedAt: new Date().toISOString() };
+  }
   const result = _origWrite(data);
   syncToSupabase();
   return result;
@@ -3388,3 +3569,13 @@ app.listen(PORT, () => {
     console.log(`   Supabase sync: ${supabase ? "enabled" : "disabled"}\n`);
   });
 });
+function requireAnyPermission(...permissions){
+  return (req,res,next)=>{
+    if(!req.session.userId) return res.status(401).json({error:"Unauthorized"});
+    const user = db.get("users").find({id: req.session.userId}).value();
+    if(!user) return res.status(401).json({error:"Unauthorized"});
+    const perms = normalizePermissions(user.role, user.permissions);
+    if(user.role === "admin" || permissions.some(permission => perms[permission])) return next();
+    return res.status(403).json({error:"Forbidden"});
+  };
+}

@@ -7,6 +7,7 @@ import {
   useListPurchases, getListPurchasesQueryKey,
   useDeletePurchase,
   useListItems, getListItemsQueryKey,
+  useListSuppliers, getListSuppliersQueryKey,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,10 +70,11 @@ export default function Purchases() {
   const [submitting, setSubmitting] = useState(false);
 
   // Multi-line voucher state
-  const [header, setHeader] = useState({ supplier: "", invoiceNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
+  const [header, setHeader] = useState({ supplierId: "", invoiceNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
   const [lines, setLines] = useState([emptyLine()]);
 
   const { data: items } = useListItems({ query: { queryKey: getListItemsQueryKey() } });
+  const { data: suppliers } = useListSuppliers({ query: { queryKey: getListSuppliersQueryKey() } });
   const queryParams = { from, to } as any;
   const { data: purchases, isLoading, refetch: refetchPurchases, isFetching } = useListPurchases(queryParams, { query: { queryKey: getListPurchasesQueryKey(queryParams) } });
 
@@ -114,7 +116,7 @@ export default function Purchases() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!header.supplier.trim() || !header.purchasedAt) { toast.error("Supplier and date are required"); return; }
+    if (!header.supplierId || !header.purchasedAt) { toast.error("Supplier and date are required"); return; }
     if (header.purchasedAt > todayStr()) { toast.error("Purchase date cannot be in the future"); return; }
     if (lines.some(l => !l.itemId || !l.quantity || !l.unitPrice)) { toast.error("Each line needs an item, quantity and unit price"); return; }
     setSubmitting(true);
@@ -125,7 +127,7 @@ export default function Purchases() {
           method: "POST", credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            supplier: header.supplier.trim().toUpperCase(),
+            supplierId: Number(header.supplierId),
             invoiceNo: header.invoiceNo.trim() || undefined,
             purchasedAt: header.purchasedAt,
             itemId: Number(line.itemId),
@@ -142,7 +144,7 @@ export default function Purchases() {
       toast.success(`${lines.length} purchase line${lines.length > 1 ? "s" : ""} recorded successfully`);
       queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) });
       setIsDialogOpen(false);
-      setHeader({ supplier: "", invoiceNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
+      setHeader({ supplierId: "", invoiceNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
       setLines([emptyLine()]);
     } catch { toast.error("Failed to record purchases"); }
     finally { setSubmitting(false); }
@@ -150,13 +152,14 @@ export default function Purchases() {
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault(); if (!editForm) return;
+    if (!editForm.supplierId) { toast.error("Supplier is required"); return; }
     if (editForm.purchasedAt > todayStr()) { toast.error("Purchase date cannot be in the future"); return; }
     setEditLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/purchases/${editForm.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplier: editForm.supplier, invoiceNo: editForm.invoiceNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
+        body: JSON.stringify({ supplierId: Number(editForm.supplierId), invoiceNo: editForm.invoiceNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
       });
       if (!res.ok) { const d = await res.json(); toast.error(d.error || "Update failed"); return; }
       toast.success("Purchase updated");
@@ -167,7 +170,7 @@ export default function Purchases() {
   };
 
   const openEdit = (p: any) => {
-    setEditForm({ id: p.id, supplier: p.supplier||"", invoiceNo: p.invoiceNo||"", quantity: p.quantity, unitPrice: p.unitPrice, purchasedAt: p.purchasedAt, batchNo: (p as any).batchNo||"", expiryDate: (p as any).expiryDate||"", note: p.note||"", itemDescription: p.item?.description||"" });
+    setEditForm({ id: p.id, supplierId: String(p.supplierId || ""), invoiceNo: p.invoiceNo||"", quantity: p.quantity, unitPrice: p.unitPrice, purchasedAt: p.purchasedAt, batchNo: (p as any).batchNo||"", expiryDate: (p as any).expiryDate||"", note: p.note||"", itemDescription: p.item?.description||"" });
     setEditDialogOpen(true);
   };
 
@@ -241,7 +244,12 @@ export default function Purchases() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-4 pb-2 border-b">
                   <div className="space-y-2 col-span-1">
                     <Label>Supplier <span className="text-destructive">*</span></Label>
-                    <Input placeholder="e.g. KEMSA" value={header.supplier} onChange={e => setHeader({...header, supplier: e.target.value.toUpperCase()})} required/>
+                    <Select value={header.supplierId} onValueChange={v => setHeader({...header, supplierId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select supplier"/></SelectTrigger>
+                      <SelectContent>
+                        {(suppliers ?? []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Invoice No</Label>
@@ -340,8 +348,8 @@ export default function Purchases() {
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setHeader({supplier:"",invoiceNo:"",purchasedAt:format(new Date(),"yyyy-MM-dd")}); setLines([emptyLine()]); }}>Cancel</Button>
-                  <Button type="submit" disabled={submitting || !header.supplier.trim() || lines.some(l => !l.itemId || !l.quantity || !l.unitPrice)}>
+                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setHeader({supplierId:"",invoiceNo:"",purchasedAt:format(new Date(),"yyyy-MM-dd")}); setLines([emptyLine()]); }}>Cancel</Button>
+                  <Button type="submit" disabled={submitting || !header.supplierId || lines.some(l => !l.itemId || !l.quantity || !l.unitPrice)}>
                     {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Recording…</> : `Record ${lines.length} Purchase${lines.length>1?"s":""}`}
                   </Button>
                 </DialogFooter>
@@ -410,7 +418,10 @@ export default function Purchases() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2 col-span-2">
                       <Label>Supplier</Label>
-                      <Input value={editForm.supplier} onChange={e => setEditForm({...editForm,supplier:e.target.value.toUpperCase()})} required/>
+                      <Select value={editForm.supplierId} onValueChange={v => setEditForm({...editForm,supplierId:v})}>
+                        <SelectTrigger><SelectValue placeholder="Select supplier"/></SelectTrigger>
+                        <SelectContent>{(suppliers ?? []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>Invoice No</Label>

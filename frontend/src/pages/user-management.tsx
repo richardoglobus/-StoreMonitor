@@ -32,6 +32,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
       manageInventory: true,
       managePurchases: true,
       viewReports: true,
+      viewAccounts: true,
+      manageAccounts: true,
       exportData: true,
       deleteTransactions: true,
       editCatalog: true,
@@ -52,6 +54,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
       manageInventory: true,
       managePurchases: true,
       viewReports: true,
+      viewAccounts: true,
+      manageAccounts: true,
       exportData: true,
       deleteTransactions: true,
       editCatalog: true,
@@ -72,6 +76,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
       manageInventory: false,
       managePurchases: true,
       viewReports: true,
+      viewAccounts: true,
+      manageAccounts: true,
       exportData: true,
       deleteTransactions: false,
       editCatalog: false,
@@ -92,6 +98,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
     manageInventory: false,
     managePurchases: false,
     viewReports: false,
+    viewAccounts: false,
+    manageAccounts: false,
     exportData: false,
     deleteTransactions: false,
     editCatalog: false,
@@ -114,6 +122,8 @@ const PERMISSION_LABELS: Record<string, string> = {
   managePurchases: "Manage Purchases (Add/Delete)",
   editPurchases: "Edit Purchases",
   viewReports: "View Reports",
+  viewAccounts: "View Accounts",
+  manageAccounts: "Manage Accounts",
   exportData: "Export Data",
   deleteTransactions: "Delete Transactions",
   editIssues: "Edit Issues (Admin)",
@@ -285,7 +295,7 @@ export default function UserManagement() {
                     {Object.entries(formData.permissions).map(([key, value]) => (
                       <label key={key} className="flex items-center gap-2">
                         <input type="checkbox" checked={!!value} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
-                        <span>{key}</span>
+                        <span>{PERMISSION_LABELS[key] || key}</span>
                       </label>
                     ))}
                   </div>
@@ -395,7 +405,7 @@ export default function UserManagement() {
                   {Object.entries(formData.permissions).map(([key, value]) => (
                     <label key={key} className="flex items-center gap-2">
                       <input type="checkbox" checked={!!value} disabled={editingUser?.id === currentUser?.id} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
-                      <span>{key}</span>
+                      <span>{PERMISSION_LABELS[key] || key}</span>
                     </label>
                   ))}
                 </div>

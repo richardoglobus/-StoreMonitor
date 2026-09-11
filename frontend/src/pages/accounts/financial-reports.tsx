@@ -13,7 +13,7 @@ import { useLocation } from "wouter";
 export default function FinancialReportsPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  if (!user?.permissions?.viewReports) { setLocation("/"); return null; }
+  if (!user?.permissions?.viewAccounts) { setLocation("/"); return null; }
 
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());

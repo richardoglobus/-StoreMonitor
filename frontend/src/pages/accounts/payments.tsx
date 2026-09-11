@@ -28,8 +28,8 @@ export default function PaymentsPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  if (!user?.permissions?.viewReports) { setLocation("/"); return null; }
-  const canManage = !!user?.permissions?.managePurchases;
+  if (!user?.permissions?.viewAccounts) { setLocation("/"); return null; }
+  const canManage = !!user?.permissions?.manageAccounts;
   const canDelete = !!user?.permissions?.deleteTransactions;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);

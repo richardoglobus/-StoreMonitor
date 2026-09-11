@@ -25,9 +25,9 @@ export default function ChartOfAccountsPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  if (!user?.permissions?.viewReports) { setLocation("/"); return null; }
-  const canManage = !!user?.permissions?.managePurchases;
-  const canDelete = !!user?.permissions?.manageUsers;
+  if (!user?.permissions?.viewAccounts) { setLocation("/"); return null; }
+  const canManage = !!user?.permissions?.manageAccounts;
+  const canDelete = !!user?.permissions?.deleteTransactions;
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
