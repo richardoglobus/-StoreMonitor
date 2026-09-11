@@ -5,6 +5,7 @@ import {
   useListStockMovements, getListStockMovementsQueryKey,
   useListStockBalances, getListStockBalancesQueryKey,
   useCreateStockAdjustment,
+  useListItems, getListItemsQueryKey,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export default function StockMovementPage() {
   const params = itemFilter !== "all" ? { itemCode: itemFilter } : {};
   const { data: movements, isLoading } = useListStockMovements(params, { query: { queryKey: getListStockMovementsQueryKey(params) } });
   const { data: balances } = useListStockBalances({ query: { queryKey: getListStockBalancesQueryKey() } });
+  const { data: catalogItems } = useListItems({ query: { queryKey: getListItemsQueryKey() } });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getListStockMovementsQueryKey({}) });
@@ -83,7 +85,7 @@ export default function StockMovementPage() {
                 <p className="text-xs text-muted-foreground -mt-2">Use this when a physical count differs from the system balance.</p>
                 <div className="space-y-3 py-2">
                   <div className="space-y-1"><Label>Date</Label><input type="date" className={dateCls} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}/></div>
-                  <div className="space-y-1"><Label>Item Code / Name</Label><Input value={form.itemCode} onChange={e => setForm(f => ({ ...f, itemCode: e.target.value, description: f.description || e.target.value }))} placeholder="e.g. PARACETAMOL 500MG TABS"/></div>
+                  <div className="space-y-1"><Label>Item Code / Name</Label><Select value={form.itemCode} onValueChange={v => { const item = (catalogItems || []).find(i => String(i.id) === v); setForm(f => ({ ...f, itemCode: v, description: item?.description || "", unit: item?.unit || "" })); }}><SelectTrigger><SelectValue placeholder="Select catalog item"/></SelectTrigger><SelectContent>{(catalogItems || []).map(item => <SelectItem key={item.id} value={String(item.id)}>{item.description} ({item.unit})</SelectItem>)}</SelectContent></Select></div>
                   <div className="space-y-1"><Label>Description</Label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}/></div>
                   <div className="space-y-1"><Label>Unit</Label><Input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}/></div>
                   <div className="space-y-1"><Label>Adjustment Qty (use negative to reduce)</Label><Input type="number" value={form.adjustmentQty} onChange={e => setForm(f => ({ ...f, adjustmentQty: e.target.value }))}/></div>

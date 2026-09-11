@@ -23,7 +23,7 @@ import { useLocation } from "wouter";
 
 const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
-const emptyLine = () => ({ itemCode: "", description: "", unit: "", qtyReceived: "", unitCost: "", batchNo: "", expiryDate: "", chargedTo: "", folioNo: "" });
+const emptyLine = () => ({ itemCode: "", description: "", unit: "", qtyReceived: "", unitCost: "", batchNo: "", expiryDate: "", chargeItemCode: "", folioNo: "" });
 
 export default function GrnPage() {
   const queryClient = useQueryClient();
@@ -81,7 +81,7 @@ export default function GrnPage() {
   const openEdit = (g: any) => {
     setEditingGrnId(g.id);
     setHeader({ date: g.date, lpoNo: g.lpoNo || "", supplierId: String(g.supplierId), invoiceNo: g.invoiceNo || "" });
-    setLines((g.items || []).map((l: any) => ({ ...l, itemCode: l.itemCode || "", description: l.description || "", unit: l.unit || "", qtyReceived: String(l.qtyReceived ?? ""), unitCost: String(l.unitCost ?? ""), batchNo: l.batchNo || "", expiryDate: l.expiryDate || "", chargedTo: l.chargedTo || "", folioNo: l.folioNo || "" })));
+    setLines((g.items || []).map((l: any) => ({ ...l, itemCode: l.itemCode || "", description: l.description || "", unit: l.unit || "", qtyReceived: String(l.qtyReceived ?? ""), unitCost: String(l.unitCost ?? ""), batchNo: l.batchNo || "", expiryDate: l.expiryDate || "", chargeItemCode: l.chargeItemCode || l.chargedTo || "", folioNo: l.folioNo || "" })));
     setIsDialogOpen(true);
   };
   const updateLine = (i: number, field: string, value: string) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
@@ -142,7 +142,7 @@ export default function GrnPage() {
                       <div className="space-y-1"><Label className="text-xs">Total Cost</Label><Input disabled value={lineTotal(l).toFixed(2)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Batch No.</Label><Input value={l.batchNo} onChange={e => updateLine(i, "batchNo", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Expiry Date</Label><input type="date" className={dateCls} value={l.expiryDate} onChange={e => updateLine(i, "expiryDate", e.target.value)}/></div>
-                      <div className="space-y-1"><Label className="text-xs">Charged To (Dept/Office)</Label><Input value={l.chargedTo} onChange={e => updateLine(i, "chargedTo", e.target.value)}/></div>
+                      <div className="space-y-1"><Label className="text-xs">Charge Item Code</Label><Input value={l.chargeItemCode} onChange={e => updateLine(i, "chargeItemCode", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Folio No.</Label><Input value={l.folioNo} onChange={e => updateLine(i, "folioNo", e.target.value)}/></div>
                     </div>
                   </div>

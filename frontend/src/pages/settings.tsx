@@ -76,7 +76,7 @@ const DEFAULTS: AppSettings = {
   defaultCurrency: "KES",
   requireInvoiceNumber: true,
   requireSupplierName: true,
-  reportChargeItem: "2211002",
+  reportChargeItem: "221102",
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -460,9 +460,9 @@ export default function SettingsPage() {
         <SectionCard icon={FileText} title="Reports & Exports" description="Configure what appears on monthly reports and Excel exports.">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Charge Item Code</Label>
+              <Label>Default Charge Item Code</Label>
               <Input value={settings.reportChargeItem} onChange={e => update("reportChargeItem", e.target.value)} placeholder="2211002" className="font-mono" />
-              <p className="text-xs text-muted-foreground">Appears in "Charge Item" column on every monthly report row.</p>
+              <p className="text-xs text-muted-foreground">Fallback for reports when an item category has no code. Category-specific codes are managed in Item Catalog.</p>
             </div>
             <div className="space-y-2">
               <Label>Responsible Officer Name</Label>

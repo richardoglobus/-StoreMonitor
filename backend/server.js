@@ -1391,7 +1391,22 @@ function migratePurchasesToGrns() {
     existing.add(Number(purchase.id));
   }
 }
+function ensureCatalogCategories() {
+  if (!Array.isArray(db.get("categories").value())) db.set("categories", []).write();
+  const savedSettings = db.get("settings").value() || {};
+  if (savedSettings.reportChargeItem === "2211002") db.set("settings.reportChargeItem", "221102").write();
+  let categories = db.get("categories").value();
+  let nonPharm = categories.find(c => String(c.name || "").trim().toUpperCase() === "NON-PHARM");
+  if (!nonPharm) {
+    nonPharm = { id: nextId("categories"), name: "NON-PHARM", chargeItemCode: "221102", createdAt: new Date().toISOString() };
+    db.get("categories").push(nonPharm).write();
+  }
+  for (const item of db.get("items").value()) {
+    if (item.categoryId == null) db.get("items").find({ id: item.id }).assign({ categoryId: nonPharm.id }).write();
+  }
+}
 function runMigrations() {
+  ensureCatalogCategories();
   migratePurchasesToSuppliers();
   migratePurchasesToGrns();
   for (const user of db.get("users").value()) {
@@ -1676,6 +1691,38 @@ app.delete("/api/departments/:id", requirePermission("manageDepartments"), (req,
   res.status(204).send();
 });
 
+// CATALOG CATEGORIES
+app.get("/api/catalog/categories", requireAuth, (req, res) => {
+  res.json(db.get("categories").orderBy("name", "asc").value().map(c => ({ ...c, itemCount: db.get("items").filter({ categoryId: c.id }).value().length })));
+});
+app.post("/api/catalog/categories", requirePermission("manageCatalog"), (req, res) => {
+  const name = String(req.body.name || "").trim().toUpperCase();
+  if (!name) return res.status(400).json({ error: "Category name is required" });
+  if (db.get("categories").value().some(c => String(c.name).toUpperCase() === name)) return res.status(400).json({ error: "Category already exists" });
+  const row = { id: nextId("categories"), name, chargeItemCode: String(req.body.chargeItemCode || "").trim() || null, createdAt: new Date().toISOString() };
+  db.get("categories").push(row).write();
+  logActivity(req, "CREATE_CATEGORY", "CATEGORY", row.id, row);
+  res.status(201).json({ ...row, itemCount: 0 });
+});
+app.patch("/api/catalog/categories/:id", requirePermission("manageCatalog"), (req, res) => {
+  const id = Number(req.params.id);
+  const ref = db.get("categories").find({ id });
+  if (!ref.value()) return res.status(404).json({ error: "Category not found" });
+  const updates = {};
+  if (req.body.name !== undefined) updates.name = String(req.body.name).trim().toUpperCase();
+  if (req.body.chargeItemCode !== undefined) updates.chargeItemCode = String(req.body.chargeItemCode || "").trim() || null;
+  ref.assign(updates).write();
+  res.json(ref.value());
+});
+app.delete("/api/catalog/categories/:id", requirePermission("manageCatalog"), (req, res) => {
+  const id = Number(req.params.id);
+  const category = db.get("categories").find({ id }).value();
+  if (!category) return res.status(404).json({ error: "Category not found" });
+  if (db.get("items").find({ categoryId: id }).value()) return res.status(400).json({ error: "Move or reassign items before deleting this category" });
+  db.get("categories").remove({ id }).write();
+  res.status(204).send();
+});
+
 // ITEMS
 app.get("/api/items",(_,res)=>res.json(db.get("items").orderBy("description","asc").value()));
 app.get("/api/items/stock",(_,res)=>{
@@ -1689,13 +1736,14 @@ app.get("/api/items/stock",(_,res)=>{
   for(const i of db.get("issues").value()) iMap.set(String(i.itemId),(iMap.get(String(i.itemId))||0)+Number(i.quantity||0));
   res.json(items.map(it=>{
     const opening=Number(it.quantity)||0, purchased=pMap.get(String(it.id))||0, issued=iMap.get(String(it.id))||0, adjustments=aMap.get(String(it.id))||0;
-    return { id:it.id, description:it.description, unit:it.unit, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:opening+purchased+adjustments-issued };
+    const category = db.get("categories").find({ id: Number(it.categoryId) }).value();
+    return { id:it.id, description:it.description, unit:it.unit, categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:opening+purchased+adjustments-issued };
   }));
 });
 app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
   const {description,unit,quantity}=req.body; if(!description||!unit) return res.status(400).json({error:"Missing fields"});
   if(db.get("items").find({description}).value()) return res.status(400).json({error:"Already exists"});
-  const row={id:nextId("items"),description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null};
+  const row={id:nextId("items"),description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),categoryId:req.body.categoryId!=null?Number(req.body.categoryId):null,quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null};
   db.get("items").push(row).write();
   logActivity(req, "CREATE_ITEM", "ITEM", row.id, { description: row.description });
   res.status(201).json(row);
@@ -1715,6 +1763,7 @@ app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
   if(description!==undefined) updates.description=String(description).trim().toUpperCase();
   if(unit!==undefined) updates.unit=String(unit).trim().toUpperCase();
   if(req.body.lowStockThreshold!==undefined) updates.lowStockThreshold=req.body.lowStockThreshold===''||req.body.lowStockThreshold===null?null:Number(req.body.lowStockThreshold);
+  if(req.body.categoryId!==undefined) updates.categoryId=req.body.categoryId===''||req.body.categoryId===null?null:Number(req.body.categoryId);
   if(quantity!==undefined) updates.quantity=Number(quantity)||0;
   row.assign(updates).write();
   logActivity(req, "UPDATE_ITEM", "ITEM", id, updates);
@@ -1869,7 +1918,7 @@ function createMatchingGrnForPurchase(purchase, supplier, item, req) {
       unit: item.unit || null, qtyReceived: Number(purchase.quantity),
       unitCost: Number(purchase.unitPrice), totalCost: totalAmount,
       batchNo: purchase.batchNo || null, expiryDate: purchase.expiryDate || null,
-      chargedTo: null, folioNo: null,
+      chargeItemCode: null, folioNo: null,
     }],
     totalAmount,
     status: "pending",
@@ -1956,7 +2005,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
       const totalAmount = Number((Number(updated.quantity) * Number(updated.unitPrice)).toFixed(2));
       linkedGrn.assign({
         date: updated.purchasedAt, lpoNo: updated.lpoNo || null, supplierId: supplier.id, invoiceNo: updated.invoiceNo || null,
-        items: [{ itemCode: String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargedTo: null, folioNo: null }],
+        items: [{ itemCode: String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargeItemCode: null, folioNo: null }],
         totalAmount,
       }).write();
     }
@@ -2043,7 +2092,7 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
       qtyReceived, unitCost, totalCost,
       batchNo: it.batchNo || null,
       expiryDate: it.expiryDate || null,
-      chargedTo: it.chargedTo || null,
+      chargeItemCode: it.chargeItemCode || it.chargedTo || null,
       folioNo: it.folioNo || null,
     };
   });
@@ -2076,7 +2125,7 @@ app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, r
     const unitCost = Number(it.unitCost) || 0;
     const totalCost = Number((qtyReceived * unitCost).toFixed(2));
     totalAmount += totalCost;
-    return { itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargedTo: it.chargedTo || null, folioNo: it.folioNo || null };
+    return { itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || null, folioNo: it.folioNo || null };
   });
   ref.assign({ date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount: Number(totalAmount.toFixed(2)), updatedAt: new Date().toISOString() }).write();
   logActivity(req, "UPDATE_GRN", "GRN", id, { grnNo: current.grnNo, totalAmount });
@@ -2362,7 +2411,7 @@ const DEFAULT_SETTINGS = {
   requireInvoiceNumber: true,
   requireSupplierName: true,
   // Reports & Exports
-  reportChargeItem: "2211002",
+  reportChargeItem: "221102",
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -2498,6 +2547,10 @@ function expandMonths(start,end){
   while(y<ey||(y===ey&&m<=em)){months.push(`${String(y).padStart(4,"0")}-${String(m).padStart(2,"0")}`);m++;if(m>12){m=1;y++;}}
   return months;
 }
+function chargeItemCodeForItem(item) {
+  const category = db.get("categories").find({ id: Number(item.categoryId) }).value();
+  return category?.chargeItemCode || getSettings().reportChargeItem || "221102";
+}
 function buildReport(startMonth,endMonth,itemId){
   const months=expandMonths(startMonth,endMonth);
   if(!months.length) return {startMonth,endMonth,commodities:[]};
@@ -2518,7 +2571,6 @@ function buildReport(startMonth,endMonth,itemId){
     running.set(i.itemId,(running.get(i.itemId)||0)-i.quantity);
   }
   const settings=getSettings();
-  const CHARGE=settings.reportChargeItem||"2211002";
   const OFFICER=settings.responsibleOfficer||"";
   const commodityMap=new Map();
   for(const item of items) commodityMap.set(item.id,{itemId:item.id,itemDescription:item.description,unit:item.unit,rows:[],hasActivity:false});
@@ -2538,16 +2590,16 @@ function buildReport(startMonth,endMonth,itemId){
       const commodity=commodityMap.get(item.id);
       if(openingQty===0&&totalAdditions===0&&totalIssued===0){running.set(item.id,closingBalance);continue;}
       commodity.hasActivity=true;
-      commodity.rows.push({rowType:"opening",month,date:start,units:openingQty,unitPrice:openingPrice||null,openingTotalCost:openingPrice?openingQty*openingPrice:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:null,balance:openingQty,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:"Opening balance"});
+      commodity.rows.push({rowType:"opening",month,date:start,units:openingQty,unitPrice:openingPrice||null,openingTotalCost:openingPrice?openingQty*openingPrice:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:null,balance:openingQty,chargeItem:chargeItemCodeForItem(item),responsibleOfficer:OFFICER,remarks:"Opening balance"});
       let runBal=openingQty;
       for(const p of monthPurchases){
         const price=Number(p.unitPrice||0);
         runBal+=Number(p.quantity||0);
         lastPrice.set(item.id,price||lastPrice.get(item.id)||0);
         const supplierName = supplierNameForPurchase(p);
-        commodity.rows.push({rowType:"additions",month,date:p.purchasedAt,units:null,unitPrice:price||null,openingTotalCost:null,additionsUnits:Number(p.quantity||0),additionsUnitCost:price?Number(p.quantity||0)*price:null,itemsIssued:null,balance:runBal,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:p.note||(supplierName?"From "+supplierName:"Additions")});
+        commodity.rows.push({rowType:"additions",month,date:p.purchasedAt,units:null,unitPrice:price||null,openingTotalCost:null,additionsUnits:Number(p.quantity||0),additionsUnitCost:price?Number(p.quantity||0)*price:null,itemsIssued:null,balance:runBal,chargeItem:chargeItemCodeForItem(item),responsibleOfficer:OFFICER,remarks:p.note||(supplierName?"From "+supplierName:"Additions")});
       }
-      commodity.rows.push({rowType:"closing",month,date:lastDay,units:null,unitPrice:null,openingTotalCost:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:totalIssued||null,balance:closingBalance,chargeItem:CHARGE,responsibleOfficer:OFFICER,remarks:"Closing balance"});
+      commodity.rows.push({rowType:"closing",month,date:lastDay,units:null,unitPrice:null,openingTotalCost:null,additionsUnits:null,additionsUnitCost:null,itemsIssued:totalIssued||null,balance:closingBalance,chargeItem:chargeItemCodeForItem(item),responsibleOfficer:OFFICER,remarks:"Closing balance"});
       running.set(item.id,closingBalance);
     }
   }

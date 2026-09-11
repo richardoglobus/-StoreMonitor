@@ -38,8 +38,9 @@ export type Permissions = {
 };
 export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
 export type Department = { id: number; name: string; slug: string };
-export type Item = { id: number; description: string; unit: string; quantity: number };
+export type Item = { id: number; description: string; unit: string; quantity: number; categoryId?: number | null; categoryName?: string | null };
 export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; adjustmentTotal: number; stockBalance: number };
+export type CatalogCategory = { id: number; name: string; chargeItemCode: string | null; itemCount?: number; createdAt?: string };
 export type InventoryRow = { id: number; departmentId: number; itemId: number; month: string; physicalCount: number; receivedKemsa: number; receivedMeds: number; totalUsed: number; balance: number; item: Item };
 export type Issue = { id: number; voucherId: string | null; folioNo: string | null; s11No: string | null; departmentId: number; itemId: number; quantity: number; issuedAt: string; weekday: string; note: string | null; item: Item; department: Department };
 export type Receipt = { id: number; departmentId: number; itemId: number; source: string; quantity: number; receivedAt: string; item: Item; department: Department };
@@ -86,6 +87,7 @@ export const getListDepartmentsQueryKey = () => ["/api/departments"] as const;
 export const getGetDepartmentQueryKey = (id: number) => [`/api/departments/${id}`] as const;
 export const getListItemsQueryKey = () => ["/api/items"] as const;
 export const getListItemStockQueryKey = () => ["/api/items/stock"] as const;
+export const getListCategoriesQueryKey = () => ["/api/catalog/categories"] as const;
 export const getListInventoryQueryKey = (params: any) => ["/api/inventory", params] as const;
 export const getListReceiptsQueryKey = (params?: any) => ["/api/receipts", params] as const;
 export const getListIssuesQueryKey = (params?: any) => ["/api/issues", params] as const;
@@ -164,12 +166,21 @@ export function useCreateDepartment(options?: MutOpts<Department, { data: { name
 export function useListItems(options?: QueryOpts<Item[]>) {
   return useQuery({ queryKey: getListItemsQueryKey(), queryFn: () => apiFetch<Item[]>("/api/items"), ...options?.query });
 }
+export function useListCategories(options?: QueryOpts<CatalogCategory[]>) {
+  return useQuery({ queryKey: getListCategoriesQueryKey(), queryFn: () => apiFetch<CatalogCategory[]>("/api/catalog/categories"), ...options?.query });
+}
+export function useCreateCategory(options?: MutOpts<CatalogCategory, { data: { name: string; chargeItemCode?: string } }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<CatalogCategory>("/api/catalog/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useUpdateCategory(options?: MutOpts<CatalogCategory, { categoryId: number; data: { name?: string; chargeItemCode?: string } }>) {
+  return useMutation({ mutationFn: ({ categoryId, data }) => apiFetch<CatalogCategory>(`/api/catalog/categories/${categoryId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
 
 export function useListItemStock(options?: QueryOpts<ItemStock[]>) {
   return useQuery({ queryKey: getListItemStockQueryKey(), queryFn: () => apiFetch<ItemStock[]>("/api/items/stock"), ...options?.query });
 }
 
-export function useCreateItem(options?: MutOpts<Item, { data: { description: string; unit: string } }>) {
+export function useCreateItem(options?: MutOpts<Item, { data: { description: string; unit: string; categoryId?: number | null } }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<Item>("/api/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
 export function useUpdateItem(options?: MutOpts<Item, { itemId: number; data: { description?: string; unit?: string; quantity?: number } }>) {
@@ -270,7 +281,7 @@ export function useListActivity(params?: any, options?: QueryOpts<ActivityLog[]>
 // ─── Accounts Section ───────────────────────────────────────────────────────
 
 export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; balance: number; createdAt: string };
-export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargedTo: string | null; folioNo: string | null };
+export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargeItemCode: string | null; folioNo: string | null };
 export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved" | "voided"; createdBy: number | null; createdAt: string; approvedBy: number | null; approvedAt: string | null; sourcePurchaseId?: number | null; voidedBy?: number | null; voidedAt?: string | null; voidReason?: string | null; supplier?: Supplier | null };
 export type StockMovement = { id: number | string; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "OPENING" | "GRN" | "GRN_REVERSAL" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
 export type PaymentEntry = { id: number; date: string; supplierId: number; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };

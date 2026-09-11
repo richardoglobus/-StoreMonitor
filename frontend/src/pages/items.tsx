@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Layout } from "@/components/layout";
 import {
   useListItemStock, getListItemStockQueryKey,
+  useListCategories, getListCategoriesQueryKey, useCreateCategory,
   useCreateItem, useUpdateItem, useDeleteItem,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -78,10 +79,14 @@ export default function Items() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editItemId, setEditItemId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
-  const [newItem, setNewItem] = useState({ description: "", unit: "", quantity: "0", lowStockThreshold: "10" });
-  const [editItem, setEditItem] = useState({ description: "", unit: "", quantity: "0", lowStockThreshold: "10" });
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryChargeCode, setNewCategoryChargeCode] = useState("");
+  const [newItem, setNewItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
+  const [editItem, setEditItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
 
   const { data: items, isLoading, refetch: refetchItems, isFetching } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
+  const { data: categories } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
 
   const existingUnits = useMemo(() => Array.from(new Set((items??[]).map(i=>i.unit.toUpperCase()))), [items]);
 
@@ -95,13 +100,20 @@ export default function Items() {
     }).slice(0, 3);
   }, [newItem.description, items]);
 
+  const createCategory = useCreateCategory({
+    mutation: {
+      onSuccess: () => { toast.success("Category added"); queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); setNewCategoryName(""); setNewCategoryChargeCode(""); },
+      onError: (err: any) => toast.error(err?.error || "Failed to add category"),
+    },
+  });
+
   const createItem = useCreateItem({
     mutation: {
       onSuccess: () => {
         toast.success("Item created successfully");
         queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() });
         setIsDialogOpen(false);
-        setNewItem({ description: "", unit: "", quantity: "0" });
+        setNewItem({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
       },
       onError: (err: any) => toast.error(err?.error || "Failed to create item — may already exist"),
     }
@@ -127,23 +139,23 @@ export default function Items() {
     e.preventDefault();
     if (!newItem.description.trim() || !newItem.unit.trim()) return;
     // Save in UPPERCASE
-    createItem.mutate({ data: { description: newItem.description.trim().toUpperCase(), unit: newItem.unit.trim().toUpperCase(), quantity: Number(newItem.quantity)||0, lowStockThreshold: newItem.lowStockThreshold!==''?Number(newItem.lowStockThreshold):null } as any });
+    createItem.mutate({ data: { description: newItem.description.trim().toUpperCase(), unit: newItem.unit.trim().toUpperCase(), categoryId: newItem.categoryId ? Number(newItem.categoryId) : null, quantity: Number(newItem.quantity)||0, lowStockThreshold: newItem.lowStockThreshold!==''?Number(newItem.lowStockThreshold):null } as any });
   };
 
   const handleDelete = (id: number) => { if (!confirm("Delete this item?")) return; deleteItem.mutate({ itemId: id }); };
 
   const openEditDialog = (item: any) => {
     setEditItemId(item.id);
-    setEditItem({ description: item.description, unit: item.unit, quantity: String(item.quantity??0), lowStockThreshold: item.lowStockThreshold!=null?String(item.lowStockThreshold):"10" });
+    setEditItem({ description: item.description, unit: item.unit, categoryId: item.categoryId ? String(item.categoryId) : "", quantity: String(item.quantity??0), lowStockThreshold: item.lowStockThreshold!=null?String(item.lowStockThreshold):"10" });
     setEditDialogOpen(true);
   };
   const handleEditSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editItemId || !editItem.description.trim() || !editItem.unit.trim()) return;
-    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null } as any });
+    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), categoryId: editItem.categoryId ? Number(editItem.categoryId) : null, quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null } as any });
   };
 
-  const filteredItems = items?.filter(item => item.description.toLowerCase().includes(search.toLowerCase()));
+  const filteredItems = items?.filter(item => (!selectedCategoryId || item.categoryId === selectedCategoryId) && item.description.toLowerCase().includes(search.toLowerCase()));
 
   // Items where issued > physical + purchased (impossible/data integrity issue)
   const negativeStockItems = (items ?? []).filter(i => i.stockBalance < 0);
@@ -202,6 +214,12 @@ export default function Items() {
                       <UnitCombobox value={newItem.unit} onChange={v=>setNewItem({...newItem,unit:v})} existingUnits={existingUnits}/>
                     </div>
                     <div className="space-y-2">
+                      <Label>Category</Label>
+                      <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={newItem.categoryId} onChange={e=>setNewItem({...newItem,categoryId:e.target.value})}>
+                        <option value="">Select category</option>{(categories || []).map(c=><option key={c.id} value={c.id}>{c.name} — Charge Item {c.chargeItemCode || "not set"}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
                       <Label>Physical Quantity</Label>
                       <Input type="number" min="0" value={newItem.quantity} onChange={e=>setNewItem({...newItem,quantity:e.target.value})}/>
                     </div>
@@ -223,6 +241,18 @@ export default function Items() {
               </DialogContent>
             </Dialog>
           )}
+          </div>
+        </div>
+
+        <div className="border rounded-lg p-4 bg-card space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+            <div className="flex-1"><Label>New Category</Label><Input placeholder="e.g. PHARM, NON-PHARM, DRESSINGS" value={newCategoryName} onChange={e=>setNewCategoryName(e.target.value)}/></div>
+            <div className="flex-1"><Label>Charge Item Code</Label><Input placeholder="e.g. 221102" value={newCategoryChargeCode} onChange={e=>setNewCategoryChargeCode(e.target.value)}/></div>
+            {canManageCatalog && <Button onClick={()=>{ if(!newCategoryName.trim()) return toast.error("Category name is required"); createCategory.mutate({data:{name:newCategoryName,chargeItemCode:newCategoryChargeCode}}); }} disabled={createCategory.isPending}><Plus className="h-4 w-4 mr-1"/>Add Category</Button>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant={selectedCategoryId === null ? "default" : "outline"} onClick={()=>setSelectedCategoryId(null)}>All Items</Button>
+            {(categories || []).map(c=><Button key={c.id} size="sm" variant={selectedCategoryId === c.id ? "default" : "outline"} onClick={()=>setSelectedCategoryId(c.id)}>{c.name} ({c.itemCount || 0}) · {c.chargeItemCode || "no code"}</Button>)}
           </div>
         </div>
 
@@ -340,6 +370,12 @@ export default function Items() {
                 <div className="space-y-2">
                   <Label>Unit</Label>
                   <UnitCombobox value={editItem.unit} onChange={v=>setEditItem({...editItem,unit:v})} existingUnits={existingUnits}/>
+                </div>
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={editItem.categoryId} onChange={e=>setEditItem({...editItem,categoryId:e.target.value})}>
+                    <option value="">Select category</option>{(categories || []).map(c=><option key={c.id} value={c.id}>{c.name} — Charge Item {c.chargeItemCode || "not set"}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-2">
                   <Label>Physical Quantity</Label>
