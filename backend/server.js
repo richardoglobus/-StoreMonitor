@@ -3320,9 +3320,17 @@ adapter.write = function(data) {
 downloadFromSupabase().finally(() => {
   // Re-read db after potential Supabase restore
   db.read();
-  // Ensure assets keys exist after Supabase restore (in case old store.json lacks them)
-  if (!db.get('assets').value()) db.set('assets', []).write();
-  if (!db.get('assetCategories').value()) db.set('assetCategories', []).write();
+  // Ensure every collection exists after a Supabase/legacy store restore.
+  // Older backups may omit newer collections such as suppliers, categories, or GRNs.
+  const restoredCollections = [
+    'users', 'departments', 'items', 'inventory', 'receipts', 'issues', 'purchases',
+    'activities', 'assets', 'assetCategories', 'categories', 'grns', 'suppliers',
+    'paymentEntries', 'chartOfAccounts', 'journalEntries', 'stockMovements',
+  ];
+  for (const collection of restoredCollections) {
+    if (!Array.isArray(db.get(collection).value())) db.set(collection, []).write();
+  }
+  if (!db.get('_seq').value() || typeof db.get('_seq').value() !== 'object') db.set('_seq', {}).write();
   runMigrations();
   seedAdmin();
   seedAssets();
