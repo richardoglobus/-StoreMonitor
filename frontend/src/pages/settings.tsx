@@ -310,7 +310,9 @@ export default function SettingsPage() {
         toast.error(message);
         return;
       }
-      toast.success("Backup restored! Refreshing in 2 seconds…");
+      const result = await res.json();
+      const c = result.counts;
+      toast.success(c ? `Backup restored: ${c.items} items, ${c.purchases} purchases, ${c.grns} GRNs. Refreshing…` : "Backup restored! Refreshing in 2 seconds…");
       setTimeout(() => window.location.reload(), 2000);
     } catch (error: any) {
       toast.error(error?.message === "Unexpected end of JSON input" ? "Invalid or incomplete JSON backup file" : (error?.message || "Restore failed"));

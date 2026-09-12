@@ -3174,16 +3174,33 @@ app.get("/api/admin/backup", requirePermission("manageUsers"), (req, res) => {
 
 app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
   try {
-    const data = req.body;
-    if (!data || !data.users || !data.items) return res.status(400).json({error:"Invalid backup file — missing required collections"});
-    // Validate collections
-    const required = ["users","departments","items","purchases","issues","receipts","inventory"];
-    for (const key of required) {
-      if (!Array.isArray(data[key])) return res.status(400).json({error:`Invalid backup: '${key}' must be an array`});
+    const raw = req.body;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return res.status(400).json({error:"Invalid backup file — expected a JSON object"});
+    const data = { ...raw };
+    // Accept older backup names and normalize them to the current schema.
+    const aliases = {
+      items: ["catalogItems", "catalog", "stockItems", "commodities"],
+      purchases: ["purchaseRecords", "purchaseOrders"],
+      grns: ["goodsReceivedNotes", "goodsReceived", "GRN"],
+      suppliers: ["supplierRecords"],
+      categories: ["catalogCategories"],
+    };
+    for (const [canonical, names] of Object.entries(aliases)) {
+      if ((!Array.isArray(data[canonical]) || data[canonical].length === 0)) {
+        const alias = names.find(name => Array.isArray(data[name]) && data[name].length > 0);
+        if (alias) data[canonical] = data[alias];
+      }
     }
+    const collections = ["users","departments","items","inventory","receipts","issues","purchases","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements"];
+    for (const key of collections) if (!Array.isArray(data[key])) data[key] = [];
+    if (!data.users.length || !data.items.length) return res.status(400).json({error:"Invalid backup file — users and catalog items are missing or empty"});
+    data._seq = { ...(data._seq || {}) };
+    for (const key of collections) data._seq[key] = Math.max(Number(data._seq[key]) || 0, ...data[key].map(row => Number(row?.id) || 0));
     db.setState(data).write();
+    // A restore does not restart the process, so run the same migrations used at startup now.
+    runMigrations();
     logActivity(req,"RESTORE_BACKUP","SYSTEM",null,{restoredAt:new Date().toISOString()});
-    res.json({success:true,message:"Backup restored successfully. Please refresh the app."});
+    res.json({success:true,message:"Backup restored successfully. Please refresh the app.", counts:{items:data.items.length,purchases:data.purchases.length,issues:data.issues.length,grns:data.grns.length,suppliers:data.suppliers.length}});
   } catch(err) {
     res.status(500).json({error:"Restore failed: "+err.message});
   }
