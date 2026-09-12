@@ -43,6 +43,7 @@ interface AppSettings {
   requireSupplierName: boolean;
   // Reports & Exports
   reportChargeItem: string;
+  chargeItemCodes: { code: string; name: string }[];
   responsibleOfficer: string;
   storeOfficerTitle: string;
   reportingOfficerTitle: string;
@@ -84,6 +85,7 @@ const DEFAULTS: AppSettings = {
   requireInvoiceNumber: true,
   requireSupplierName: true,
   reportChargeItem: "221102",
+  chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -145,6 +147,8 @@ export default function SettingsPage() {
   const [newOfficerName, setNewOfficerName] = useState("");
   const [editingOfficer, setEditingOfficer] = useState<number|null>(null);
   const [editOfficerName, setEditOfficerName] = useState("");
+  const [newChargeCode, setNewChargeCode] = useState("");
+  const [newChargeCodeName, setNewChargeCodeName] = useState("");
 
   const loadOfficers = async () => {
     setOfficersLoading(true);
@@ -249,6 +253,31 @@ export default function SettingsPage() {
     // Apply appearance changes immediately
     if (key === "appTheme") setAppTheme(value as AppTheme);
     if (key === "appLogo") setAppLogo(value as AppLogo);
+  };
+
+  const addChargeCode = () => {
+    const code = newChargeCode.trim();
+    const name = newChargeCodeName.trim();
+    if (!code || !name) return toast.error("Enter both a charge item code and a name");
+    if (settings.chargeItemCodes.some(c => c.code.toLowerCase() === code.toLowerCase())) return toast.error("That charge item code already exists");
+    update("chargeItemCodes", [...settings.chargeItemCodes, { code, name }]);
+    setNewChargeCode(""); setNewChargeCodeName("");
+  };
+
+  const editChargeCode = (code: string) => {
+    const current = settings.chargeItemCodes.find(c => c.code === code);
+    if (!current) return;
+    const nextCode = prompt("Charge item code:", current.code)?.trim();
+    const nextName = prompt("Description/name:", current.name)?.trim();
+    if (!nextCode || !nextName) return;
+    if (nextCode !== code && settings.chargeItemCodes.some(c => c.code.toLowerCase() === nextCode.toLowerCase())) return toast.error("That charge item code already exists");
+    update("chargeItemCodes", settings.chargeItemCodes.map(c => c.code === code ? { code: nextCode, name: nextName } : c));
+  };
+
+  const deleteChargeCode = (code: string) => {
+    if (!confirm(`Delete charge item code ${code}?`)) return;
+    update("chargeItemCodes", settings.chargeItemCodes.filter(c => c.code !== code));
+    if (settings.reportChargeItem === code) update("reportChargeItem", "");
   };
 
   const toggleDay = (day: string) => {
@@ -486,10 +515,21 @@ export default function SettingsPage() {
 
         {/* 6. Reports & Exports */}
         <SectionCard icon={FileText} title="Reports & Exports" description="Configure what appears on monthly reports and Excel exports.">
+          <div className="space-y-3 border rounded-lg p-3">
+            <div><Label>Charge Item Codes</Label><p className="text-xs text-muted-foreground">Manage the code and description choices used throughout reports and GRNs.</p></div>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
+              <Input value={newChargeCode} onChange={e => setNewChargeCode(e.target.value)} placeholder="Code e.g. 221102" className="font-mono" />
+              <Input value={newChargeCodeName} onChange={e => setNewChargeCodeName(e.target.value)} placeholder="Description/name" />
+              <Button type="button" onClick={addChargeCode}><Plus className="h-4 w-4 mr-1" />Add</Button>
+            </div>
+            <div className="space-y-2">
+              {settings.chargeItemCodes.map(entry => <div key={entry.code} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="font-mono font-medium">{entry.code}</span><span className="flex-1 text-muted-foreground">{entry.name}</span><Button type="button" variant="ghost" size="icon" onClick={() => editChargeCode(entry.code)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteChargeCode(entry.code)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Charge Item Code</Label>
-              <Input value={settings.reportChargeItem} onChange={e => update("reportChargeItem", e.target.value)} placeholder="2211002" className="font-mono" />
+              <select value={settings.reportChargeItem} onChange={e => update("reportChargeItem", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm font-mono"><option value="">Select a code</option>{settings.chargeItemCodes.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}</select>
               <p className="text-xs text-muted-foreground">Used as the report charge item code unless a category-specific code is configured below.</p>
             </div>
             <div className="sm:col-span-2 space-y-2 border rounded-lg p-3">
@@ -498,9 +538,7 @@ export default function SettingsPage() {
               {(catalogCategories || []).map(category => (
                 <div key={category.id} className="flex items-center gap-3">
                   <span className="text-sm font-medium min-w-32">{category.name}</span>
-                  <Input defaultValue={category.chargeItemCode || ""} placeholder="Charge item code" className="font-mono" onBlur={e => {
-                    if (e.target.value !== (category.chargeItemCode || "")) updateCategory.mutate({ categoryId: category.id, data: { chargeItemCode: e.target.value } });
-                  }} />
+                  <select defaultValue={category.chargeItemCode || ""} className="h-10 rounded-md border border-input bg-background px-3 text-sm font-mono" onChange={e => updateCategory.mutate({ categoryId: category.id, data: { chargeItemCode: e.target.value } })}><option value="">No code</option>{settings.chargeItemCodes.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}</select>
                 </div>
               ))}
             </div>

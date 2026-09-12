@@ -4,7 +4,7 @@ import { Layout } from "@/components/layout";
 import {
   useListGrns, getListGrnsQueryKey,
   useCreateGrn, useApproveGrn, useUpdateGrn, useVoidGrn, useDeleteGrn,
-  useListSuppliers,
+  useListSuppliers, useChargeItemCodes,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ export default function GrnPage() {
 
   const { data: grns, isLoading } = useListGrns({}, { query: { queryKey: getListGrnsQueryKey({}) } });
   const { data: suppliers } = useListSuppliers();
+  const { data: chargeItemCodes } = useChargeItemCodes();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListGrnsQueryKey({}) });
 
@@ -142,7 +143,7 @@ export default function GrnPage() {
                       <div className="space-y-1"><Label className="text-xs">Total Cost</Label><Input disabled value={lineTotal(l).toFixed(2)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Batch No.</Label><Input value={l.batchNo} onChange={e => updateLine(i, "batchNo", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Expiry Date</Label><input type="date" className={dateCls} value={l.expiryDate} onChange={e => updateLine(i, "expiryDate", e.target.value)}/></div>
-                      <div className="space-y-1"><Label className="text-xs">Charge Item Code</Label><Input value={l.chargeItemCode} onChange={e => updateLine(i, "chargeItemCode", e.target.value)}/></div>
+                      <div className="space-y-1"><Label className="text-xs">Charge Item Code</Label><select value={l.chargeItemCode} onChange={e => updateLine(i, "chargeItemCode", e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="">Select code</option>{(chargeItemCodes || []).map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}</select></div>
                       <div className="space-y-1"><Label className="text-xs">Folio No.</Label><Input value={l.folioNo} onChange={e => updateLine(i, "folioNo", e.target.value)}/></div>
                     </div>
                   </div>

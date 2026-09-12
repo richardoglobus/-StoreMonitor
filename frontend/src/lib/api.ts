@@ -83,6 +83,7 @@ export type MonthlyReport = {
   }[];
 };
 export type ActivityLog = { id: number; userId: number; username: string | null; action: string; entityType: string; entityId: number | null; details: any; createdAt: string };
+export type ChargeItemCode = { code: string; name: string };
 
 export const ReceiptSource = { KEMSA: "KEMSA", MEDS: "MEDS" } as const;
 
@@ -135,6 +136,13 @@ export function useLogout(options?: MutOpts<void, void>) {
 }
 export function useChangePassword(options?: MutOpts<{ success: boolean; message: string }, { data: { currentPassword: string; newPassword: string } }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<{ success: boolean; message: string }>("/api/auth/change-password", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useChangeUsername(options?: MutOpts<{ success: boolean; username: string }, { username: string }>) {
+  return useMutation({ mutationFn: ({ username }) => apiFetch<{ success: boolean; username: string }>("/api/auth/change-username", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }) }), ...options?.mutation });
+}
+export const getChargeItemCodesQueryKey = () => ["/api/settings/charge-item-codes"] as const;
+export function useChargeItemCodes(options?: QueryOpts<ChargeItemCode[]>) {
+  return useQuery({ queryKey: getChargeItemCodesQueryKey(), queryFn: () => apiFetch<ChargeItemCode[]>("/api/settings/charge-item-codes"), ...options?.query });
 }
 
 export function useListUsers(options?: QueryOpts<AuthUser[]>) {

@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Wifi, WifiOff, Package2, ClipboardList } from "lucide-react";
+import { Wifi, WifiOff, Package2, ClipboardList, Timer } from "lucide-react";
 import {
   LayoutDashboard, Building2, PackageSearch, FileText,
   Download, Menu, ShoppingCart, BarChart3, Users,
@@ -138,6 +138,8 @@ export function Layout({ children }: { children: ReactNode }) {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [maintenanceEndsAt, setMaintenanceEndsAt] = useState<string | null>(null);
+  const [maintenanceRemaining, setMaintenanceRemaining] = useState(0);
 
   useEffect(() => {
     try { localStorage.setItem("sidebar-collapsed", String(collapsed)); } catch {}
@@ -145,6 +147,30 @@ export function Layout({ children }: { children: ReactNode }) {
 
   // Close mobile sheet on navigation
   useEffect(() => { setMobileOpen(false); }, [location]);
+
+  useEffect(() => {
+    if (user?.role !== "admin") { setMaintenanceEndsAt(null); return; }
+    let active = true;
+    const loadMaintenance = async () => {
+      try {
+        const res = await fetch("/api/settings/public", { credentials: "include", cache: "no-store" });
+        const data = await res.json();
+        if (active) setMaintenanceEndsAt(data.maintenanceMode ? data.maintenanceEndsAt : null);
+      } catch { if (active) setMaintenanceEndsAt(null); }
+    };
+    loadMaintenance();
+    const refresh = window.setInterval(loadMaintenance, 30000);
+    return () => { active = false; window.clearInterval(refresh); };
+  }, [user?.role]);
+
+  useEffect(() => {
+    const tick = () => setMaintenanceRemaining(maintenanceEndsAt ? Math.max(0, new Date(maintenanceEndsAt).getTime() - Date.now()) : 0);
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [maintenanceEndsAt]);
+
+  const maintenanceClock = `${String(Math.floor(maintenanceRemaining / 3600000)).padStart(2, "0")}:${String(Math.floor((maintenanceRemaining % 3600000) / 60000)).padStart(2, "0")}:${String(Math.floor((maintenanceRemaining % 60000) / 1000)).padStart(2, "0")}`;
 
   const filteredNavItems = NAV_ITEMS
     .map(item => {
@@ -338,7 +364,15 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Main content */}
       <main className="flex-1 p-4 md:p-8 min-w-0 overflow-auto">
-        <div className="max-w-6xl mx-auto">{children}</div>
+        <div className="max-w-6xl mx-auto">
+          {user?.role === "admin" && maintenanceEndsAt && maintenanceRemaining > 0 && (
+            <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="flex items-center gap-2 text-sm font-medium"><Timer className="h-4 w-4" />Maintenance is active</div>
+              <div className="font-mono text-lg font-bold tabular-nums" aria-label="Maintenance time remaining">{maintenanceClock}</div>
+            </div>
+          )}
+          {children}
+        </div>
       </main>
       <OfflineBanner />
     </div>

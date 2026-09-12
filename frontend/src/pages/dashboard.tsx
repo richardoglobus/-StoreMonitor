@@ -8,7 +8,7 @@ import {
   getGetDashboardSummaryQueryKey, getGetRecentIssuesQueryKey,
   getGetLowStockQueryKey, getGetDepartmentUsageQueryKey,
   getGetTopUsedItemsQueryKey, getListActivityQueryKey, getListItemStockQueryKey,
-  useChangePassword,
+  useChangePassword, useChangeUsername, getGetCurrentUserQueryKey,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 function ChangePasswordDialog() {
   const [open, setOpen] = useState(false);
@@ -93,6 +94,29 @@ function abbrevDept(name: string): string {
     "AMBULANCE":"AMBUL","MAINTAINANCE":"MAINT","LAUNDRY":"LAUNDR",
   };
   return map[name] ?? (name.length > 8 ? name.slice(0,7)+"…" : name);
+}
+
+function ChangeUsernameDialog() {
+  const [open, setOpen] = useState(false);
+  const [username, setUsername] = useState("");
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const changeUsername = useChangeUsername({ mutation: {
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() }); toast.success("Username changed successfully"); setOpen(false); },
+    onError: (err: any) => toast.error(err?.error || "Failed to change username"),
+  }});
+  return (
+    <Dialog open={open} onOpenChange={v => { setOpen(v); if (v) setUsername(user?.username || ""); }}>
+      <DialogTrigger asChild><Button variant="outline" size="sm">Change Username</Button></DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Change Username</DialogTitle></DialogHeader>
+        <form className="space-y-4" onSubmit={e => { e.preventDefault(); changeUsername.mutate({ username: username.trim() }); }}>
+          <div className="space-y-2"><Label htmlFor="new-username">Username</Label><Input id="new-username" value={username} onChange={e => setUsername(e.target.value)} minLength={3} required /></div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={changeUsername.isPending}>{changeUsername.isPending ? "Saving..." : "Save Username"}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function LiveClock() {
@@ -167,6 +191,7 @@ export default function Dashboard() {
             <p className="text-muted-foreground">Overview of hospital stores inventory.</p>
           </div>
           <div className="flex items-center gap-2">
+            <ChangeUsernameDialog />
             <ChangePasswordDialog />
             <Button variant="ghost" size="icon" onClick={() => refetchDash()} disabled={isFetchingDash} title="Refresh">
               <RefreshCw className={`h-4 w-4 ${isFetchingDash ? "animate-spin" : ""}`}/>

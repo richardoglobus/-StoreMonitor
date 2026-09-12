@@ -1644,6 +1644,18 @@ app.patch("/api/auth/change-password",requireAuth,(req,res)=>{
   logActivity(req, "CHANGE_PASSWORD", "USER", user.id, null);
   res.json({success:true,message:"Password changed successfully"});
 });
+app.patch("/api/auth/change-username",requireAuth,(req,res)=>{
+  const username = String(req.body?.username || "").trim();
+  if (!/^[A-Za-z0-9._-]{3,40}$/.test(username)) return res.status(400).json({error:"Username must be 3–40 characters and use only letters, numbers, dot, underscore, or hyphen"});
+  const duplicate = db.get("users").find(u => String(u.username).toLowerCase() === username.toLowerCase() && u.id !== req.session.userId).value();
+  if (duplicate) return res.status(409).json({error:"Username already exists"});
+  const user = db.get("users").find({id:req.session.userId});
+  if (!user.value()) return res.status(401).json({error:"Unauthorized"});
+  user.assign({username}).write();
+  req.session.username = username;
+  logActivity(req, "CHANGE_USERNAME", "USER", req.session.userId, { username });
+  res.json({success:true, username});
+});
 app.get("/api/auth/users",requirePermission("manageUsers"),(_,res)=>{ res.json(db.get("users").orderBy("username","asc").value().map(u=>({id:u.id,username:u.username,fullName:u.fullName,role:u.role,permissions:normalizePermissions(u.role, u.permissions)}))); });
 app.post("/api/auth/users",requireAdmin,(req,res)=>{
   const {username,password,fullName,role,permissions}=req.body;
@@ -2472,6 +2484,7 @@ const DEFAULT_SETTINGS = {
   requireSupplierName: true,
   // Reports & Exports
   reportChargeItem: "221102",
+  chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -2534,7 +2547,13 @@ app.get("/api/settings/public",(req,res)=>{
     maintenanceMode:!!s.maintenanceMode && !!s.maintenanceEndsAt && new Date(s.maintenanceEndsAt).getTime() > Date.now(),
     maintenanceEndsAt:s.maintenanceEndsAt||null,
     maintenanceMessage:s.maintenanceMessage||'System maintenance is in progress. Please check back soon.',
+    chargeItemCodes:Array.isArray(s.chargeItemCodes)?s.chargeItemCodes:[],
   });
+});
+
+app.get("/api/settings/charge-item-codes", requireAuth, (_req, res) => {
+  const codes = getSettings().chargeItemCodes;
+  res.json(Array.isArray(codes) ? codes : []);
 });
 
 app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{
