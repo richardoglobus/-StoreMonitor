@@ -13,7 +13,7 @@ import {
   getGetIssueScheduleQueryKey, getGetMonthlyReportQueryKey,
   getListActivityQueryKey, getListStockMovementsQueryKey,
   getListStockBalancesQueryKey,
-  useCreateIssueVoucher, useDeleteIssue,
+  useCreateIssueVoucher, useDeleteIssue, useBulkDeleteIssues,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -225,6 +225,8 @@ export default function Issues() {
     }
   });
 
+  const bulkDeleteIssues = useBulkDeleteIssues();
+
   const invalidateIssueRelatedData = () => {
     const queryKeys = [
       ["/api/issues"], ["/api/inventory"], ["/api/dashboard"], ["/api/reports"],
@@ -332,10 +334,13 @@ export default function Issues() {
     setDeletionProgress({ done: 0, total: idsToDelete.length });
     try { localStorage.setItem(ISSUE_DELETION_PROGRESS_KEY, JSON.stringify({ done: 0, total: idsToDelete.length })); } catch {}
     try {
-      for (const issueId of idsToDelete) {
-        await deleteIssue.mutateAsync({ issueId });
+      // Delete in bounded batches so each request performs one database write
+      // while the progress bar still advances for large month selections.
+      for (let start = 0; start < idsToDelete.length; start += 100) {
+        const batch = idsToDelete.slice(start, start + 100);
+        const result = await bulkDeleteIssues.mutateAsync({ issueIds: batch });
         setDeletionProgress(progress => {
-          const next = progress ? { ...progress, done: progress.done + 1 } : progress;
+          const next = progress ? { ...progress, done: progress.done + result.deleted } : progress;
           try { if (next) localStorage.setItem(ISSUE_DELETION_PROGRESS_KEY, JSON.stringify(next)); } catch {}
           return next;
         });

@@ -27,7 +27,8 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 const dataPath = process.env.DATA_PATH || path.join(__dirname, "store.json");
 
 let syncTimer = null;
-let syncQueue = Promise.resolve();
+let syncInFlight = false;
+let pendingSyncContent = null;
 
 async function downloadFromSupabase() {
   if (!supabase) return;
@@ -75,23 +76,34 @@ function syncToSupabase() {
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     syncTimer = null;
-    let content;
     try {
-      content = fs.readFileSync(dataPath, "utf8");
+      // Keep only the newest snapshot. Do not queue one full store.json string
+      // for every write; large bulk deletions otherwise exhaust Render memory.
+      pendingSyncContent = fs.readFileSync(dataPath, "utf8");
     } catch (e) {
       console.error("Supabase sync read error:", e.message);
       return;
     }
-    syncQueue = syncQueue.catch(() => {}).then(async () => {
-      try {
-        const { error } = await supabase.storage.from(BUCKET).upload(BACKUP_FILE,
-          Buffer.from(content, "utf8"),
-          { contentType: "application/json", upsert: true }
-        );
-        if (error) console.error("Supabase sync failed:", error.message);
-      } catch (e) { console.error("Supabase sync error:", e.message); }
-    });
+    flushSupabaseSync();
   }, 250);
+}
+
+async function flushSupabaseSync() {
+  if (syncInFlight || !pendingSyncContent) return;
+  syncInFlight = true;
+  const content = pendingSyncContent;
+  pendingSyncContent = null;
+  try {
+    const { error } = await supabase.storage.from(BUCKET).upload(
+      BACKUP_FILE, Buffer.from(content, "utf8"),
+      { contentType: "application/json", upsert: true }
+    );
+    if (error) console.error("Supabase sync failed:", error.message);
+  } catch (e) { console.error("Supabase sync error:", e.message); }
+  finally {
+    syncInFlight = false;
+    if (pendingSyncContent) flushSupabaseSync();
+  }
 }
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -1904,6 +1916,31 @@ app.patch("/api/issues/:id", requirePermission("editIssues"), (req, res) => {
 });
 
 app.delete("/api/issues/:id",requirePermission("deleteIssues"),(req,res)=>{ const id=Number(req.params.id); db.get("issues").remove({id}).write(); logActivity(req, "DELETE_ISSUE", "ISSUE", id, null); res.status(204).send(); });
+app.post("/api/issues/bulk-delete", requirePermission("deleteIssues"), (req, res) => {
+  const ids = Array.isArray(req.body?.issueIds)
+    ? [...new Set(req.body.issueIds.map(Number).filter(Number.isInteger))]
+    : [];
+  if (!ids.length) return res.status(400).json({ error: "No issues selected" });
+  const selected = new Set(ids);
+  const before = db.get("issues").value();
+  const deleted = before.filter(issue => selected.has(Number(issue.id)));
+  if (!deleted.length) return res.json({ deleted: 0, requested: ids.length });
+  db.set("issues", before.filter(issue => !selected.has(Number(issue.id)))).write();
+  const activities = db.get("activities").value();
+  let activityId = Math.max(
+    Number(db.get("_seq.activities").value() || 0),
+    ...activities.map(activity => Number(activity.id) || 0),
+  );
+  activities.push(...deleted.map(issue => ({
+    id: ++activityId, userId: req.session.userId,
+    username: req.session.username || null, action: "DELETE_ISSUE",
+    entityType: "ISSUE", entityId: issue.id, details: null,
+    createdAt: new Date().toISOString(),
+  })));
+  db.set("activities", activities).write();
+  db.set("_seq.activities", activityId).write();
+  res.json({ deleted: deleted.length, requested: ids.length });
+});
 function ensureSupplierByName(name) {
   const normalized = String(name || "").trim().toUpperCase();
   if (!normalized) return null;

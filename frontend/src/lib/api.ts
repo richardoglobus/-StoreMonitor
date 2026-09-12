@@ -236,6 +236,9 @@ export function useCreateIssueVoucher(options?: MutOpts<Issue[], { data: any }>)
 export function useDeleteIssue(options?: MutOpts<void, { issueId: number }>) {
   return useMutation({ mutationFn: ({ issueId }) => apiFetch<void>(`/api/issues/${issueId}`, { method: "DELETE" }), ...options?.mutation });
 }
+export function useBulkDeleteIssues(options?: MutOpts<{ deleted: number; requested: number }, { issueIds: number[] }>) {
+  return useMutation({ mutationFn: ({ issueIds }) => apiFetch<{ deleted: number; requested: number }>("/api/issues/bulk-delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueIds }) }), ...options?.mutation });
+}
 
 // ─── Purchases ─────────────────────────────────────────────────────────────────
 
