@@ -342,6 +342,7 @@ export default function LoginPage(){
   const [effectIdx,setEffectIdx]=useState(0);
   const [resetTokenData,setResetTokenData]=useState<any>(null);
   const [producedBy,setProducedBy]=useState("");
+  const [appVersion,setAppVersion]=useState("dev");
   const [maintenance,setMaintenance]=useState({active:false,endsAt:null as string|null,message:"System maintenance is in progress. Please check back soon."});
   const [maintenanceNow,setMaintenanceNow]=useState(Date.now());
   const [energy,setEnergy]=useState(0);
@@ -371,6 +372,7 @@ export default function LoginPage(){
         if(s.loginEffect) setEffect(s.loginEffect as Effect);
       }
     }).catch(()=>{});
+    fetch(`${API_BASE}/api/version`).then(r=>r.json()).then(v=>{ if(v.version) setAppVersion(String(v.version)); }).catch(()=>{});
     return () => { if(shuffleRef.current) clearInterval(shuffleRef.current); };
   },[]);
   useEffect(()=>{ if(!maintenance.active) return; const timer=setInterval(()=>{ const now=Date.now(); setMaintenanceNow(now); if(maintenance.endsAt && new Date(maintenance.endsAt).getTime() <= now) setMaintenance(v=>({...v,active:false})); },1000); return ()=>clearInterval(timer); },[maintenance.active,maintenance.endsAt]);
@@ -404,7 +406,7 @@ export default function LoginPage(){
   const welcome=WELCOME_META[panel]||WELCOME_META.login;
   const isSignup=panel==="signup";
   const maintenanceRemaining=maintenance.endsAt ? Math.max(0,new Date(maintenance.endsAt).getTime()-maintenanceNow) : 0;
-  const countdown=maintenanceRemaining ? `${String(Math.floor(maintenanceRemaining/3600000)).padStart(2,"0")}:${String(Math.floor((maintenanceRemaining%3600000)/60000)).padStart(2,"0")}:${String(Math.floor((maintenanceRemaining%60000)/1000)).padStart(2,"0")}` : "Soon";
+  const countdown=maintenanceRemaining ? `${String(Math.floor(maintenanceRemaining/86400000)).padStart(2,"0")}d:${String(Math.floor((maintenanceRemaining%86400000)/3600000)).padStart(2,"0")}h:${String(Math.floor((maintenanceRemaining%3600000)/60000)).padStart(2,"0")}m:${String(Math.floor((maintenanceRemaining%60000)/1000)).padStart(2,"0")}s` : "Soon";
 
   const [mounted,setMounted]=useState(false);
   useEffect(()=>{setTimeout(()=>setMounted(true),80);},[]);
@@ -461,7 +463,7 @@ export default function LoginPage(){
           </div>
         </div>
       </div>
-      {producedBy && !maintenance.active && <div style={{position:"fixed",bottom:12,left:0,right:0,zIndex:30,textAlign:"center",color:t.textMuted,fontSize:11}}>Powered by {producedBy}</div>}
+      <div style={{position:"fixed",bottom:12,left:0,right:0,zIndex:30,textAlign:"center",color:t.textMuted,fontSize:11}}>{producedBy ? `Powered by ${producedBy} · ` : ""}Version {appVersion}</div>
     </div>
   );
 }

@@ -44,6 +44,7 @@ interface AppSettings {
   // Reports & Exports
   reportChargeItem: string;
   chargeItemCodes: { code: string; name: string }[];
+  customRoles: { name: string; permissions: Record<string, boolean> }[];
   responsibleOfficer: string;
   storeOfficerTitle: string;
   reportingOfficerTitle: string;
@@ -85,7 +86,8 @@ const DEFAULTS: AppSettings = {
   requireInvoiceNumber: true,
   requireSupplierName: true,
   reportChargeItem: "221102",
-  chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }],
+  chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }, { code: "2211002", name: "NON-PHARM" }],
+  customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -106,6 +108,9 @@ const DEFAULTS: AppSettings = {
 };
 
 const ALL_DAYS = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"];
+const ROLE_PERMISSIONS = [["viewDashboard", "View Dashboard"], ["viewCatalog", "View Catalog"], ["viewDepartments", "View Departments"], ["viewPurchases", "View Purchases"], ["viewIssues", "View Issues"], ["issueItems", "Issue Items"], ["manageCatalog", "Manage Catalog"], ["editCatalog", "Edit Catalog"], ["manageDepartments", "Manage Departments"], ["manageInventory", "Manage Inventory"], ["managePurchases", "Manage Purchases"], ["editPurchases", "Edit Purchases"], ["viewReports", "View Reports"], ["viewAccounts", "View Accounts"], ["manageAccounts", "Manage Accounts"], ["exportData", "Export Data"], ["deleteTransactions", "Delete Transactions"], ["deletePurchases", "Delete Purchases"], ["deleteIssues", "Delete Issues"], ["editIssues", "Edit Issues"], ["viewActivityLogs", "View Activity Logs"], ["manageUsers", "Manage Users & Settings"], ["viewAssets", "View Assets"], ["manageAssets", "Manage Assets"], ["manageDigitalForms", "Manage Digital Forms"]] as const;
+function kenyaLocalToIso(value: string) { if (!value) return null; const [date, time] = value.split("T"); const [year, month, day] = date.split("-").map(Number); const [hour, minute] = time.split(":").map(Number); return new Date(Date.UTC(year, month - 1, day, hour - 3, minute)).toISOString(); }
+function isoToKenyaLocal(value: string | null) { if (!value) return ""; const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value)); const get = (type: string) => parts.find(p => p.type === type)?.value || ""; return `${get("year")}-${get("month")}-${get("day")}T${get("hour")==="24" ? "00" : get("hour")}:${get("minute")}`; }
 
 function SectionCard({ icon: Icon, title, description, children }: any) {
   return (
@@ -244,7 +249,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch(`${API_BASE}/api/settings`, { credentials: "include" })
       .then(r => r.json())
-      .then(data => { setSettings({ ...DEFAULTS, ...data }); setLoading(false); })
+      .then(data => { const merged = { ...DEFAULTS, ...data }; const codes = Array.isArray(merged.chargeItemCodes) ? merged.chargeItemCodes : []; if (!codes.some((c: any) => String(c.code) === "2211002")) codes.push({ code: "2211002", name: "NON-PHARM" }); setSettings({ ...merged, chargeItemCodes: codes, customRoles: Array.isArray(merged.customRoles) ? merged.customRoles : [] }); setLoading(false); })
       .catch(() => { toast.error("Failed to load settings"); setLoading(false); });
   }, []);
 
@@ -292,6 +297,10 @@ export default function SettingsPage() {
   const deleteRole = (name: string) => {
     if (!confirm(`Delete role "${name}"? Users assigned to it must be reassigned first.`)) return;
     update("customRoles", settings.customRoles.filter(r => r.name !== name));
+  };
+
+  const updateRolePermissions = (roleName: string, permission: string, enabled: boolean) => {
+    update("customRoles", settings.customRoles.map(role => role.name === roleName ? { ...role, permissions: { ...role.permissions, [permission]: enabled } } : role));
   };
 
   const toggleDay = (day: string) => {
@@ -415,7 +424,7 @@ export default function SettingsPage() {
           </div>
           <div className="space-y-2">
             {settings.customRoles.length === 0 ? <p className="text-sm text-muted-foreground">No custom roles have been added.</p> : settings.customRoles.map(role => (
-              <div key={role.name} className="flex items-center justify-between rounded-lg border px-3 py-2"><span className="font-medium">{role.name}</span><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteRole(role.name)} title="Delete role"><Trash2 className="h-4 w-4" /></Button></div>
+              <div key={role.name} className="rounded-lg border p-3 space-y-3"><div className="flex items-center justify-between"><span className="font-medium">{role.name}</span><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteRole(role.name)} title="Delete role"><Trash2 className="h-4 w-4" /></Button></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">{ROLE_PERMISSIONS.map(([permission, label]) => <label key={permission} className="flex items-center gap-2"><input type="checkbox" checked={!!role.permissions?.[permission]} onChange={e => updateRolePermissions(role.name, permission, e.target.checked)} /><span>{label}</span></label>)}</div></div>
             ))}
           </div>
           <p className="text-xs text-muted-foreground">After adding a role, assign it from User Management and configure that user’s access rights.</p>
@@ -875,7 +884,7 @@ export default function SettingsPage() {
           <Separator />
           <ToggleRow label="System Under Maintenance" description="Only administrators can log in while active. Existing sessions remain active so users can finish safely." checked={settings.maintenanceMode} onChange={(v: boolean) => update("maintenanceMode", v)} />
           {settings.maintenanceMode && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Maintenance Ends</Label><Input type="datetime-local" className="[color-scheme:light] dark:[color-scheme:dark]" value={settings.maintenanceEndsAt ? settings.maintenanceEndsAt.slice(0,16) : ""} onChange={e => update("maintenanceEndsAt", e.target.value ? new Date(e.target.value).toISOString() : null)} /></div>
+            <div className="space-y-2"><Label>Maintenance Ends (Kenya time — EAT, 24-hour clock)</Label><Input type="datetime-local" className="[color-scheme:light] dark:[color-scheme:dark]" value={isoToKenyaLocal(settings.maintenanceEndsAt)} onChange={e => update("maintenanceEndsAt", kenyaLocalToIso(e.target.value))} /><p className="text-xs text-muted-foreground">Enter time as Kenya local time. For example, 18:30 means 6:30 PM in Kenya.</p></div>
             <div className="space-y-2"><Label>Maintenance Message</Label><Input value={settings.maintenanceMessage} onChange={e => update("maintenanceMessage", e.target.value)} placeholder="System maintenance is in progress." /></div>
           </div>}
         </SectionCard>

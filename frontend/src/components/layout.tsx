@@ -140,6 +140,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [maintenanceEndsAt, setMaintenanceEndsAt] = useState<string | null>(null);
   const [maintenanceRemaining, setMaintenanceRemaining] = useState(0);
+  const [appVersion, setAppVersion] = useState("dev");
 
   useEffect(() => {
     try { localStorage.setItem("sidebar-collapsed", String(collapsed)); } catch {}
@@ -147,6 +148,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   // Close mobile sheet on navigation
   useEffect(() => { setMobileOpen(false); }, [location]);
+  useEffect(() => { fetch("/api/version", { credentials: "include", cache: "no-store" }).then(r => r.json()).then(v => { if (v.version) setAppVersion(String(v.version)); }).catch(() => {}); }, []);
 
   useEffect(() => {
     if (user?.role !== "admin") { setMaintenanceEndsAt(null); return; }
@@ -170,7 +172,7 @@ export function Layout({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, [maintenanceEndsAt]);
 
-  const maintenanceClock = `${String(Math.floor(maintenanceRemaining / 3600000)).padStart(2, "0")}:${String(Math.floor((maintenanceRemaining % 3600000) / 60000)).padStart(2, "0")}:${String(Math.floor((maintenanceRemaining % 60000) / 1000)).padStart(2, "0")}`;
+  const maintenanceClock = `${String(Math.floor(maintenanceRemaining / 86400000)).padStart(2, "0")}d:${String(Math.floor((maintenanceRemaining % 86400000) / 3600000)).padStart(2, "0")}h:${String(Math.floor((maintenanceRemaining % 3600000) / 60000)).padStart(2, "0")}m:${String(Math.floor((maintenanceRemaining % 60000) / 1000)).padStart(2, "0")}s`;
 
   const filteredNavItems = NAV_ITEMS
     .map(item => {
@@ -372,6 +374,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
           )}
           {children}
+          <div className="mt-6 text-center text-xs text-muted-foreground">Version {appVersion}</div>
         </div>
       </main>
       <OfflineBanner />

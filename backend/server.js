@@ -2486,7 +2486,7 @@ const DEFAULT_SETTINGS = {
   requireSupplierName: true,
   // Reports & Exports
   reportChargeItem: "221102",
-  chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }],
+  chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }, { code: "2211002", name: "NON-PHARM" }],
   customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
@@ -2511,7 +2511,10 @@ const DEFAULT_SETTINGS = {
 };
 function getSettings(){
   const stored=db.get("settings").value()||{};
-  return {...DEFAULT_SETTINGS,...stored};
+  const settings={...DEFAULT_SETTINGS,...stored};
+  if (!Array.isArray(settings.chargeItemCodes)) settings.chargeItemCodes = [...DEFAULT_SETTINGS.chargeItemCodes];
+  if (!settings.chargeItemCodes.some(c => String(c.code) === "2211002")) settings.chargeItemCodes.push({ code: "2211002", name: "NON-PHARM" });
+  return settings;
 }
 app.get("/api/settings",requirePermission("manageUsers"),(req,res)=>{
   res.json(getSettings());
