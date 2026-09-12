@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, firstOfMonth, todayStr } from "@/components/date-range-picker";
@@ -157,6 +157,7 @@ function VoucherItemRow({
 const emptyRow = () => ({ itemId: "", quantity: "", note: "", search: "", folioNo: "" });
 
 export default function Issues() {
+  const ISSUE_DELETION_PROGRESS_KEY = "storemonitor.issueDeletionProgress";
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -167,7 +168,19 @@ export default function Issues() {
   const [to, setTo] = useState(todayStr());
   const canDeleteIssues = !!user?.permissions?.deleteIssues || !!user?.permissions?.deleteTransactions;
   const [selectedIssueIds, setSelectedIssueIds] = useState<number[]>([]);
-  const [deletionProgress, setDeletionProgress] = useState<{ done: number; total: number } | null>(null);
+  const [deletionProgress, setDeletionProgress] = useState<{ done: number; total: number } | null>(() => {
+    try {
+      const saved = localStorage.getItem(ISSUE_DELETION_PROGRESS_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+
+  useEffect(() => {
+    try {
+      if (deletionProgress) localStorage.setItem(ISSUE_DELETION_PROGRESS_KEY, JSON.stringify(deletionProgress));
+      else localStorage.removeItem(ISSUE_DELETION_PROGRESS_KEY);
+    } catch { /* Storage may be unavailable in private browsing. */ }
+  }, [deletionProgress]);
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
   const [itemIdFilter, setItemIdFilter] = useState("all");
   const [s11Filter, setS11Filter] = useState("");
@@ -317,16 +330,24 @@ export default function Issues() {
     if (!selectedIssueIds.length || !confirm(`Delete ${selectedIssueIds.length} selected issue${selectedIssueIds.length === 1 ? "" : "s"}?`)) return;
     const idsToDelete = [...selectedIssueIds];
     setDeletionProgress({ done: 0, total: idsToDelete.length });
+    try { localStorage.setItem(ISSUE_DELETION_PROGRESS_KEY, JSON.stringify({ done: 0, total: idsToDelete.length })); } catch {}
     try {
       for (const issueId of idsToDelete) {
         await deleteIssue.mutateAsync({ issueId });
-        setDeletionProgress(progress => progress ? { ...progress, done: progress.done + 1 } : progress);
+        setDeletionProgress(progress => {
+          const next = progress ? { ...progress, done: progress.done + 1 } : progress;
+          try { if (next) localStorage.setItem(ISSUE_DELETION_PROGRESS_KEY, JSON.stringify(next)); } catch {}
+          return next;
+        });
       }
       setSelectedIssueIds([]);
       invalidateIssueRelatedData();
       toast.success("Selected issues deleted");
     } catch { toast.error("Some selected issues could not be deleted"); }
-    finally { setDeletionProgress(null); }
+    finally {
+      setDeletionProgress(null);
+      try { localStorage.removeItem(ISSUE_DELETION_PROGRESS_KEY); } catch {}
+    }
   };
 
   const deleteSingleIssue = (issueId: number) => {
