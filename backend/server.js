@@ -1538,7 +1538,9 @@ app.use(cors({
     cb(new Error("Not allowed by CORS"));
   }
 }));
-app.use(express.json());
+// Backups can contain the full catalog, users, transactions, CCTV logs, and assets.
+// The default Express JSON limit is too small for a real store.json backup.
+app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({extended:true}));
 app.use(compression());
 const isProd = process.env.NODE_ENV === "production";

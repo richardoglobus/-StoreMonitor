@@ -303,10 +303,18 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) { const err = await res.json(); toast.error(err.error || "Restore failed"); return; }
+      if (!res.ok) {
+        const responseText = await res.text();
+        let message = "Restore failed";
+        try { message = JSON.parse(responseText).error || message; } catch { if (responseText) message = responseText.slice(0, 180); }
+        toast.error(message);
+        return;
+      }
       toast.success("Backup restored! Refreshing in 2 seconds…");
       setTimeout(() => window.location.reload(), 2000);
-    } catch { toast.error("Invalid backup file"); }
+    } catch (error: any) {
+      toast.error(error?.message === "Unexpected end of JSON input" ? "Invalid or incomplete JSON backup file" : (error?.message || "Restore failed"));
+    }
     e.target.value = "";
   };
 
