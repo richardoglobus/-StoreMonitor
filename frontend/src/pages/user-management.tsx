@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Layout } from "@/components/layout";
 import {
   useListUsers,
@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
-const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "staff") => {
+const defaultPermissionsByRole = (role: string, customRoles: any[] = []) => {
   if (role === "admin") {
     return {
       viewDashboard: true,
@@ -99,6 +99,8 @@ const defaultPermissionsByRole = (role: "admin" | "manager" | "accountant" | "st
       manageDigitalForms: false,
     };
   }
+  const customRole = customRoles.find(r => r.name === role);
+  if (customRole?.permissions) return { ...customRole.permissions };
   return {
     viewDashboard: true,
     issueItems: true,
@@ -163,11 +165,13 @@ export default function UserManagement() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [customRoles, setCustomRoles] = useState<any[]>([]);
+  useEffect(() => { fetch("/api/settings", { credentials: "include" }).then(r => r.json()).then(s => setCustomRoles(Array.isArray(s.customRoles) ? s.customRoles : [])).catch(() => {}); }, []);
   const [formData, setFormData] = useState({
     username: "",
     password: "",
     fullName: "",
-    role: "staff" as const,
+    role: "staff",
     permissions: defaultPermissionsByRole("staff")
   });
 
@@ -245,7 +249,7 @@ export default function UserManagement() {
       fullName: user.fullName,
       role: user.role
       ,
-      permissions: { ...defaultPermissionsByRole(user.role), ...user.permissions }
+      permissions: { ...defaultPermissionsByRole(user.role, customRoles), ...user.permissions }
     });
     setIsEditOpen(true);
   };
@@ -293,7 +297,7 @@ export default function UserManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label>Role</Label>
-                  <Select value={formData.role} onValueChange={(v: any) => setFormData({...formData, role: v, permissions: defaultPermissionsByRole(v)})}>
+                  <Select value={formData.role} onValueChange={(v: any) => setFormData({...formData, role: v, permissions: defaultPermissionsByRole(v, customRoles)})}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -302,6 +306,7 @@ export default function UserManagement() {
                       <SelectItem value="manager">Manager</SelectItem>
                       <SelectItem value="accountant">Accountant</SelectItem>
                       <SelectItem value="staff">Staff</SelectItem>
+                      {customRoles.map(role => <SelectItem key={role.name} value={role.name}>{role.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -402,7 +407,7 @@ export default function UserManagement() {
               </div>
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={formData.role} onValueChange={(v: any) => setFormData({...formData, role: v, permissions: defaultPermissionsByRole(v)})} disabled={editingUser?.id === currentUser?.id}>
+                  <Select value={formData.role} onValueChange={(v: any) => setFormData({...formData, role: v, permissions: defaultPermissionsByRole(v, customRoles)})} disabled={editingUser?.id === currentUser?.id}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -410,7 +415,8 @@ export default function UserManagement() {
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="accountant">Accountant</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
+                      <SelectItem value="staff">Staff</SelectItem>
+                      {customRoles.map(role => <SelectItem key={role.name} value={role.name}>{role.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 {editingUser?.id === currentUser?.id && <p className="text-[10px] text-muted-foreground">You cannot change your own role</p>}

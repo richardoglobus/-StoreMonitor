@@ -1276,6 +1276,8 @@ function getDefaultPermissions(role) {
       manageDigitalForms: false
     };
   }
+  const customRole = (db.get("settings").value()?.customRoles || []).find(r => r.name === role);
+  if (customRole?.permissions) return { ...customRole.permissions };
   return {
     viewDashboard: true,
     viewCatalog: false, viewDepartments: false, viewPurchases: false, viewIssues: false,
@@ -2485,6 +2487,7 @@ const DEFAULT_SETTINGS = {
   // Reports & Exports
   reportChargeItem: "221102",
   chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }],
+  customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
   reportingOfficerTitle: "Reporting Officer",
@@ -2518,6 +2521,18 @@ app.patch("/api/settings",requirePermission("manageUsers"),(req,res)=>{
   const allowed=Object.keys(DEFAULT_SETTINGS);
   const updates={};
   for(const key of allowed){ if(req.body[key]!==undefined) updates[key]=req.body[key]; }
+  if (updates.customRoles !== undefined) {
+    if (!Array.isArray(updates.customRoles)) return res.status(400).json({ error: "Custom roles must be an array" });
+    const reserved = new Set(["admin", "manager", "accountant", "staff"]);
+    const names = updates.customRoles.map(r => String(r?.name || "").trim());
+    if (names.some(n => !/^[A-Za-z][A-Za-z0-9 _-]{1,39}$/.test(n) || reserved.has(n.toLowerCase()))) return res.status(400).json({ error: "Invalid or reserved role name" });
+    if (new Set(names.map(n => n.toLowerCase())).size !== names.length) return res.status(400).json({ error: "Duplicate role names are not allowed" });
+    const existingUsers = db.get("users").value();
+    const deleted = (current.customRoles || []).map(r => r.name).filter(name => !names.includes(name));
+    const assigned = existingUsers.find(u => deleted.includes(u.role));
+    if (assigned) return res.status(400).json({ error: `Role "${assigned.role}" is assigned to a user and cannot be deleted` });
+    updates.customRoles = updates.customRoles.map(r => ({ name: String(r.name).trim(), permissions: r.permissions && typeof r.permissions === "object" ? r.permissions : {} }));
+  }
   const next={...current,...updates};
   db.set("settings",next).write();
   logActivity(req,"UPDATE_SETTINGS","SETTINGS",null,updates);

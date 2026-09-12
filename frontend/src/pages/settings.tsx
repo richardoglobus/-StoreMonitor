@@ -149,6 +149,7 @@ export default function SettingsPage() {
   const [editOfficerName, setEditOfficerName] = useState("");
   const [newChargeCode, setNewChargeCode] = useState("");
   const [newChargeCodeName, setNewChargeCodeName] = useState("");
+  const [newRoleName, setNewRoleName] = useState("");
 
   const loadOfficers = async () => {
     setOfficersLoading(true);
@@ -280,6 +281,19 @@ export default function SettingsPage() {
     if (settings.reportChargeItem === code) update("reportChargeItem", "");
   };
 
+  const addRole = () => {
+    const name = newRoleName.trim();
+    if (!name) return toast.error("Enter a role name");
+    if (["admin", "manager", "accountant", "staff"].includes(name.toLowerCase()) || settings.customRoles.some(r => r.name.toLowerCase() === name.toLowerCase())) return toast.error("That role already exists or is reserved");
+    update("customRoles", [...settings.customRoles, { name, permissions: {} }]);
+    setNewRoleName("");
+  };
+
+  const deleteRole = (name: string) => {
+    if (!confirm(`Delete role "${name}"? Users assigned to it must be reassigned first.`)) return;
+    update("customRoles", settings.customRoles.filter(r => r.name !== name));
+  };
+
   const toggleDay = (day: string) => {
     const next = settings.issueDays.includes(day)
       ? settings.issueDays.filter(d => d !== day)
@@ -393,6 +407,19 @@ export default function SettingsPage() {
             Unsaved changes — click "Save Settings" to apply.
           </div>
         )}
+
+        <SectionCard icon={Shield} title="User Roles" description="Add custom roles for assigning users. Built-in roles cannot be deleted.">
+          <div className="flex gap-2">
+            <Input value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="New role name e.g. Pharmacist" />
+            <Button type="button" onClick={addRole} className="shrink-0"><Plus className="h-4 w-4 mr-1" />Add Role</Button>
+          </div>
+          <div className="space-y-2">
+            {settings.customRoles.length === 0 ? <p className="text-sm text-muted-foreground">No custom roles have been added.</p> : settings.customRoles.map(role => (
+              <div key={role.name} className="flex items-center justify-between rounded-lg border px-3 py-2"><span className="font-medium">{role.name}</span><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteRole(role.name)} title="Delete role"><Trash2 className="h-4 w-4" /></Button></div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">After adding a role, assign it from User Management and configure that user’s access rights.</p>
+        </SectionCard>
 
         {/* 1. Facility Identity */}
         <SectionCard icon={Building2} title="Facility Identity" description="Names and codes that appear on reports and the app header.">
