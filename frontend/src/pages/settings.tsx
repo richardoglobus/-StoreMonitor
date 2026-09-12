@@ -23,6 +23,7 @@ interface AppSettings {
   maxLoginAttempts: number;
   // Branding
   hospitalName: string;
+  producedBy: string;
   facilityCode: string;
   countyName: string;
   subCountyName: string;
@@ -56,6 +57,9 @@ interface AppSettings {
   shuffleIntervalSeconds: number;
   allowSelfRegistration: boolean;
   selfRegistrationNote: string;
+  maintenanceMode: boolean;
+  maintenanceEndsAt: string | null;
+  maintenanceMessage: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -64,6 +68,7 @@ const DEFAULTS: AppSettings = {
   sessionDurationDays: 30,
   maxLoginAttempts: 5,
   hospitalName: "Mukurweini Hospital Stores",
+  producedBy: "",
   facilityCode: "",
   countyName: "",
   subCountyName: "",
@@ -93,6 +98,9 @@ const DEFAULTS: AppSettings = {
   shuffleIntervalSeconds: 30,
   allowSelfRegistration: false,
   selfRegistrationNote: "New accounts require admin approval before login.",
+  maintenanceMode: false,
+  maintenanceEndsAt: null,
+  maintenanceMessage: "System maintenance is in progress. Please check back soon.",
 };
 
 const ALL_DAYS = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"];
@@ -382,6 +390,11 @@ export default function SettingsPage() {
             <Label>Financial Year</Label>
             <Input value={settings.financialYear} onChange={e => update("financialYear", e.target.value)} placeholder="e.g. 2025/2026" className="max-w-xs" />
             <p className="text-xs text-muted-foreground">Shown on monthly report headers.</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Produced / Powered / Created By</Label>
+            <Input value={settings.producedBy} onChange={e => update("producedBy", e.target.value)} placeholder="e.g. Created by Your Name" />
+            <p className="text-xs text-muted-foreground">Shown discreetly at the bottom of the login screen.</p>
           </div>
         </SectionCard>
 
@@ -794,6 +807,12 @@ export default function SettingsPage() {
               />
             </div>
           )}
+          <Separator />
+          <ToggleRow label="System Under Maintenance" description="Only administrators can log in while active. Existing sessions remain active so users can finish safely." checked={settings.maintenanceMode} onChange={(v: boolean) => update("maintenanceMode", v)} />
+          {settings.maintenanceMode && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Maintenance Ends</Label><Input type="datetime-local" value={settings.maintenanceEndsAt ? settings.maintenanceEndsAt.slice(0,16) : ""} onChange={e => update("maintenanceEndsAt", e.target.value ? new Date(e.target.value).toISOString() : null)} /></div>
+            <div className="space-y-2"><Label>Maintenance Message</Label><Input value={settings.maintenanceMessage} onChange={e => update("maintenanceMessage", e.target.value)} placeholder="System maintenance is in progress." /></div>
+          </div>}
         </SectionCard>
 
         {/* 8. Catalog */}

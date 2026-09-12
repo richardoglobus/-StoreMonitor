@@ -1577,6 +1577,9 @@ app.post("/api/auth/login",(req,res)=>{
   const {username,password}=req.body;
   const user=db.get("users").find({username}).value();
   if(!user||!bcrypt.compareSync(password,user.passwordHash)) return res.status(401).json({error:"Invalid credentials"});
+  const settings = getSettings();
+  const maintenanceActive = !!settings.maintenanceMode && settings.maintenanceEndsAt && new Date(settings.maintenanceEndsAt).getTime() > Date.now();
+  if(maintenanceActive && user.role !== "admin") return res.status(423).json({error:"System maintenance is in progress", maintenanceEndsAt: settings.maintenanceEndsAt});
   req.session.userId=user.id; req.session.username=user.username; req.session.role=user.role;
   const permissions = normalizePermissions(user.role, user.permissions);
   req.session.permissions = permissions;
@@ -2437,6 +2440,10 @@ const DEFAULT_SETTINGS = {
   shuffleIntervalSeconds: 30,
   allowSelfRegistration: false,
   selfRegistrationNote: "New accounts require admin approval before login.",
+  producedBy: "",
+  maintenanceMode: false,
+  maintenanceEndsAt: null,
+  maintenanceMessage: "System maintenance is in progress. Please check back soon.",
 };
 function getSettings(){
   const stored=db.get("settings").value()||{};
@@ -2475,6 +2482,10 @@ app.get("/api/settings/public",(req,res)=>{
     shuffleIntervalSeconds:s.shuffleIntervalSeconds||30,
     allowSelfRegistration:s.allowSelfRegistration||false,
     selfRegistrationNote:s.selfRegistrationNote||'',
+    producedBy:s.producedBy||'',
+    maintenanceMode:!!s.maintenanceMode && !!s.maintenanceEndsAt && new Date(s.maintenanceEndsAt).getTime() > Date.now(),
+    maintenanceEndsAt:s.maintenanceEndsAt||null,
+    maintenanceMessage:s.maintenanceMessage||'System maintenance is in progress. Please check back soon.',
   });
 });
 

@@ -341,12 +341,18 @@ export default function LoginPage(){
   const [allowSignup,setAllowSignup]=useState(false);
   const [effectIdx,setEffectIdx]=useState(0);
   const [resetTokenData,setResetTokenData]=useState<any>(null);
+  const [producedBy,setProducedBy]=useState("");
+  const [maintenance,setMaintenance]=useState({active:false,endsAt:null as string|null,message:"System maintenance is in progress. Please check back soon."});
+  const [maintenanceNow,setMaintenanceNow]=useState(Date.now());
+  const [energy,setEnergy]=useState(0);
   const effects:Effect[]=["split","particles","glass","wave","gradient"];
   const LogoEmoji=LOGOS[appLogo as keyof typeof LOGOS]?.emoji||"🏥";
 
   useEffect(()=>{
     fetch(`${API_BASE}/api/settings/public`).then(r=>r.json()).then(s=>{
       if(s.hospitalName) setHospitalName(s.hospitalName);
+      if(s.producedBy) setProducedBy(s.producedBy);
+      setMaintenance({active:!!s.maintenanceMode,endsAt:s.maintenanceEndsAt||null,message:s.maintenanceMessage||"System maintenance is in progress. Please check back soon."});
       if(s.allowSelfRegistration) setAllowSignup(s.allowSelfRegistration);
 
       if(s.shuffleEffect){
@@ -367,6 +373,7 @@ export default function LoginPage(){
     }).catch(()=>{});
     return () => { if(shuffleRef.current) clearInterval(shuffleRef.current); };
   },[]);
+  useEffect(()=>{ if(!maintenance.active) return; const timer=setInterval(()=>{ const now=Date.now(); setMaintenanceNow(now); if(maintenance.endsAt && new Date(maintenance.endsAt).getTime() <= now) setMaintenance(v=>({...v,active:false})); },1000); return ()=>clearInterval(timer); },[maintenance.active,maintenance.endsAt]);
 
   const shuffleRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
@@ -396,6 +403,8 @@ export default function LoginPage(){
   const meta=PANEL_META[panel]||PANEL_META.login;
   const welcome=WELCOME_META[panel]||WELCOME_META.login;
   const isSignup=panel==="signup";
+  const maintenanceRemaining=maintenance.endsAt ? Math.max(0,new Date(maintenance.endsAt).getTime()-maintenanceNow) : 0;
+  const countdown=maintenanceRemaining ? `${String(Math.floor(maintenanceRemaining/3600000)).padStart(2,"0")}:${String(Math.floor((maintenanceRemaining%3600000)/60000)).padStart(2,"0")}:${String(Math.floor((maintenanceRemaining%60000)/1000)).padStart(2,"0")}` : "Soon";
 
   const [mounted,setMounted]=useState(false);
   useEffect(()=>{setTimeout(()=>setMounted(true),80);},[]);
@@ -405,6 +414,16 @@ export default function LoginPage(){
       <InstallBanner />
       <style>{BASE_CSS+`@keyframes wave{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}} @keyframes blob{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-20px) scale(1.08)}} @keyframes blob2{0%,100%{transform:translate(0,0)}50%{transform:translate(-25px,30px)}}`}</style>
       <EffectBg effect={effect}/>
+      {maintenance.active && maintenanceRemaining > 0 && <div style={{position:"fixed",inset:0,zIndex:20,display:"flex",alignItems:"center",justifyContent:"center",padding:20,color:"white",textAlign:"center"}}>
+        <div style={{width:"100%",maxWidth:560,background:t.formBg,border:`1px solid ${t.inputBorder}`,backdropFilter:"blur(18px)",borderRadius:24,padding:"42px 30px",boxShadow:"0 24px 80px rgba(0,0,0,.45)"}}>
+          <div style={{fontSize:48,marginBottom:10}}>🛠️</div><h1 style={{fontSize:28,margin:"0 0 10px",fontWeight:800}}>System Under Maintenance</h1>
+          <p style={{color:t.textMuted,lineHeight:1.6,margin:"0 auto 18px",maxWidth:420}}>{maintenance.message}</p>
+          <div style={{fontSize:42,fontWeight:900,letterSpacing:3,color:t.accentColor,fontVariantNumeric:"tabular-nums"}}>{countdown}</div><p style={{color:t.textMuted,fontSize:12,marginTop:4}}>Administrators may still sign in</p>
+          <div style={{margin:"26px auto 12px",maxWidth:360,background:"rgba(255,255,255,.08)",borderRadius:16,padding:18}}><div style={{fontSize:13,color:t.textMuted,marginBottom:10}}>Keep the maintenance lights on while you wait</div><button type="button" onClick={()=>setEnergy(v=>Math.min(100,v+10))} style={{border:0,borderRadius:12,padding:"12px 24px",background:t.accentGrad,color:"white",fontWeight:800,cursor:"pointer"}}>⚡ Recharge system ({energy}%)</button><div style={{height:6,background:"rgba(255,255,255,.12)",borderRadius:8,marginTop:14}}><div style={{height:"100%",width:`${energy}%`,background:t.accentColor,borderRadius:8,transition:"width .2s"}}/></div></div>
+          <button type="button" onClick={()=>setMaintenance(v=>({...v,active:false}))} style={{background:"none",border:"1px solid rgba(255,255,255,.22)",borderRadius:10,padding:"9px 16px",color:"white",fontSize:12,cursor:"pointer"}}>Administrator sign in</button>
+          {producedBy && <div style={{color:t.textMuted,fontSize:11,marginTop:22}}>Powered by {producedBy}</div>}
+        </div>
+      </div>}
 
       {/* Reshuffle button */}
       <button onClick={reshuffleEffect} title="Switch style" style={{position:"fixed",top:16,right:16,zIndex:100,background:"rgba(255,255,255,0.1)",backdropFilter:"blur(8px)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:10,padding:"8px 14px",color:"white",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
@@ -412,7 +431,7 @@ export default function LoginPage(){
       </button>
 
       {/* Main card */}
-      <div style={{position:"relative",zIndex:10,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{position:"relative",zIndex:maintenance.active?1:10,minHeight:"100vh",display:maintenance.active?"none":"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <div style={{width:"100%",maxWidth:860,borderRadius:22,overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,0.6)",display:"flex",flexDirection:isSignup?"row-reverse":"row",minHeight:520,animation:shake?"shake 0.5s ease":undefined,transition:"all 0.5s"}}>
 
           {/* Form panel */}
@@ -442,6 +461,7 @@ export default function LoginPage(){
           </div>
         </div>
       </div>
+      {producedBy && !maintenance.active && <div style={{position:"fixed",bottom:12,left:0,right:0,zIndex:30,textAlign:"center",color:t.textMuted,fontSize:11}}>Powered by {producedBy}</div>}
     </div>
   );
 }
