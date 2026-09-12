@@ -7,6 +7,12 @@ import {
   useListIssues, getListIssuesQueryKey,
   useListDepartments, getListDepartmentsQueryKey,
   useListItemStock, getListItemStockQueryKey,
+  getListInventoryQueryKey, getGetDashboardSummaryQueryKey,
+  getGetRecentIssuesQueryKey, getGetLowStockQueryKey,
+  getGetDepartmentUsageQueryKey, getGetTopUsedItemsQueryKey,
+  getGetIssueScheduleQueryKey, getGetMonthlyReportQueryKey,
+  getListActivityQueryKey, getListStockMovementsQueryKey,
+  getListStockBalancesQueryKey,
   useCreateIssueVoucher, useDeleteIssue,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -19,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -160,6 +167,7 @@ export default function Issues() {
   const [to, setTo] = useState(todayStr());
   const canDeleteIssues = !!user?.permissions?.deleteIssues || !!user?.permissions?.deleteTransactions;
   const [selectedIssueIds, setSelectedIssueIds] = useState<number[]>([]);
+  const [deletionProgress, setDeletionProgress] = useState<{ done: number; total: number } | null>(null);
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
   const [itemIdFilter, setItemIdFilter] = useState("all");
   const [s11Filter, setS11Filter] = useState("");
@@ -199,10 +207,25 @@ export default function Issues() {
 
   const deleteIssue = useDeleteIssue({
     mutation: {
-      onSuccess: () => { toast.success("Issue deleted"); queryClient.invalidateQueries({ queryKey: getListIssuesQueryKey(queryParams) }); },
+      onSuccess: () => { invalidateIssueRelatedData(); },
       onError: () => toast.error("Failed to delete issue"),
     }
   });
+
+  const invalidateIssueRelatedData = () => {
+    const queryKeys = [
+      ["/api/issues"], ["/api/inventory"], ["/api/dashboard"], ["/api/reports"],
+      ["/api/activity"], ["/api/accounts/stock-movements"],
+      getListItemStockQueryKey(), getListDepartmentsQueryKey(),
+      getListIssuesQueryKey(queryParams), getGetDashboardSummaryQueryKey(),
+      getGetRecentIssuesQueryKey(), getGetLowStockQueryKey(),
+      getGetDepartmentUsageQueryKey(), getGetTopUsedItemsQueryKey(),
+      getGetIssueScheduleQueryKey(), getGetMonthlyReportQueryKey(),
+      getListActivityQueryKey(), getListStockMovementsQueryKey(),
+      getListStockBalancesQueryKey(), getListInventoryQueryKey({}),
+    ];
+    queryKeys.forEach(queryKey => queryClient.invalidateQueries({ queryKey }));
+  };
 
   const handleVoucherItemChange = (index: number, field: string, value: string) => {
     const next = [...voucherItems];
@@ -292,11 +315,23 @@ export default function Issues() {
   const allFilteredIssuesSelected = filteredIssueIds.length > 0 && filteredIssueIds.every(id => selectedIssueIds.includes(id));
   const deleteSelectedIssues = async () => {
     if (!selectedIssueIds.length || !confirm(`Delete ${selectedIssueIds.length} selected issue${selectedIssueIds.length === 1 ? "" : "s"}?`)) return;
+    const idsToDelete = [...selectedIssueIds];
+    setDeletionProgress({ done: 0, total: idsToDelete.length });
     try {
-      await Promise.all(selectedIssueIds.map(issueId => deleteIssue.mutateAsync({ issueId })));
+      for (const issueId of idsToDelete) {
+        await deleteIssue.mutateAsync({ issueId });
+        setDeletionProgress(progress => progress ? { ...progress, done: progress.done + 1 } : progress);
+      }
       setSelectedIssueIds([]);
+      invalidateIssueRelatedData();
       toast.success("Selected issues deleted");
     } catch { toast.error("Some selected issues could not be deleted"); }
+    finally { setDeletionProgress(null); }
+  };
+
+  const deleteSingleIssue = (issueId: number) => {
+    if (!confirm("Delete this issue?")) return;
+    deleteIssue.mutate({ issueId }, { onSuccess: () => toast.success("Issue deleted") });
   };
 
   return (
@@ -482,6 +517,15 @@ export default function Issues() {
               </Button>
             )}
           </div>
+          {deletionProgress && (
+            <div className="px-3 pb-3 border-t bg-background/80">
+              <div className="flex items-center justify-between gap-3 pt-3 text-xs text-muted-foreground">
+                <span>Deleting issues and refreshing connected records…</span>
+                <span className="font-medium text-foreground">{deletionProgress.done} of {deletionProgress.total}</span>
+              </div>
+              <Progress className="mt-2" value={(deletionProgress.done / deletionProgress.total) * 100} aria-label="Issue deletion progress" />
+            </div>
+          )}
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -547,7 +591,7 @@ export default function Issues() {
                       )}
                       {canDeleteIssues && (
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => { if (confirm("Delete this issue?")) deleteIssue.mutate({ issueId: issue.id }); }}
+                            onClick={() => deleteSingleIssue(issue.id)}
                             disabled={deleteIssue.isPending}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
