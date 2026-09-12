@@ -182,7 +182,7 @@ export default function Issues() {
     } catch { /* Storage may be unavailable in private browsing. */ }
   }, [deletionProgress]);
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
-  const [itemIdFilter, setItemIdFilter] = useState("all");
+  const [itemIdFilter, setItemIdFilter] = useState(() => new URLSearchParams(window.location.search).get("itemId") || "all");
   const [s11Filter, setS11Filter] = useState("");
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);

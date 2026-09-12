@@ -226,10 +226,17 @@ export default function Dashboard() {
                       const available = (item.quantity??0) + item.purchasedTotal;
                       return (
                         <tr key={item.id} className={i%2===0?"bg-white dark:bg-red-950/30":"bg-red-50 dark:bg-red-950/50"}>
-                          <td className="px-3 py-2 font-semibold text-red-900 dark:text-red-200 flex items-center gap-1.5">
-                            <Zap className="h-3 w-3 text-yellow-500 shrink-0"/>
-                            {item.description}
-                            <Badge className="ml-1 text-[9px] px-1 py-0 bg-yellow-400 text-red-900 border-0 font-black">EMERGENCY</Badge>
+                          <td className="px-3 py-2 font-semibold text-red-900 dark:text-red-200">
+                            <button
+                              type="button"
+                              className="flex items-center gap-1.5 text-left underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-red-500 rounded"
+                              onClick={() => setLocation(`/issues?itemId=${item.id}`)}
+                              title={`Open Issues Log for ${item.description}`}
+                            >
+                              <Zap className="h-3 w-3 text-yellow-500 shrink-0"/>
+                              {item.description}
+                              <Badge className="ml-1 text-[9px] px-1 py-0 bg-yellow-400 text-red-900 border-0 font-black">EMERGENCY</Badge>
+                            </button>
                           </td>
                           <td className="px-3 py-2 text-right font-mono text-red-700 dark:text-red-400">{item.quantity??0}</td>
                           <td className="px-3 py-2 text-right font-mono text-red-700 dark:text-red-400">{item.purchasedTotal}</td>
