@@ -810,7 +810,7 @@ export default function SettingsPage() {
           <Separator />
           <ToggleRow label="System Under Maintenance" description="Only administrators can log in while active. Existing sessions remain active so users can finish safely." checked={settings.maintenanceMode} onChange={(v: boolean) => update("maintenanceMode", v)} />
           {settings.maintenanceMode && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Maintenance Ends</Label><Input type="datetime-local" value={settings.maintenanceEndsAt ? settings.maintenanceEndsAt.slice(0,16) : ""} onChange={e => update("maintenanceEndsAt", e.target.value ? new Date(e.target.value).toISOString() : null)} /></div>
+            <div className="space-y-2"><Label>Maintenance Ends</Label><Input type="datetime-local" className="[color-scheme:light] dark:[color-scheme:dark]" value={settings.maintenanceEndsAt ? settings.maintenanceEndsAt.slice(0,16) : ""} onChange={e => update("maintenanceEndsAt", e.target.value ? new Date(e.target.value).toISOString() : null)} /></div>
             <div className="space-y-2"><Label>Maintenance Message</Label><Input value={settings.maintenanceMessage} onChange={e => update("maintenanceMessage", e.target.value)} placeholder="System maintenance is in progress." /></div>
           </div>}
         </SectionCard>

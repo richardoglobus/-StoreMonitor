@@ -47,7 +47,7 @@ function expiryBadge(expiryDate: string | null | undefined) {
   return <Badge variant="outline" className="text-xs text-green-600 border-green-400">{format(parseISO(expiryDate),"dd MMM yyyy")}</Badge>;
 }
 
-const emptyLine = () => ({ itemId: "", quantity: "", unitPrice: "", totalPrice: "", batchNo: "", expiryDate: "", note: "", search: "" });
+const emptyLine = () => ({ itemId: "", quantity: "", unitPrice: "", totalPrice: "", batchNo: "", expiryDate: "", folioNo: "", note: "", search: "" });
 
 const dateInputCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
@@ -58,7 +58,7 @@ export default function Purchases() {
   if (!user?.permissions?.viewPurchases && !user?.permissions?.managePurchases) { setLocation("/"); return null; }
   const canManagePurchases = !!user?.permissions?.managePurchases;
 
-  const canDelete = !!user?.permissions?.deleteTransactions;
+  const canDelete = !!user?.permissions?.deletePurchases || !!user?.permissions?.deleteTransactions;
   const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<number[]>([]);
   const canEdit = !!user?.permissions?.editPurchases;
   const [from, setFrom] = useState(firstOfMonth());
@@ -132,6 +132,7 @@ export default function Purchases() {
           body: JSON.stringify({
             supplierId: Number(header.supplierId),
             invoiceNo: header.invoiceNo.trim() || undefined,
+            folioNo: line.folioNo.trim() || undefined,
             lpoNo: header.lpoNo.trim() || undefined,
             purchasedAt: header.purchasedAt,
             itemId: Number(line.itemId),
@@ -163,7 +164,7 @@ export default function Purchases() {
       const res = await fetch(`${API_BASE}/api/purchases/${editForm.id}`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierId: Number(editForm.supplierId), invoiceNo: editForm.invoiceNo, lpoNo: editForm.lpoNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
+        body: JSON.stringify({ supplierId: Number(editForm.supplierId), invoiceNo: editForm.invoiceNo, folioNo: editForm.folioNo, lpoNo: editForm.lpoNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
       });
       if (!res.ok) { const d = await res.json(); toast.error(d.error || "Update failed"); return; }
       toast.success("Purchase updated");
@@ -174,14 +175,14 @@ export default function Purchases() {
   };
 
   const openEdit = (p: any) => {
-    setEditForm({ id: p.id, supplierId: String(p.supplierId || ""), invoiceNo: p.invoiceNo||"", lpoNo: p.lpoNo||"", quantity: p.quantity, unitPrice: p.unitPrice, purchasedAt: p.purchasedAt, batchNo: (p as any).batchNo||"", expiryDate: (p as any).expiryDate||"", note: p.note||"", itemDescription: p.item?.description||"" });
+    setEditForm({ id: p.id, supplierId: String(p.supplierId || ""), invoiceNo: p.invoiceNo||"", folioNo: p.folioNo||"", lpoNo: p.lpoNo||"", quantity: p.quantity, unitPrice: p.unitPrice, purchasedAt: p.purchasedAt, batchNo: (p as any).batchNo||"", expiryDate: (p as any).expiryDate||"", note: p.note||"", itemDescription: p.item?.description||"" });
     setEditDialogOpen(true);
   };
 
   const fmt = (v: any) => new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES" }).format(Number(v));
 
   const displayed = (purchases || []).filter(p => {
-    const ms = !search || p.supplier?.toLowerCase().includes(search.toLowerCase()) || p.item?.description?.toLowerCase().includes(search.toLowerCase()) || p.invoiceNo?.toLowerCase().includes(search.toLowerCase());
+    const ms = !search || p.supplier?.toLowerCase().includes(search.toLowerCase()) || p.item?.description?.toLowerCase().includes(search.toLowerCase()) || (p.invoiceNo?.toLowerCase().includes(search.toLowerCase()) || p.folioNo?.toLowerCase().includes(search.toLowerCase()));
     return ms;
   });
   const displayedPurchaseIds = displayed.map(p => p.id);
@@ -329,6 +330,10 @@ export default function Purchases() {
                         </div>
                         {/* Row 2: batch + expiry + note */}
                         <div className="col-span-4 space-y-1">
+                          <Label className="text-xs">Folio No.</Label>
+                          <Input className="h-8 text-sm" placeholder="Optional" value={(line as any).folioNo} onChange={e => updateLine(idx, "folioNo", e.target.value)} />
+                        </div>
+                        <div className="col-span-4 space-y-1">
                           <Label className="text-xs">Batch No</Label>
                           <Input className="h-8 text-sm" placeholder="Optional" value={line.batchNo} onChange={e => updateLine(idx,"batchNo",e.target.value)}/>
                         </div>
@@ -386,6 +391,7 @@ export default function Purchases() {
                   <TableHead className="w-28">Date</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead>Invoice</TableHead>
+                  <TableHead>Folio</TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Unit Price</TableHead>
@@ -397,13 +403,14 @@ export default function Purchases() {
               </TableHeader>
               <TableBody>
                 {isLoading ? Array(5).fill(0).map((_,i) => (
-                  <TableRow key={i}>{Array(10).fill(0).map((_,j) => <TableCell key={j}><Skeleton className="h-4 w-full"/></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array(12).fill(0).map((_,j) => <TableCell key={j}><Skeleton className="h-4 w-full"/></TableCell>)}</TableRow>
                 )) : displayed.length > 0 ? displayed.map(p => (
                   <TableRow key={p.id}>
                     {canDelete && <TableCell><Checkbox checked={selectedPurchaseIds.includes(p.id)} onCheckedChange={(checked) => setSelectedPurchaseIds(ids => checked ? [...new Set([...ids, p.id])] : ids.filter(id => id !== p.id))} aria-label={`Select purchase ${p.id}`} /></TableCell>}
                     <TableCell className="text-sm font-medium whitespace-nowrap">{format(parseISO(p.purchasedAt),"d MMM yyyy")}</TableCell>
                     <TableCell className="text-sm font-medium">{p.supplier}</TableCell>
                     <TableCell className="text-xs text-muted-foreground font-mono">{p.invoiceNo||"—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground font-mono">{p.folioNo||"—"}</TableCell>
                     <TableCell><div className="font-medium text-sm">{p.item?.description}</div><div className="text-xs text-muted-foreground">{p.item?.unit}</div></TableCell>
                     <TableCell className="text-right font-mono text-sm">{p.quantity}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{fmt(p.unitPrice)}</TableCell>
@@ -418,7 +425,7 @@ export default function Purchases() {
                     </TableCell>
                   </TableRow>
                 )) : (
-                  <TableRow><TableCell colSpan={10} className="h-32 text-center text-muted-foreground"><ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-40"/>No purchases found for selected date range</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={12} className="h-32 text-center text-muted-foreground"><ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-40"/>No purchases found for selected date range</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -446,6 +453,8 @@ export default function Purchases() {
                     <div className="space-y-2">
                       <Label>Invoice No</Label>
                       <Input value={editForm.invoiceNo} onChange={e => setEditForm({...editForm,invoiceNo:e.target.value})}/>
+                      <Label>Folio No.</Label>
+                      <Input value={editForm.folioNo} onChange={e => setEditForm({...editForm,folioNo:e.target.value})}/>
                       <Label>LPO No.</Label><Input value={editForm.lpoNo || ""} onChange={e => setEditForm({...editForm,lpoNo:e.target.value})}/>
                     </div>
                     <div className="space-y-2">

@@ -158,7 +158,7 @@ export default function Issues() {
 
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());
-  const canDeleteTransactions = !!user?.permissions?.deleteTransactions;
+  const canDeleteIssues = !!user?.permissions?.deleteIssues || !!user?.permissions?.deleteTransactions;
   const [selectedIssueIds, setSelectedIssueIds] = useState<number[]>([]);
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
   const [itemIdFilter, setItemIdFilter] = useState("all");
@@ -474,15 +474,19 @@ export default function Issues() {
             {(search || activeFilterCount > 0) && (
               <span className="text-xs text-muted-foreground ml-1">
                 {filteredIssues.length} result{filteredIssues.length !== 1 ? "s" : ""}
-                {canDeleteTransactions && selectedIssueIds.length > 0 && <Button variant="destructive" size="sm" className="ml-3 gap-1" onClick={deleteSelectedIssues}><Trash2 className="h-3.5 w-3.5"/>Delete selected ({selectedIssueIds.length})</Button>}
               </span>
+            )}
+            {canDeleteIssues && selectedIssueIds.length > 0 && (
+              <Button variant="destructive" size="sm" className="ml-auto gap-1" onClick={deleteSelectedIssues} disabled={deleteIssue.isPending}>
+                <Trash2 className="h-3.5 w-3.5"/>Delete selected ({selectedIssueIds.length})
+              </Button>
             )}
           </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  {canDeleteTransactions && <TableHead className="w-10"><Checkbox checked={allFilteredIssuesSelected} onCheckedChange={(checked) => setSelectedIssueIds(checked ? Array.from(new Set([...selectedIssueIds, ...filteredIssueIds])) : selectedIssueIds.filter(id => !filteredIssueIds.includes(id)))} aria-label="Select filtered issues" /></TableHead>}
+                  {canDeleteIssues && <TableHead className="w-10"><Checkbox checked={allFilteredIssuesSelected} onCheckedChange={(checked) => setSelectedIssueIds(checked ? Array.from(new Set([...selectedIssueIds, ...filteredIssueIds])) : selectedIssueIds.filter(id => !filteredIssueIds.includes(id)))} aria-label="Select filtered issues" /></TableHead>}
                   <TableHead className="w-36">Date</TableHead>
                   <TableHead className="w-24 text-center">Voucher</TableHead>
                   <TableHead>Department</TableHead>
@@ -507,7 +511,7 @@ export default function Issues() {
                   const dayLabel = getWeekdayLabel(issue.issuedAt);
                   return (
                     <TableRow key={issue.id}>
-                      {canDeleteTransactions && <TableCell><Checkbox checked={selectedIssueIds.includes(issue.id)} onCheckedChange={(checked) => setSelectedIssueIds(ids => checked ? [...new Set([...ids, issue.id])] : ids.filter(id => id !== issue.id))} aria-label={`Select issue ${issue.id}`} /></TableCell>}
+                      {canDeleteIssues && <TableCell><Checkbox checked={selectedIssueIds.includes(issue.id)} onCheckedChange={(checked) => setSelectedIssueIds(ids => checked ? [...new Set([...ids, issue.id])] : ids.filter(id => id !== issue.id))} aria-label={`Select issue ${issue.id}`} /></TableCell>}
                       <TableCell className="font-medium text-sm whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
                           <span>{format(new Date(issue.issuedAt + "T00:00:00"), "MMM d, yyyy")}</span>
@@ -541,7 +545,7 @@ export default function Issues() {
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {canDeleteTransactions && (
+                      {canDeleteIssues && (
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
                             onClick={() => { if (confirm("Delete this issue?")) deleteIssue.mutate({ issueId: issue.id }); }}
                             disabled={deleteIssue.isPending}>

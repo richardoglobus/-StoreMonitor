@@ -31,6 +31,8 @@ export type Permissions = {
   manageAccounts: boolean;
   exportData: boolean;
   deleteTransactions: boolean;
+  deletePurchases: boolean;
+  deleteIssues: boolean;
   editCatalog: boolean;
   editPurchases: boolean;
   editIssues: boolean;
@@ -48,7 +50,7 @@ export type CatalogCategory = { id: number; name: string; chargeItemCode: string
 export type InventoryRow = { id: number; departmentId: number; itemId: number; month: string; physicalCount: number; receivedKemsa: number; receivedMeds: number; totalUsed: number; balance: number; item: Item };
 export type Issue = { id: number; voucherId: string | null; folioNo: string | null; s11No: string | null; departmentId: number; itemId: number; quantity: number; issuedAt: string; weekday: string; note: string | null; item: Item; department: Department };
 export type Receipt = { id: number; departmentId: number; itemId: number; source: string; quantity: number; receivedAt: string; item: Item; department: Department };
-export type Purchase = { id: number; supplierId: number; supplier: string; supplierRecord?: Supplier | null; itemId: number; quantity: number; unitPrice: number; invoiceNo: string | null; purchasedAt: string; note: string | null; batchNo?: string | null; expiryDate?: string | null; item: Item };
+export type Purchase = { id: number; supplierId: number; supplier: string; supplierRecord?: Supplier | null; itemId: number; quantity: number; unitPrice: number; invoiceNo: string | null; folioNo?: string | null; purchasedAt: string; note: string | null; batchNo?: string | null; expiryDate?: string | null; item: Item };
 export type DashboardSummary = { month: string; totalDepartments: number; totalItems: number; totalIssuedThisMonth: number; totalReceivedThisMonth: number; lowStockCount: number; outOfStockCount: number; nextIssueDate: string | null; nextIssueWeekday: string | null };
 export type LowStockRow = { departmentId: number; departmentName: string; itemId: number; itemDescription: string; unit: string; balance: number };
 export type DepartmentUsage = { departmentId: number; departmentName: string; totalIssued: number; issueCount: number };

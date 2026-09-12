@@ -1200,6 +1200,8 @@ const ALL_PERMISSIONS = {
   manageAccounts: true,
   exportData: true,
   deleteTransactions: true,
+  deletePurchases: true,
+  deleteIssues: true,
   editCatalog: true,
   editPurchases: true,
   editIssues: true,
@@ -1225,6 +1227,8 @@ function getDefaultPermissions(role) {
       manageAccounts: true,
       exportData: true,
       deleteTransactions: true,
+      deletePurchases: true,
+      deleteIssues: true,
       editCatalog: true,
       editPurchases: true,
       editIssues: true,
@@ -1248,6 +1252,8 @@ function getDefaultPermissions(role) {
       manageAccounts: true,
       exportData: true,
       deleteTransactions: false,
+      deletePurchases: false,
+      deleteIssues: false,
       editCatalog: false,
       editPurchases: true,
       editIssues: false,
@@ -1274,6 +1280,8 @@ function getDefaultPermissions(role) {
     manageAccounts: false,
     exportData: false,
     deleteTransactions: false,
+    deletePurchases: false,
+    deleteIssues: false,
     viewActivityLogs: false,
     manageUsers: false,
     manageAssets: false,
@@ -1300,6 +1308,8 @@ function normalizePermissions(role, permissions) {
     manageAccounts: permissions.manageAccounts !== undefined ? !!permissions.manageAccounts : defaults.manageAccounts,
     exportData: permissions.exportData !== undefined ? !!permissions.exportData : defaults.exportData,
     deleteTransactions: permissions.deleteTransactions !== undefined ? !!permissions.deleteTransactions : defaults.deleteTransactions,
+    deletePurchases: permissions.deletePurchases !== undefined ? !!permissions.deletePurchases : (permissions.deleteTransactions !== undefined ? !!permissions.deleteTransactions : defaults.deletePurchases),
+    deleteIssues: permissions.deleteIssues !== undefined ? !!permissions.deleteIssues : (permissions.deleteTransactions !== undefined ? !!permissions.deleteTransactions : defaults.deleteIssues),
     editCatalog: permissions.editCatalog !== undefined ? !!permissions.editCatalog : defaults.editCatalog,
     editPurchases: permissions.editPurchases !== undefined ? !!permissions.editPurchases : defaults.editPurchases,
     editIssues: permissions.editIssues !== undefined ? !!permissions.editIssues : defaults.editIssues,
@@ -1893,7 +1903,7 @@ app.patch("/api/issues/:id", requirePermission("editIssues"), (req, res) => {
   res.json(row.value());
 });
 
-app.delete("/api/issues/:id",requirePermission("deleteTransactions"),(req,res)=>{ const id=Number(req.params.id); db.get("issues").remove({id}).write(); logActivity(req, "DELETE_ISSUE", "ISSUE", id, null); res.status(204).send(); });
+app.delete("/api/issues/:id",requirePermission("deleteIssues"),(req,res)=>{ const id=Number(req.params.id); db.get("issues").remove({id}).write(); logActivity(req, "DELETE_ISSUE", "ISSUE", id, null); res.status(204).send(); });
 function ensureSupplierByName(name) {
   const normalized = String(name || "").trim().toUpperCase();
   if (!normalized) return null;
@@ -1930,7 +1940,7 @@ function createMatchingGrnForPurchase(purchase, supplier, item, req) {
       unit: item.unit || null, qtyReceived: Number(purchase.quantity),
       unitCost: Number(purchase.unitPrice), totalCost: totalAmount,
       batchNo: purchase.batchNo || null, expiryDate: purchase.expiryDate || null,
-      chargeItemCode: null, folioNo: null,
+      chargeItemCode: null, folioNo: purchase.folioNo || null,
     }],
     totalAmount,
     status: "pending",
@@ -1967,7 +1977,7 @@ app.get("/api/purchases",requireAnyPermission("viewPurchases", "managePurchases"
   res.json(rows.map(r=>({...r, supplier: supplierMap.get(Number(r.supplierId))?.name || r.supplier || "", supplierRecord: supplierMap.get(Number(r.supplierId)) || null, item:itemMap.get(r.itemId)})));
 });
 app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
-  const {supplierId, supplier: legacySupplier, itemId, quantity, unitPrice, purchasedAt, note, invoiceNo, lpoNo}=req.body;
+  const {supplierId, supplier: legacySupplier, itemId, quantity, unitPrice, purchasedAt, note, invoiceNo, folioNo, lpoNo}=req.body;
   const supplier = supplierId
     ? db.get("suppliers").find({ id: Number(supplierId) }).value()
     : ensureSupplierByName(legacySupplier);
@@ -1978,7 +1988,7 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   if(!purchasedAt) return res.status(400).json({error:"Purchase date is required"});
   if(!(Number(quantity) > 0) || !(Number(unitPrice) >= 0)) return res.status(400).json({error:"Quantity and unit price must be valid"});
   const {batchNo,expiryDate}=req.body;
-  const row={id:nextId("purchases"),supplierId:supplier.id,itemId:Number(itemId),quantity:Number(quantity),unitPrice:Number(unitPrice),invoiceNo:String(invoiceNo).trim(),lpoNo:lpoNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
+  const row={id:nextId("purchases"),supplierId:supplier.id,itemId:Number(itemId),quantity:Number(quantity),unitPrice:Number(unitPrice),invoiceNo:String(invoiceNo).trim(),folioNo:folioNo||null,lpoNo:lpoNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
   db.get("purchases").push(row).write();
   const grn = createMatchingGrnForPurchase(row, supplier, item, req);
   logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplierId: supplier.id, itemId: row.itemId, quantity: row.quantity, invoiceNo: row.invoiceNo, grnId: grn.id });
@@ -1991,7 +2001,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
   if (!row.value()) return res.status(404).json({ error: "Purchase not found" });
   const linkedGrn = db.get("grns").find({ sourcePurchaseId: id });
   if (linkedGrn.value()?.status === "approved") return res.status(400).json({ error: "This purchase is linked to an approved GRN and cannot be edited" });
-  const { supplierId, supplier: legacySupplier, invoiceNo, lpoNo, quantity, unitPrice, purchasedAt, batchNo, expiryDate, note } = req.body;
+  const { supplierId, supplier: legacySupplier, invoiceNo, folioNo, lpoNo, quantity, unitPrice, purchasedAt, batchNo, expiryDate, note } = req.body;
   const updates = {};
   if (supplierId !== undefined || legacySupplier !== undefined) {
     const supplier = supplierId ? db.get("suppliers").find({ id: Number(supplierId) }).value() : ensureSupplierByName(legacySupplier);
@@ -1999,6 +2009,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
     updates.supplierId = supplier.id;
   }
   if (invoiceNo !== undefined) updates.invoiceNo = invoiceNo || null;
+  if (folioNo !== undefined) updates.folioNo = folioNo || null;
   if (lpoNo !== undefined) updates.lpoNo = lpoNo || null;
   if (quantity !== undefined) updates.quantity = Number(quantity);
   if (unitPrice !== undefined) updates.unitPrice = Number(unitPrice);
@@ -2017,7 +2028,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
       const totalAmount = Number((Number(updated.quantity) * Number(updated.unitPrice)).toFixed(2));
       linkedGrn.assign({
         date: updated.purchasedAt, lpoNo: updated.lpoNo || null, supplierId: supplier.id, invoiceNo: updated.invoiceNo || null,
-        items: [{ itemCode: String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargeItemCode: null, folioNo: null }],
+        items: [{ itemCode: String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargeItemCode: null, folioNo: updated.folioNo || null }],
         totalAmount,
       }).write();
     }
@@ -2027,7 +2038,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
   res.json({...updated, supplier: supplier?.name || "", supplierRecord: supplier || null});
 });
 
-app.delete("/api/purchases/:id",requirePermission("deleteTransactions"),(req,res)=>{
+app.delete("/api/purchases/:id",requirePermission("deletePurchases"),(req,res)=>{
   const id=Number(req.params.id);
   const linkedGrn=db.get("grns").find({ sourcePurchaseId: id }).value();
   if(linkedGrn?.status === "approved") return res.status(400).json({error:"This purchase is linked to an approved GRN and cannot be deleted"});
@@ -2968,11 +2979,11 @@ app.get("/api/export/purchases.csv", requirePermission("exportData"), (req, res)
   const end = req.query.to || new Date().toISOString().slice(0,10);
   const rows = db.get("purchases").filter(p => p.purchasedAt >= start && p.purchasedAt <= end)
     .orderBy("purchasedAt","asc").value();
-  const lines = [["Date","Supplier","Invoice No","Item","Unit","Qty","Unit Price","Total","Batch No","Expiry Date","Note"].map(csvEscape).join(",")];
+  const lines = [["Date","Supplier","Invoice No","Folio No","Item","Unit","Qty","Unit Price","Total","Batch No","Expiry Date","Note"].map(csvEscape).join(",")];
   for (const p of rows) {
     const item = db.get("items").find({id:p.itemId}).value();
     const total = Number(p.quantity) * Number(p.unitPrice);
-    lines.push([p.purchasedAt, supplierNameForPurchase(p), p.invoiceNo||"", item?.description||"", item?.unit||"", p.quantity, p.unitPrice, total.toFixed(2), p.batchNo||"", p.expiryDate||"", p.note||""].map(csvEscape).join(","));
+    lines.push([p.purchasedAt, supplierNameForPurchase(p), p.invoiceNo||"", p.folioNo||"", item?.description||"", item?.unit||"", p.quantity, p.unitPrice, total.toFixed(2), p.batchNo||"", p.expiryDate||"", p.note||""].map(csvEscape).join(","));
   }
   res.setHeader("Content-Type","text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="purchases_${start}_to_${end}.csv"`);
@@ -2996,7 +3007,7 @@ app.get("/api/export/purchases.xlsx", requirePermission("exportData"), async (re
     ws.addRow([`Purchases: ${start} to ${end}`]).getCell(1).font = {italic:true,color:{argb:"FF6B7280"}};
     ws.addRow([]);
 
-    const headers = ["Date","Supplier","Invoice No","Item","Unit","Qty","Unit Price (KES)","Total (KES)","Batch No","Expiry Date","Note"];
+    const headers = ["Date","Supplier","Invoice No","Folio No","Item","Unit","Qty","Unit Price (KES)","Total (KES)","Batch No","Expiry Date","Note"];
     const hRow = ws.addRow(headers);
     hRow.eachCell(cell => {
       cell.font = {bold:true,color:{argb:"FFFFFFFF"}};
@@ -3010,7 +3021,7 @@ app.get("/api/export/purchases.xlsx", requirePermission("exportData"), async (re
       const total = Number(p.quantity) * Number(p.unitPrice);
       grandTotal += total;
       const row = ws.addRow([
-        p.purchasedAt, supplierNameForPurchase(p), p.invoiceNo||"",
+        p.purchasedAt, supplierNameForPurchase(p), p.invoiceNo||"", p.folioNo||"",
         item?.description||"", item?.unit||"",
         p.quantity, Number(p.unitPrice), total,
         p.batchNo||"", p.expiryDate||"", p.note||""
