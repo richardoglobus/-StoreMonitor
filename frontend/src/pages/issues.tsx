@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -158,6 +159,7 @@ export default function Issues() {
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());
   const canDeleteTransactions = !!user?.permissions?.deleteTransactions;
+  const [selectedIssueIds, setSelectedIssueIds] = useState<number[]>([]);
   const [departmentIdFilter, setDepartmentIdFilter] = useState("all");
   const [itemIdFilter, setItemIdFilter] = useState("all");
   const [s11Filter, setS11Filter] = useState("");
@@ -286,6 +288,16 @@ export default function Issues() {
     }
     return true;
   });
+  const filteredIssueIds = filteredIssues.map(i => i.id);
+  const allFilteredIssuesSelected = filteredIssueIds.length > 0 && filteredIssueIds.every(id => selectedIssueIds.includes(id));
+  const deleteSelectedIssues = async () => {
+    if (!selectedIssueIds.length || !confirm(`Delete ${selectedIssueIds.length} selected issue${selectedIssueIds.length === 1 ? "" : "s"}?`)) return;
+    try {
+      await Promise.all(selectedIssueIds.map(issueId => deleteIssue.mutateAsync({ issueId })));
+      setSelectedIssueIds([]);
+      toast.success("Selected issues deleted");
+    } catch { toast.error("Some selected issues could not be deleted"); }
+  };
 
   return (
     <Layout>
@@ -462,6 +474,7 @@ export default function Issues() {
             {(search || activeFilterCount > 0) && (
               <span className="text-xs text-muted-foreground ml-1">
                 {filteredIssues.length} result{filteredIssues.length !== 1 ? "s" : ""}
+                {canDeleteTransactions && selectedIssueIds.length > 0 && <Button variant="destructive" size="sm" className="ml-3 gap-1" onClick={deleteSelectedIssues}><Trash2 className="h-3.5 w-3.5"/>Delete selected ({selectedIssueIds.length})</Button>}
               </span>
             )}
           </div>
@@ -469,6 +482,7 @@ export default function Issues() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  {canDeleteTransactions && <TableHead className="w-10"><Checkbox checked={allFilteredIssuesSelected} onCheckedChange={(checked) => setSelectedIssueIds(checked ? Array.from(new Set([...selectedIssueIds, ...filteredIssueIds])) : selectedIssueIds.filter(id => !filteredIssueIds.includes(id)))} aria-label="Select filtered issues" /></TableHead>}
                   <TableHead className="w-36">Date</TableHead>
                   <TableHead className="w-24 text-center">Voucher</TableHead>
                   <TableHead>Department</TableHead>
@@ -493,6 +507,7 @@ export default function Issues() {
                   const dayLabel = getWeekdayLabel(issue.issuedAt);
                   return (
                     <TableRow key={issue.id}>
+                      {canDeleteTransactions && <TableCell><Checkbox checked={selectedIssueIds.includes(issue.id)} onCheckedChange={(checked) => setSelectedIssueIds(ids => checked ? [...new Set([...ids, issue.id])] : ids.filter(id => id !== issue.id))} aria-label={`Select issue ${issue.id}`} /></TableCell>}
                       <TableCell className="font-medium text-sm whitespace-nowrap">
                         <div className="flex flex-col gap-0.5">
                           <span>{format(new Date(issue.issuedAt + "T00:00:00"), "MMM d, yyyy")}</span>

@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ export default function Purchases() {
   const canManagePurchases = !!user?.permissions?.managePurchases;
 
   const canDelete = !!user?.permissions?.deleteTransactions;
+  const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<number[]>([]);
   const canEdit = !!user?.permissions?.editPurchases;
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());
@@ -182,6 +184,16 @@ export default function Purchases() {
     const ms = !search || p.supplier?.toLowerCase().includes(search.toLowerCase()) || p.item?.description?.toLowerCase().includes(search.toLowerCase()) || p.invoiceNo?.toLowerCase().includes(search.toLowerCase());
     return ms;
   });
+  const displayedPurchaseIds = displayed.map(p => p.id);
+  const allDisplayedPurchasesSelected = displayedPurchaseIds.length > 0 && displayedPurchaseIds.every(id => selectedPurchaseIds.includes(id));
+  const deleteSelectedPurchases = async () => {
+    if (!selectedPurchaseIds.length || !confirm(`Delete ${selectedPurchaseIds.length} selected purchase${selectedPurchaseIds.length === 1 ? "" : "s"}? Linked pending GRNs will also be removed.`)) return;
+    try {
+      await Promise.all(selectedPurchaseIds.map(purchaseId => deletePurchase.mutateAsync({ purchaseId })));
+      setSelectedPurchaseIds([]);
+      toast.success("Selected purchases deleted");
+    } catch { toast.error("Some selected purchases could not be deleted"); }
+  };
 
   const totalValue = displayed.reduce((s, p) => s + Number(p.quantity) * Number(p.unitPrice), 0);
   const lineTotal = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0);
@@ -363,12 +375,14 @@ export default function Purchases() {
           )}
         </div>
 
+        {canDelete && selectedPurchaseIds.length > 0 && <div className="flex justify-end"><Button variant="destructive" size="sm" className="gap-1" onClick={deleteSelectedPurchases}><Trash2 className="h-3.5 w-3.5"/>Delete selected ({selectedPurchaseIds.length})</Button></div>}
         {/* Table */}
         <Card>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  {canDelete && <TableHead className="w-10"><Checkbox checked={allDisplayedPurchasesSelected} onCheckedChange={(checked) => setSelectedPurchaseIds(checked ? Array.from(new Set([...selectedPurchaseIds, ...displayedPurchaseIds])) : selectedPurchaseIds.filter(id => !displayedPurchaseIds.includes(id)))} aria-label="Select filtered purchases" /></TableHead>}
                   <TableHead className="w-28">Date</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead>Invoice</TableHead>
@@ -386,6 +400,7 @@ export default function Purchases() {
                   <TableRow key={i}>{Array(10).fill(0).map((_,j) => <TableCell key={j}><Skeleton className="h-4 w-full"/></TableCell>)}</TableRow>
                 )) : displayed.length > 0 ? displayed.map(p => (
                   <TableRow key={p.id}>
+                    {canDelete && <TableCell><Checkbox checked={selectedPurchaseIds.includes(p.id)} onCheckedChange={(checked) => setSelectedPurchaseIds(ids => checked ? [...new Set([...ids, p.id])] : ids.filter(id => id !== p.id))} aria-label={`Select purchase ${p.id}`} /></TableCell>}
                     <TableCell className="text-sm font-medium whitespace-nowrap">{format(parseISO(p.purchasedAt),"d MMM yyyy")}</TableCell>
                     <TableCell className="text-sm font-medium">{p.supplier}</TableCell>
                     <TableCell className="text-xs text-muted-foreground font-mono">{p.invoiceNo||"—"}</TableCell>
