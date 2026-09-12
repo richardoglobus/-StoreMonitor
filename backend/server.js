@@ -10,7 +10,19 @@ const FileSync = require("lowdb/adapters/FileSync");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const fs = require("fs");
+const { execFileSync } = require("child_process");
 const { createClient } = require("@supabase/supabase-js");
+// Version 2.1 starts at the current repository commit. Each later Git commit
+// increases the patch number automatically: 2.1.0, 2.1.1, 2.1.2, ...
+const VERSION_BASE_COMMIT_COUNT = 117;
+function getAppVersion() {
+  if (process.env.APP_VERSION) return process.env.APP_VERSION;
+  try {
+    const count = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: path.join(__dirname, ".."), encoding: "utf8" }).trim());
+    if (Number.isFinite(count)) return `2.1.${Math.max(0, count - VERSION_BASE_COMMIT_COUNT)}`;
+  } catch {}
+  return "2.1.0";
+}
 
 // ── Supabase Storage sync ──────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -2541,7 +2553,7 @@ app.patch("/api/settings",requirePermission("manageUsers"),(req,res)=>{
   logActivity(req,"UPDATE_SETTINGS","SETTINGS",null,updates);
   res.json(next);
 });
-app.get("/api/version", (_req, res) => res.json({ version: process.env.RENDER_GIT_COMMIT || process.env.APP_VERSION || "dev" }));
+app.get("/api/version", (_req, res) => res.json({ version: getAppVersion() }));
 app.get("/api/settings/public",(req,res)=>{
   const s=getSettings();
   res.json({
