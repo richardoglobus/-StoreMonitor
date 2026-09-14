@@ -131,7 +131,7 @@ export default function Items() {
       onError: (err: any) => toast.error(err?.error || "Failed to delete item"),
     }
   });
-  const bulkCreate = useBulkCreateItems({ mutation: { onSuccess: (result) => { toast.success(`Imported ${result.created} item(s); skipped ${result.skipped}.`); queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); setBulkOpen(false); setBulkText(""); }, onError: (err: any) => toast.error(err?.error || "Bulk import failed") } });
+  const bulkCreate = useBulkCreateItems({ mutation: { onSuccess: (result) => { queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); queryClient.invalidateQueries({ queryKey: ["/api/items"] }); queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); refetchItems(); const names = (result.createdItems || []).slice(0, 3).map((i: any) => i.description).join(", "); toast.success(`Imported ${result.created} item(s); skipped ${result.skipped}.${names ? ` Added: ${names}${result.created > 3 ? "…" : ""}` : ""}`); setBulkOpen(false); setBulkText(""); }, onError: (err: any) => toast.error(err?.error || "Bulk import failed") } });
   const handleBulkImport = () => {
     const rows = bulkText.trim().split(/\r?\n/).filter(Boolean).map(line => line.split(/\t|,/).map(v => v.trim()));
     const first = rows[0] || [];

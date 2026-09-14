@@ -203,8 +203,8 @@ export function useListItemStock(options?: QueryOpts<ItemStock[]>) {
 export function useCreateItem(options?: MutOpts<Item, { data: { description: string; unit: string; categoryId?: number | null; expiryDate?: string | null } }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<Item>("/api/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
-export function useBulkCreateItems(options?: MutOpts<{ created: number; skipped: number; skippedDescriptions: string[] }, { items: any[] }>) {
-  return useMutation({ mutationFn: ({ items }) => apiFetch<{ created: number; skipped: number; skippedDescriptions: string[] }>("/api/items/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) }), ...options?.mutation });
+export function useBulkCreateItems(options?: MutOpts<{ created: number; skipped: number; skippedDescriptions: string[]; createdItems: Item[] }, { items: any[] }>) {
+  return useMutation({ mutationFn: ({ items }) => apiFetch<{ created: number; skipped: number; skippedDescriptions: string[]; createdItems: Item[] }>("/api/items/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) }), ...options?.mutation });
 }
 export function useUpdateItem(options?: MutOpts<Item, { itemId: number; data: { description?: string; unit?: string; quantity?: number; expiryDate?: string | null } }>) {
   return useMutation({ mutationFn: ({ itemId, data }) => apiFetch<Item>(`/api/items/${itemId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });

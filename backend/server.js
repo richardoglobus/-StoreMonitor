@@ -1837,13 +1837,16 @@ app.post("/api/items/bulk", requirePermission("manageCatalog"), (req, res) => {
     const description = String(input.description || "").trim().toUpperCase();
     const unit = String(input.unit || "").trim().toUpperCase();
     if (!description || !unit || seen.has(description)) { skipped.push(description || "Blank description"); continue; }
-    const row = { id: nextId("items"), description, unit, categoryId: input.categoryId != null && input.categoryId !== "" ? Number(input.categoryId) : null, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null };
+    const categoryId = input.categoryId != null && input.categoryId !== "" ? Number(input.categoryId) : null;
+    const category = categoryId != null && Number.isFinite(categoryId) ? db.get("categories").find({ id: categoryId }).value() : null;
+    if (categoryId != null && (!category || !categoryAllows(req, category, "edit"))) { skipped.push(`${description} (category is not editable by your role)`); continue; }
+    const row = { id: nextId("items"), description, unit, categoryId, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null, createdByUserId: req.session.userId, createdAt: new Date().toISOString() };
     db.get("items").push(row);
     seen.add(description); created.push(row);
   }
   db.write();
   logActivity(req, "BULK_CREATE_ITEMS", "ITEM", null, { created: created.length, skipped: skipped.length });
-  res.status(201).json({ created: created.length, skipped: skipped.length, skippedDescriptions: skipped.slice(0, 25) });
+  res.status(201).json({ created: created.length, skipped: skipped.length, skippedDescriptions: skipped.slice(0, 25), createdItems: created });
 });
 app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
   const id=Number(req.params.id);
