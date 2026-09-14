@@ -2567,6 +2567,8 @@ function getSettings(){
   const stored=db.get("settings").value()||{};
   const settings={...DEFAULT_SETTINGS,...stored};
   if (!Array.isArray(settings.chargeItemCodes)) settings.chargeItemCodes = [...DEFAULT_SETTINGS.chargeItemCodes];
+  const byCode = new Map(settings.chargeItemCodes.map(c => [String(c.code), c]));
+  for (const code of DEFAULT_SETTINGS.chargeItemCodes) if (!byCode.has(String(code.code))) settings.chargeItemCodes.push(code);
   if (!settings.chargeItemCodes.some(c => String(c.code) === "2211002")) settings.chargeItemCodes.push({ code: "2211002", name: "NON-PHARM" });
   return settings;
 }

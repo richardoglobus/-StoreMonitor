@@ -166,6 +166,7 @@ export default function Items() {
 
   // Items where issued > physical + purchased (impossible/data integrity issue)
   const negativeStockItems = (items ?? []).filter(i => i.stockBalance < 0);
+  const expiredItems = (items ?? []).filter(i => i.expired || (i.expiryDate && i.expiryDate < new Date().toISOString().slice(0, 10)));
 
   const getStockColorClass = (balance: number) => {
     if (balance < 0) return "text-white font-bold";
@@ -266,6 +267,12 @@ export default function Items() {
           </div>
         </div>
 
+        {expiredItems.length > 0 && (
+          <div className="border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between"><div><h2 className="font-bold text-amber-800 dark:text-amber-300">Expired Items ({expiredItems.length})</h2><p className="text-xs text-amber-700 dark:text-amber-400">These items are excluded from available stock and cannot be issued.</p></div><Badge variant="destructive">EXPIRED</Badge></div>
+            <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Expiry Date</TableHead><TableHead className="text-right">Recorded Stock</TableHead><TableHead className="text-right">Available</TableHead></TableRow></TableHeader><TableBody>{expiredItems.map(item=><TableRow key={item.id}><TableCell className="font-medium">{item.description}</TableCell><TableCell>{item.categoryName || "—"}</TableCell><TableCell className="font-mono text-destructive font-semibold">{item.expiryDate || "—"}</TableCell><TableCell className="text-right font-mono">{(item.quantity || 0) + (item.purchasedTotal || 0)}</TableCell><TableCell className="text-right font-bold text-destructive">0</TableCell></TableRow>)}</TableBody></Table></div>
+          </div>
+        )}
         {/* Emergency: negative stock banner */}
         {negativeStockItems.length > 0 && (
           <div className="border-2 border-red-500 bg-red-50 dark:bg-red-950/40 rounded-lg p-4 flex flex-col gap-3">
