@@ -88,6 +88,7 @@ export default function Items() {
   const [editItem, setEditItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10", expiryDate: "" });
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
 
   const { data: items, isLoading, refetch: refetchItems, isFetching } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
   const { data: categories } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
@@ -131,14 +132,14 @@ export default function Items() {
       onError: (err: any) => toast.error(err?.error || "Failed to delete item"),
     }
   });
-  const bulkCreate = useBulkCreateItems({ mutation: { onSuccess: (result) => { queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); queryClient.invalidateQueries({ queryKey: ["/api/items"] }); queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); refetchItems(); const names = (result.createdItems || []).slice(0, 3).map((i: any) => i.description).join(", "); toast.success(`Imported ${result.created} item(s); skipped ${result.skipped}.${names ? ` Added: ${names}${result.created > 3 ? "…" : ""}` : ""}`); setBulkOpen(false); setBulkText(""); }, onError: (err: any) => toast.error(err?.error || "Bulk import failed") } });
+  const bulkCreate = useBulkCreateItems({ mutation: { onSuccess: (result) => { queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); queryClient.invalidateQueries({ queryKey: ["/api/items"] }); queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); refetchItems(); const names = (result.createdItems || []).slice(0, 3).map((i: any) => i.description).join(", "); toast.success(`Imported ${result.created} item(s); skipped ${result.skipped}.${names ? ` Added: ${names}${result.created > 3 ? "…" : ""}` : ""}`); setBulkOpen(false); setBulkText(""); setBulkCategoryId(""); }, onError: (err: any) => toast.error(err?.error || "Bulk import failed") } });
   const handleBulkImport = () => {
     const rows = bulkText.trim().split(/\r?\n/).filter(Boolean).map(line => line.split(/\t|,/).map(v => v.trim()));
     const first = rows[0] || [];
     const hasHeader = String(first[0]).toLowerCase() === "description";
     const dataRows = hasHeader ? rows.slice(1) : rows;
-    const items = dataRows.map(r => ({ description: r[0], unit: r[1] || "PIECE", quantity: r[2] || 0, expiryDate: r[3] || null, categoryId: r[4] || null })).filter(r => r.description);
-    if (!items.length) return toast.error("No items found. Use Description, Unit, Quantity, Expiry Date, Category ID columns.");
+    const items = dataRows.map(r => ({ description: r[0], unit: r[1] || "PIECE", quantity: r[2] || 0, expiryDate: r[3] || null, categoryId: bulkCategoryId || r[4] || null })).filter(r => r.description);
+    if (!items.length) return toast.error("No items found. Use Description, Unit, Quantity, Expiry Date, and optionally Category.");
     bulkCreate.mutate({ items });
   };
 
@@ -190,7 +191,7 @@ export default function Items() {
           {canManageCatalog && (
             <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
               <DialogTrigger asChild><Button variant="outline">Bulk Add Items</Button></DialogTrigger>
-              <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Bulk Add Items</DialogTitle></DialogHeader><div className="space-y-3"><p className="text-sm text-muted-foreground">Paste rows copied from Excel. Columns: <strong>Description, Unit, Quantity, Expiry Date, Category ID</strong>. Use one item per line.</p><Textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={12} placeholder={'Description\tUnit\tQuantity\tExpiry Date\tCategory ID\nPARACETAMOL 500MG\tTABLET\t100\t2027-12-31\t1'} /><DialogFooter><Button type="button" variant="outline" onClick={()=>setBulkOpen(false)}>Cancel</Button><Button type="button" onClick={handleBulkImport} disabled={bulkCreate.isPending}>{bulkCreate.isPending ? "Importing..." : "Import Items"}</Button></DialogFooter></div></DialogContent>
+              <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Bulk Add Items</DialogTitle></DialogHeader><div className="space-y-3"><div className="space-y-2"><Label>Assign all imported items to category</Label><select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={bulkCategoryId} onChange={e=>setBulkCategoryId(e.target.value)}><option value="">Choose a category, or use the per-row category column</option>{(categories || []).map(c=><option key={c.id} value={c.id}>{c.name}{c.chargeItemCode ? ` — ${c.chargeItemCode}` : ""}</option>)}</select><p className="text-xs text-muted-foreground">When selected, this category overrides the category column for every row. Leave it blank for mixed-category uploads.</p></div><p className="text-sm text-muted-foreground">Paste rows copied from Excel. Columns: <strong>Description, Unit, Quantity, Expiry Date, Category ID or Category Name</strong>.</p><Textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={12} placeholder={'Description\tUnit\tQuantity\tExpiry Date\tCategory Name\nITEM NAME\tPIECE\t100\t2027-12-31\tFOOD AND RATION'} /><DialogFooter><Button type="button" variant="outline" onClick={()=>setBulkOpen(false)}>Cancel</Button><Button type="button" onClick={handleBulkImport} disabled={bulkCreate.isPending}>{bulkCreate.isPending ? "Importing..." : "Import Items"}</Button></DialogFooter></div></DialogContent>
             </Dialog>
           )}
           {canManageCatalog && (

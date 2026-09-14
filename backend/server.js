@@ -1837,8 +1837,10 @@ app.post("/api/items/bulk", requirePermission("manageCatalog"), (req, res) => {
     const description = String(input.description || "").trim().toUpperCase();
     const unit = String(input.unit || "").trim().toUpperCase();
     if (!description || !unit || seen.has(description)) { skipped.push(description || "Blank description"); continue; }
-    const categoryId = input.categoryId != null && input.categoryId !== "" ? Number(input.categoryId) : null;
-    const category = categoryId != null && Number.isFinite(categoryId) ? db.get("categories").find({ id: categoryId }).value() : null;
+    const rawCategory = input.categoryId != null ? String(input.categoryId).trim() : "";
+    const numericCategoryId = rawCategory !== "" && /^\d+$/.test(rawCategory) ? Number(rawCategory) : null;
+    const category = rawCategory === "" ? null : (numericCategoryId != null ? db.get("categories").find({ id: numericCategoryId }).value() : db.get("categories").value().find(c => String(c.name).trim().toUpperCase() === rawCategory.toUpperCase()));
+    const categoryId = category ? category.id : (rawCategory === "" ? null : numericCategoryId);
     if (categoryId != null && (!category || !categoryAllows(req, category, "edit"))) { skipped.push(`${description} (category is not editable by your role)`); continue; }
     const row = { id: nextId("items"), description, unit, categoryId, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null, createdByUserId: req.session.userId, createdAt: new Date().toISOString() };
     db.get("items").push(row);
