@@ -1,0 +1,522 @@
+[
+  {
+    "code": "2110100",
+    "name": "Basic Salaries - Permanent Employees"
+  },
+  {
+    "code": "2100000",
+    "name": "COMPENSATION OF EMPLOYEES"
+  },
+  {
+    "code": "2110101",
+    "name": "Basic Salaries - Civil Service"
+  },
+  {
+    "code": "2110201",
+    "name": "Contractual Employees"
+  },
+  {
+    "code": "2110202",
+    "name": "Casual Labour - Others"
+  },
+  {
+    "code": "2110200",
+    "name": "Basic Wages - Temporary Employees"
+  },
+  {
+    "code": "2110299",
+    "name": "Basic Wages - Temporary -Other"
+  },
+  {
+    "code": "2110311",
+    "name": "Transfer Allowance"
+  },
+  {
+    "code": "2110320",
+    "name": "Leave Allowance"
+  },
+  {
+    "code": "2110401",
+    "name": "Refund of Medical Expenses - Outpatient"
+  },
+  {
+    "code": "2110402",
+    "name": "Refund of Medical Expenses - Inpatient"
+  },
+  {
+    "code": "2110403",
+    "name": "Refund of Medical Expenses - Ex-Gratia"
+  },
+  {
+    "code": "2210100",
+    "name": "Utilities Supplies and Services"
+  },
+  {
+    "code": "2210101",
+    "name": "Electricity"
+  },
+  {
+    "code": "2210102",
+    "name": "Water and sewerage charges"
+  },
+  {
+    "code": "2210103",
+    "name": "Gas expenses"
+  },
+  {
+    "code": "2210104",
+    "name": "Electricity expenses(Pending Bills)"
+  },
+  {
+    "code": "2210105",
+    "name": "Water and Sewarage expenses(Pending Bills)"
+  },
+  {
+    "code": "2210106",
+    "name": "Utilities, Supplies- Other ("
+  },
+  {
+    "code": "2210200",
+    "name": "Communication, Supplies and Services"
+  },
+  {
+    "code": "2210201",
+    "name": "Telephone, Telex, Facsimile and Mobile Phone Services"
+  },
+  {
+    "code": "2210202",
+    "name": "Internet Connections"
+  },
+  {
+    "code": "2210203",
+    "name": "Courier and Postal Services"
+  },
+  {
+    "code": "2210302",
+    "name": "Accommodation - Domestic Travel"
+  },
+  {
+    "code": "2210303",
+    "name": "Daily Subsistence Allowance"
+  },
+  {
+    "code": "2210402",
+    "name": "Accommodation"
+  },
+  {
+    "code": "2210403",
+    "name": "Daily Subsistence Allowance"
+  },
+  {
+    "code": "2210502",
+    "name": "Publishing and Printing Services"
+  },
+  {
+    "code": "2210503",
+    "name": "Subscriptions to Newspapers, Magazines and Periodicals"
+  },
+  {
+    "code": "2210504",
+    "name": "Advertising, Awareness and Publicity Campaigns"
+  },
+  {
+    "code": "2210505",
+    "name": "Trade Shows and Exhibitions"
+  },
+  {
+    "code": "2210599",
+    "name": "Printing, Advertising - Other"
+  },
+  {
+    "code": "2210500",
+    "name": "Printing, Advertising and Information Supplies and Services"
+  },
+  {
+    "code": "2210606",
+    "name": "Hire of Equipment, Plant and Machinery"
+  },
+  {
+    "code": "2210701",
+    "name": "Travel Allowance"
+  },
+  {
+    "code": "2210703",
+    "name": "Production and Printing of Training Materials"
+  },
+  {
+    "code": "2210704",
+    "name": "Hire of Training Facilities and Equipment"
+  },
+  {
+    "code": "2210705",
+    "name": "Field Training Attachments"
+  },
+  {
+    "code": "2210706",
+    "name": "Book Allowance"
+  },
+  {
+    "code": "2210707",
+    "name": "Project Allowance"
+  },
+  {
+    "code": "2210708",
+    "name": "Trainer Allowance"
+  },
+  {
+    "code": "2210709",
+    "name": "Research Allowance"
+  },
+  {
+    "code": "2210711",
+    "name": "Tuition Fees"
+  },
+  {
+    "code": "2210712",
+    "name": "Trainee Allowance"
+  },
+  {
+    "code": "2210715",
+    "name": "Kenya School of Government"
+  },
+  {
+    "code": "2210716",
+    "name": "Human Resource Reforms"
+  },
+  {
+    "code": "2210700",
+    "name": "Training Expenses"
+  },
+  {
+    "code": "2210799",
+    "name": "Training Expenses - Other (Bud"
+  },
+  {
+    "code": "2210801",
+    "name": "Catering Services (receptions), Accommodation, Gifts, Food and Drinks"
+  },
+  {
+    "code": "2210802",
+    "name": "Boards, Committees, Conferences and Seminars"
+  },
+  {
+    "code": "2210809",
+    "name": "Board Allowance"
+  },
+  {
+    "code": "2210899",
+    "name": "Hospitality Supplies - other ("
+  },
+  {
+    "code": "2210904",
+    "name": "Motor Vehicle Insurance"
+  },
+  {
+    "code": "2211001",
+    "name": "Medical Drugs"
+  },
+  {
+    "code": "2211002",
+    "name": "Dressings and Other Non-Pharmaceutical Medical Items"
+  },
+  {
+    "code": "2211004",
+    "name": "Fungicides, Insecticides and Sprays"
+  },
+  {
+    "code": "2211005",
+    "name": "Chemicals and Industrial Gases"
+  },
+  {
+    "code": "2211006",
+    "name": "Purchase of Workshop Tools, Spares and Small Equipment"
+  },
+  {
+    "code": "2211008",
+    "name": "Laboratory Materials, Supplies and Small Equipment"
+  },
+  {
+    "code": "2211015",
+    "name": "Food and Rations"
+  },
+  {
+    "code": "2211016",
+    "name": "Purchase of Uniforms and Clothing - Staff"
+  },
+  {
+    "code": "2211019",
+    "name": "Purchase of Uniforms and Clothing - Patients"
+  },
+  {
+    "code": "2211021",
+    "name": "Purchase of Bedding and Linen"
+  },
+  {
+    "code": "2211023",
+    "name": "Supplies for Production"
+  },
+  {
+    "code": "2211026",
+    "name": "Purchase of Vaccines and Sera"
+  },
+  {
+    "code": "2211028",
+    "name": "Purchase of X-Rays Supplies"
+  },
+  {
+    "code": "2211029",
+    "name": "Purchase of Safety Gear"
+  },
+  {
+    "code": "2211101",
+    "name": "General Office Supplies (papers, pencils, forms, small office equipment"
+  },
+  {
+    "code": "2211102",
+    "name": "Supplies and Accessories for Computers and Printers"
+  },
+  {
+    "code": "2211103",
+    "name": "Sanitary and Cleaning Materials, Supplies and Services"
+  },
+  {
+    "code": "2211199",
+    "name": "Office and General Supplies -"
+  },
+  {
+    "code": "2211100",
+    "name": "Office and General Supplies and Services"
+  },
+  {
+    "code": "2211201",
+    "name": "Refined Fuels and Lubricants for Transport"
+  },
+  {
+    "code": "2211202",
+    "name": "Refined Fuels and Lubricants for Production"
+  },
+  {
+    "code": "2211203",
+    "name": "Refined Fuels and Lubricants -- Other"
+  },
+  {
+    "code": "2211204",
+    "name": "Other Fuels (wood, charcoal, cooking gas etc\u2026)"
+  },
+  {
+    "code": "2211200",
+    "name": "Fuel Oil and Lubricants"
+  },
+  {
+    "code": "2211299",
+    "name": "Fuel Oil and Lubricants - Othe"
+  },
+  {
+    "code": "2211301",
+    "name": "Bank Service Commission and Charges"
+  },
+  {
+    "code": "2211304",
+    "name": "Medical Expenses"
+  },
+  {
+    "code": "2211305",
+    "name": "Contracted Guards and Cleaning Services"
+  },
+  {
+    "code": "2211310",
+    "name": "Contracted Professional Services"
+  },
+  {
+    "code": "2211311",
+    "name": "Contracted Technical Services"
+  },
+  {
+    "code": "2211329",
+    "name": "HIV/AIDS Secretariat workplace Policy Development"
+  },
+  {
+    "code": "2211332",
+    "name": "Emergency Medical Expenses"
+  },
+  {
+    "code": "2211399",
+    "name": "Other Operating Expenses - Oth"
+  },
+  {
+    "code": "2220101",
+    "name": "Maintenance Expenses - Motor Vehicles"
+  },
+  {
+    "code": "2220105",
+    "name": "Routine Maintenance - Vehicles"
+  },
+  {
+    "code": "2220100",
+    "name": "Routine Maintenance - Vehicles and Other Transport Equipment"
+  },
+  {
+    "code": "2220201",
+    "name": "Maintenance of Plant, Machinery and Equipment (including lifts)"
+  },
+  {
+    "code": "2220202",
+    "name": "Maintenance of Office Furniture and Equipment"
+  },
+  {
+    "code": "2220203",
+    "name": "Maintenance of Medical and Dental Equipment"
+  },
+  {
+    "code": "2220204",
+    "name": "Maintenance of Buildings -- Residential"
+  },
+  {
+    "code": "2220205",
+    "name": "Maintenance of Buildings and Stations -- Non-Residential"
+  },
+  {
+    "code": "2220210",
+    "name": "Maintenance of Computers, Software, and Networks"
+  },
+  {
+    "code": "2220299",
+    "name": "Routine Maintenance - Other As"
+  },
+  {
+    "code": "2610000",
+    "name": "Grants and Other Transfers"
+  },
+  {
+    "code": "3110705",
+    "name": "Purchase of Trucks and Trailers"
+  },
+  {
+    "code": "3110706",
+    "name": "Purchase of Tractors"
+  },
+  {
+    "code": "3110707",
+    "name": "Purchase of Ambulances"
+  },
+  {
+    "code": "3110708",
+    "name": "Purchase of Minibuses and Buses"
+  },
+  {
+    "code": "3110799",
+    "name": "Purchase of Vehicles & Other T"
+  },
+  {
+    "code": "3110700",
+    "name": "Purchase of Vehicles and Other Transport Equipment"
+  },
+  {
+    "code": "3110801",
+    "name": "Overhaul of Vehicles"
+  },
+  {
+    "code": "3110802",
+    "name": "Overhaul of Aircraft"
+  },
+  {
+    "code": "3110803",
+    "name": "Overhaul of Boats"
+  },
+  {
+    "code": "3110899",
+    "name": "Overhaul of Vehicles - Other ("
+  },
+  {
+    "code": "3110800",
+    "name": "Overhaul of Vehicles and Other Transport Equipment"
+  },
+  {
+    "code": "3110901",
+    "name": "Purchase of Household and Institutional Furniture and Fittings"
+  },
+  {
+    "code": "3110902",
+    "name": "Purchase of Household and Institutional Appliances"
+  },
+  {
+    "code": "3110900",
+    "name": "Purchase of Household Furniture and Institutional Equipment"
+  },
+  {
+    "code": "3110999",
+    "name": "Purch. of Household Furn. - Ot"
+  },
+  {
+    "code": "3111001",
+    "name": "Purchase of Office Furniture and Fittings"
+  },
+  {
+    "code": "3111002",
+    "name": "Purchase of Computers, Printers and other IT Equipment"
+  },
+  {
+    "code": "3111003",
+    "name": "Purchase of Airconditioners, Fans and Heating Appliances"
+  },
+  {
+    "code": "3111004",
+    "name": "Purchase of Exchanges and other Communications Equipment"
+  },
+  {
+    "code": "3111005",
+    "name": "Purchase of Photocopiers"
+  },
+  {
+    "code": "3111008",
+    "name": "Purchase of Printing Equipment"
+  },
+  {
+    "code": "3111009",
+    "name": "Purchase of other Office Equipment"
+  },
+  {
+    "code": "3111011",
+    "name": "Purchase of Lighting Equipment"
+  },
+  {
+    "code": "3111099",
+    "name": "Purch. of Office Furn. & Gen. - Other (Budget)"
+  },
+  {
+    "code": "3111000",
+    "name": "Purchase of Office Furniture and General Equipment"
+  },
+  {
+    "code": "3111101",
+    "name": "Purchase of Medical and Dental Equipment"
+  },
+  {
+    "code": "3111102",
+    "name": "Purchase of Boilers, Refrigeration and Air-conditioning Plant"
+  },
+  {
+    "code": "3111107",
+    "name": "Purchase of Laboratory Equipment"
+  },
+  {
+    "code": "3111110",
+    "name": "Purchase of Generators"
+  },
+  {
+    "code": "3111111",
+    "name": "Purchase of ICT networking and Communications Equipment"
+  },
+  {
+    "code": "3111112",
+    "name": "Purchase of Software"
+  },
+  {
+    "code": "3111401",
+    "name": "Pre-feasibility, Feasibility and Appraisal Studies"
+  },
+  {
+    "code": "3120102",
+    "name": "Purchase of Milk"
+  }
+]

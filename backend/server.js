@@ -12,16 +12,17 @@ const path = require("path");
 const fs = require("fs");
 const { execFileSync } = require("child_process");
 const { createClient } = require("@supabase/supabase-js");
+const CHARGE_ITEM_CODES = require("./charge-item-codes.json");
 // Version 2.1 starts at the current repository commit. Each later Git commit
-// increases the patch number automatically: 2.1.0, 2.1.1, 2.1.2, ...
-const VERSION_BASE_COMMIT_COUNT = 117;
+// increases the displayed version automatically: 2.1, 2.2, 2.3, ...
+const VERSION_BASE_COMMIT_COUNT = 118;
 function getAppVersion() {
   if (process.env.APP_VERSION) return process.env.APP_VERSION;
   try {
     const count = Number(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: path.join(__dirname, ".."), encoding: "utf8" }).trim());
-    if (Number.isFinite(count)) return `2.1.${Math.max(0, count - VERSION_BASE_COMMIT_COUNT)}`;
+    if (Number.isFinite(count)) return `2.${Math.max(1, count - VERSION_BASE_COMMIT_COUNT + 1)}`;
   } catch {}
-  return "2.1.0";
+  return "2.1";
 }
 
 // ── Supabase Storage sync ──────────────────────────────────────────────────
@@ -1752,14 +1753,27 @@ app.delete("/api/departments/:id", requirePermission("manageDepartments"), (req,
 });
 
 // CATALOG CATEGORIES
+function categoryAllows(req, category, mode = "view") {
+  if (!category || req.session.role === "admin") return true;
+  const roles = mode === "edit" ? category.editRoles : category.viewRoles;
+  return !Array.isArray(roles) || roles.length === 0 || roles.includes(req.session.role);
+}
+function requireCategoryAccess(req, res, category, mode) {
+  if (!categoryAllows(req, category, mode)) { res.status(403).json({ error: `Your role cannot ${mode} category ${category.name}` }); return false; }
+  return true;
+}
 app.get("/api/catalog/categories", requireAuth, (req, res) => {
-  res.json(db.get("categories").orderBy("name", "asc").value().map(c => ({ ...c, itemCount: db.get("items").filter({ categoryId: c.id }).value().length })));
+  res.json(db.get("categories").orderBy("name", "asc").value().filter(c => categoryAllows(req, c, "view")).map(c => ({ ...c, itemCount: db.get("items").filter({ categoryId: c.id }).value().length })));
+});
+app.get("/api/catalog/roles", requireAuth, (_req, res) => {
+  const custom = getSettings().customRoles || [];
+  res.json(["admin", "manager", "accountant", "staff", ...custom.map(r => r.name)]);
 });
 app.post("/api/catalog/categories", requirePermission("manageCatalog"), (req, res) => {
   const name = String(req.body.name || "").trim().toUpperCase();
   if (!name) return res.status(400).json({ error: "Category name is required" });
   if (db.get("categories").value().some(c => String(c.name).toUpperCase() === name)) return res.status(400).json({ error: "Category already exists" });
-  const row = { id: nextId("categories"), name, chargeItemCode: String(req.body.chargeItemCode || "").trim() || null, createdAt: new Date().toISOString() };
+  const row = { id: nextId("categories"), name, chargeItemCode: String(req.body.chargeItemCode || "").trim() || null, viewRoles: Array.isArray(req.body.viewRoles) ? req.body.viewRoles : [], editRoles: Array.isArray(req.body.editRoles) ? req.body.editRoles : [], createdAt: new Date().toISOString() };
   db.get("categories").push(row).write();
   logActivity(req, "CREATE_CATEGORY", "CATEGORY", row.id, row);
   res.status(201).json({ ...row, itemCount: 0 });
@@ -1768,9 +1782,12 @@ app.patch("/api/catalog/categories/:id", requirePermission("manageCatalog"), (re
   const id = Number(req.params.id);
   const ref = db.get("categories").find({ id });
   if (!ref.value()) return res.status(404).json({ error: "Category not found" });
+  if (!requireCategoryAccess(req, res, ref.value(), "edit")) return;
   const updates = {};
   if (req.body.name !== undefined) updates.name = String(req.body.name).trim().toUpperCase();
   if (req.body.chargeItemCode !== undefined) updates.chargeItemCode = String(req.body.chargeItemCode || "").trim() || null;
+  if (req.body.viewRoles !== undefined) updates.viewRoles = Array.isArray(req.body.viewRoles) ? req.body.viewRoles : [];
+  if (req.body.editRoles !== undefined) updates.editRoles = Array.isArray(req.body.editRoles) ? req.body.editRoles : [];
   ref.assign(updates).write();
   res.json(ref.value());
 });
@@ -1778,14 +1795,15 @@ app.delete("/api/catalog/categories/:id", requirePermission("manageCatalog"), (r
   const id = Number(req.params.id);
   const category = db.get("categories").find({ id }).value();
   if (!category) return res.status(404).json({ error: "Category not found" });
+  if (!requireCategoryAccess(req, res, category, "edit")) return;
   if (db.get("items").find({ categoryId: id }).value()) return res.status(400).json({ error: "Move or reassign items before deleting this category" });
   db.get("categories").remove({ id }).write();
   res.status(204).send();
 });
 
 // ITEMS
-app.get("/api/items",requireAnyPermission("viewCatalog", "manageCatalog"),(_,res)=>res.json(db.get("items").orderBy("description","asc").value()));
-app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),(_,res)=>{
+app.get("/api/items",requireAnyPermission("viewCatalog", "manageCatalog"),(req,res)=>res.json(db.get("items").orderBy("description","asc").value().filter(item => { const c = db.get("categories").find({ id: Number(item.categoryId) }).value(); return !c || categoryAllows(req, c, "view"); })));
+app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),(req,res)=>{
   const items=db.get("items").orderBy("description","asc").value();
   const movementRows=db.get("stockMovements").value();
   const pMap=new Map(),aMap=new Map(),iMap=new Map();
@@ -1794,19 +1812,38 @@ app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),
     if(m.transactionType === "ADJUSTMENT" || m.transactionType === "GRN_REVERSAL") aMap.set(String(m.itemCode),(aMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0)-Number(m.qtyOut||0));
   }
   for(const i of db.get("issues").value()) iMap.set(String(i.itemId),(iMap.get(String(i.itemId))||0)+Number(i.quantity||0));
-  res.json(items.map(it=>{
+  res.json(items.filter(it => { const c = db.get("categories").find({ id: Number(it.categoryId) }).value(); return !c || categoryAllows(req, c, "view"); }).map(it=>{
     const opening=Number(it.quantity)||0, purchased=pMap.get(String(it.id))||0, issued=iMap.get(String(it.id))||0, adjustments=aMap.get(String(it.id))||0;
     const category = db.get("categories").find({ id: Number(it.categoryId) }).value();
-    return { id:it.id, description:it.description, unit:it.unit, categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:opening+purchased+adjustments-issued };
+    const rawBalance=opening+purchased+adjustments-issued, expired=!!it.expiryDate && it.expiryDate < new Date().toISOString().slice(0,10);
+    return { id:it.id, description:it.description, unit:it.unit, categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:expired ? 0 : rawBalance, rawStockBalance:rawBalance, expiryDate:it.expiryDate || null, expired };
   }));
 });
 app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
   const {description,unit,quantity}=req.body; if(!description||!unit) return res.status(400).json({error:"Missing fields"});
   if(db.get("items").find({description}).value()) return res.status(400).json({error:"Already exists"});
-  const row={id:nextId("items"),description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),categoryId:req.body.categoryId!=null?Number(req.body.categoryId):null,quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null};
+  const row={id:nextId("items"),description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),categoryId:req.body.categoryId!=null?Number(req.body.categoryId):null,quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null,expiryDate:req.body.expiryDate||null};
   db.get("items").push(row).write();
   logActivity(req, "CREATE_ITEM", "ITEM", row.id, { description: row.description });
   res.status(201).json(row);
+});
+app.post("/api/items/bulk", requirePermission("manageCatalog"), (req, res) => {
+  const rows = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!rows.length || rows.length > 5000) return res.status(400).json({ error: "Provide between 1 and 5000 items" });
+  const existing = db.get("items").value();
+  const seen = new Set(existing.map(i => String(i.description).toUpperCase()));
+  const created = [], skipped = [];
+  for (const input of rows) {
+    const description = String(input.description || "").trim().toUpperCase();
+    const unit = String(input.unit || "").trim().toUpperCase();
+    if (!description || !unit || seen.has(description)) { skipped.push(description || "Blank description"); continue; }
+    const row = { id: nextId("items"), description, unit, categoryId: input.categoryId != null && input.categoryId !== "" ? Number(input.categoryId) : null, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null };
+    db.get("items").push(row);
+    seen.add(description); created.push(row);
+  }
+  db.write();
+  logActivity(req, "BULK_CREATE_ITEMS", "ITEM", null, { created: created.length, skipped: skipped.length });
+  res.status(201).json({ created: created.length, skipped: skipped.length, skippedDescriptions: skipped.slice(0, 25) });
 });
 app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
   const id=Number(req.params.id);
@@ -1824,6 +1861,7 @@ app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
   if(unit!==undefined) updates.unit=String(unit).trim().toUpperCase();
   if(req.body.lowStockThreshold!==undefined) updates.lowStockThreshold=req.body.lowStockThreshold===''||req.body.lowStockThreshold===null?null:Number(req.body.lowStockThreshold);
   if(req.body.categoryId!==undefined) updates.categoryId=req.body.categoryId===''||req.body.categoryId===null?null:Number(req.body.categoryId);
+  if(req.body.expiryDate!==undefined) updates.expiryDate=req.body.expiryDate || null;
   if(quantity!==undefined) updates.quantity=Number(quantity)||0;
   row.assign(updates).write();
   logActivity(req, "UPDATE_ITEM", "ITEM", id, updates);
@@ -1895,6 +1933,8 @@ app.get("/api/issues",requireAnyPermission("viewIssues", "issueItems"),(req,res)
 });
 app.post("/api/issues",requirePermission("issueItems"),(req,res)=>{
   const {departmentId,itemId,quantity,issuedAt,folioNo,s11No,note}=req.body;
+  const issueItem = db.get("items").find({ id: Number(itemId) }).value();
+  if (issueItem?.expiryDate && issueItem.expiryDate < new Date().toISOString().slice(0,10)) return res.status(400).json({ error: `${issueItem.description} has expired and cannot be issued` });
   const available = getCurrentStockForItem(itemId);
   if (available <= 0) return res.status(400).json({ error: "Item is out of stock" });
   if (Number(quantity) > available) return res.status(400).json({ error: "Quantity exceeds stock in hand" });
@@ -1909,6 +1949,8 @@ app.post("/api/issues/voucher",requirePermission("issueItems"),(req,res)=>{
   if(!s11No||!String(s11No).trim()) return res.status(400).json({error:"S11 number is required"});
   if(!items||!items.length) return res.status(400).json({error:"No items"});
   for (const it of items) {
+    const issueItem = db.get("items").find({ id: Number(it.itemId) }).value();
+    if (issueItem?.expiryDate && issueItem.expiryDate < new Date().toISOString().slice(0,10)) return res.status(400).json({ error: `${issueItem.description} has expired and cannot be issued` });
     if(!it.folioNo||!String(it.folioNo).trim()) return res.status(400).json({error:"Folio number required for each item"});
     const available = getCurrentStockForItem(it.itemId);
     if (available <= 0) return res.status(400).json({ error: "One or more items are out of stock" });
@@ -2498,7 +2540,7 @@ const DEFAULT_SETTINGS = {
   requireSupplierName: true,
   // Reports & Exports
   reportChargeItem: "221102",
-  chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }, { code: "2211002", name: "NON-PHARM" }],
+  chargeItemCodes: CHARGE_ITEM_CODES,
   customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",

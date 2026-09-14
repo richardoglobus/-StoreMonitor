@@ -98,8 +98,8 @@ function VoucherItemRow({
               {filtered.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-muted-foreground">No items match</div>
               ) : filtered.map(item => (
-                <SelectItem key={item.id} value={item.id.toString()} disabled={item.stockBalance <= 0}>
-                  {item.description} ({item.stockBalance} {item.unit})
+                <SelectItem key={item.id} value={item.id.toString()} disabled={item.stockBalance <= 0 || item.expired}>
+                  {item.description} ({item.expired ? "EXPIRED" : `${item.stockBalance} ${item.unit}`})
                 </SelectItem>
               ))}
             </SelectContent>

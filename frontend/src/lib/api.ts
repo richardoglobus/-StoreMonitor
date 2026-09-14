@@ -44,9 +44,9 @@ export type Permissions = {
 };
 export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
 export type Department = { id: number; name: string; slug: string };
-export type Item = { id: number; description: string; unit: string; quantity: number; categoryId?: number | null; categoryName?: string | null };
-export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; adjustmentTotal: number; stockBalance: number };
-export type CatalogCategory = { id: number; name: string; chargeItemCode: string | null; itemCount?: number; createdAt?: string };
+export type Item = { id: number; description: string; unit: string; quantity: number; categoryId?: number | null; categoryName?: string | null; expiryDate?: string | null; expired?: boolean };
+export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; adjustmentTotal: number; stockBalance: number; rawStockBalance?: number };
+export type CatalogCategory = { id: number; name: string; chargeItemCode: string | null; viewRoles?: string[]; editRoles?: string[]; itemCount?: number; createdAt?: string };
 export type InventoryRow = { id: number; departmentId: number; itemId: number; month: string; physicalCount: number; receivedKemsa: number; receivedMeds: number; totalUsed: number; balance: number; item: Item };
 export type Issue = { id: number; voucherId: string | null; folioNo: string | null; s11No: string | null; departmentId: number; itemId: number; quantity: number; issuedAt: string; weekday: string; note: string | null; item: Item; department: Department };
 export type Receipt = { id: number; departmentId: number; itemId: number; source: string; quantity: number; receivedAt: string; item: Item; department: Department };
@@ -183,10 +183,13 @@ export function useListItems(options?: QueryOpts<Item[]>) {
 export function useListCategories(options?: QueryOpts<CatalogCategory[]>) {
   return useQuery({ queryKey: getListCategoriesQueryKey(), queryFn: () => apiFetch<CatalogCategory[]>("/api/catalog/categories"), ...options?.query });
 }
-export function useCreateCategory(options?: MutOpts<CatalogCategory, { data: { name: string; chargeItemCode?: string } }>) {
+export function useListCatalogRoles(options?: QueryOpts<string[]>) {
+  return useQuery({ queryKey: ["/api/catalog/roles"], queryFn: () => apiFetch<string[]>("/api/catalog/roles"), ...options?.query });
+}
+export function useCreateCategory(options?: MutOpts<CatalogCategory, { data: { name: string; chargeItemCode?: string; viewRoles?: string[]; editRoles?: string[] } }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<CatalogCategory>("/api/catalog/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
-export function useUpdateCategory(options?: MutOpts<CatalogCategory, { categoryId: number; data: { name?: string; chargeItemCode?: string } }>) {
+export function useUpdateCategory(options?: MutOpts<CatalogCategory, { categoryId: number; data: { name?: string; chargeItemCode?: string; viewRoles?: string[]; editRoles?: string[] } }>) {
   return useMutation({ mutationFn: ({ categoryId, data }) => apiFetch<CatalogCategory>(`/api/catalog/categories/${categoryId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
 export function useDeleteCategory(options?: MutOpts<void, { categoryId: number }>) {
@@ -197,10 +200,13 @@ export function useListItemStock(options?: QueryOpts<ItemStock[]>) {
   return useQuery({ queryKey: getListItemStockQueryKey(), queryFn: () => apiFetch<ItemStock[]>("/api/items/stock"), ...options?.query });
 }
 
-export function useCreateItem(options?: MutOpts<Item, { data: { description: string; unit: string; categoryId?: number | null } }>) {
+export function useCreateItem(options?: MutOpts<Item, { data: { description: string; unit: string; categoryId?: number | null; expiryDate?: string | null } }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<Item>("/api/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
-export function useUpdateItem(options?: MutOpts<Item, { itemId: number; data: { description?: string; unit?: string; quantity?: number } }>) {
+export function useBulkCreateItems(options?: MutOpts<{ created: number; skipped: number; skippedDescriptions: string[] }, { items: any[] }>) {
+  return useMutation({ mutationFn: ({ items }) => apiFetch<{ created: number; skipped: number; skippedDescriptions: string[] }>("/api/items/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) }), ...options?.mutation });
+}
+export function useUpdateItem(options?: MutOpts<Item, { itemId: number; data: { description?: string; unit?: string; quantity?: number; expiryDate?: string | null } }>) {
   return useMutation({ mutationFn: ({ itemId, data }) => apiFetch<Item>(`/api/items/${itemId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
 export function useDeleteItem(options?: MutOpts<void, { itemId: number }>) {

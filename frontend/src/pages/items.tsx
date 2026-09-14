@@ -4,6 +4,7 @@ import {
   useListItemStock, getListItemStockQueryKey,
   useListCategories, getListCategoriesQueryKey,
   useCreateItem, useUpdateItem, useDeleteItem,
+  useBulkCreateItems,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PackageSearch, Plus, Search, Pencil, Trash2, AlertCircle, Zap, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -82,8 +84,10 @@ export default function Items() {
   const [editItemId, setEditItemId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
-  const [newItem, setNewItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
-  const [editItem, setEditItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
+  const [newItem, setNewItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10", expiryDate: "" });
+  const [editItem, setEditItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10", expiryDate: "" });
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
 
   const { data: items, isLoading, refetch: refetchItems, isFetching } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
   const { data: categories } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
@@ -106,7 +110,7 @@ export default function Items() {
         toast.success("Item created successfully");
         queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() });
         setIsDialogOpen(false);
-        setNewItem({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10" });
+        setNewItem({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10", expiryDate: "" });
       },
       onError: (err: any) => toast.error(err?.error || "Failed to create item — may already exist"),
     }
@@ -127,25 +131,35 @@ export default function Items() {
       onError: (err: any) => toast.error(err?.error || "Failed to delete item"),
     }
   });
+  const bulkCreate = useBulkCreateItems({ mutation: { onSuccess: (result) => { toast.success(`Imported ${result.created} item(s); skipped ${result.skipped}.`); queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); setBulkOpen(false); setBulkText(""); }, onError: (err: any) => toast.error(err?.error || "Bulk import failed") } });
+  const handleBulkImport = () => {
+    const rows = bulkText.trim().split(/\r?\n/).filter(Boolean).map(line => line.split(/\t|,/).map(v => v.trim()));
+    const first = rows[0] || [];
+    const hasHeader = String(first[0]).toLowerCase() === "description";
+    const dataRows = hasHeader ? rows.slice(1) : rows;
+    const items = dataRows.map(r => ({ description: r[0], unit: r[1] || "PIECE", quantity: r[2] || 0, expiryDate: r[3] || null, categoryId: r[4] || null })).filter(r => r.description);
+    if (!items.length) return toast.error("No items found. Use Description, Unit, Quantity, Expiry Date, Category ID columns.");
+    bulkCreate.mutate({ items });
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.description.trim() || !newItem.unit.trim()) return;
     // Save in UPPERCASE
-    createItem.mutate({ data: { description: newItem.description.trim().toUpperCase(), unit: newItem.unit.trim().toUpperCase(), categoryId: newItem.categoryId ? Number(newItem.categoryId) : null, quantity: Number(newItem.quantity)||0, lowStockThreshold: newItem.lowStockThreshold!==''?Number(newItem.lowStockThreshold):null } as any });
+    createItem.mutate({ data: { description: newItem.description.trim().toUpperCase(), unit: newItem.unit.trim().toUpperCase(), categoryId: newItem.categoryId ? Number(newItem.categoryId) : null, quantity: Number(newItem.quantity)||0, lowStockThreshold: newItem.lowStockThreshold!==''?Number(newItem.lowStockThreshold):null, expiryDate: newItem.expiryDate || null } as any });
   };
 
   const handleDelete = (id: number) => { if (!confirm("Delete this item?")) return; deleteItem.mutate({ itemId: id }); };
 
   const openEditDialog = (item: any) => {
     setEditItemId(item.id);
-    setEditItem({ description: item.description, unit: item.unit, categoryId: item.categoryId ? String(item.categoryId) : "", quantity: String(item.quantity??0), lowStockThreshold: item.lowStockThreshold!=null?String(item.lowStockThreshold):"10" });
+    setEditItem({ description: item.description, unit: item.unit, categoryId: item.categoryId ? String(item.categoryId) : "", quantity: String(item.quantity??0), lowStockThreshold: item.lowStockThreshold!=null?String(item.lowStockThreshold):"10", expiryDate: item.expiryDate || "" });
     setEditDialogOpen(true);
   };
   const handleEditSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editItemId || !editItem.description.trim() || !editItem.unit.trim()) return;
-    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), categoryId: editItem.categoryId ? Number(editItem.categoryId) : null, quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null } as any });
+    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), categoryId: editItem.categoryId ? Number(editItem.categoryId) : null, quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null, expiryDate: editItem.expiryDate || null } as any });
   };
 
   const filteredItems = items?.filter(item => (!selectedCategoryId || item.categoryId === selectedCategoryId) && item.description.toLowerCase().includes(search.toLowerCase()));
@@ -172,6 +186,12 @@ export default function Items() {
             <Button variant="ghost" size="icon" onClick={() => refetchItems()} disabled={isFetching} title="Refresh">
               <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}/>
             </Button>
+          {canManageCatalog && (
+            <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+              <DialogTrigger asChild><Button variant="outline">Bulk Add Items</Button></DialogTrigger>
+              <DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Bulk Add Items</DialogTitle></DialogHeader><div className="space-y-3"><p className="text-sm text-muted-foreground">Paste rows copied from Excel. Columns: <strong>Description, Unit, Quantity, Expiry Date, Category ID</strong>. Use one item per line.</p><Textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={12} placeholder={'Description\tUnit\tQuantity\tExpiry Date\tCategory ID\nPARACETAMOL 500MG\tTABLET\t100\t2027-12-31\t1'} /><DialogFooter><Button type="button" variant="outline" onClick={()=>setBulkOpen(false)}>Cancel</Button><Button type="button" onClick={handleBulkImport} disabled={bulkCreate.isPending}>{bulkCreate.isPending ? "Importing..." : "Import Items"}</Button></DialogFooter></div></DialogContent>
+            </Dialog>
+          )}
           {canManageCatalog && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
@@ -223,6 +243,7 @@ export default function Items() {
                       </Label>
                       <Input type="number" min="0" placeholder="e.g. 10" value={newItem.lowStockThreshold} onChange={e=>setNewItem({...newItem,lowStockThreshold:e.target.value})}/>
                     </div>
+                    <div className="space-y-2"><Label>Expiry Date</Label><Input type="date" value={newItem.expiryDate} onChange={e=>setNewItem({...newItem,expiryDate:e.target.value})} /><p className="text-xs text-muted-foreground">Expired stock cannot be issued.</p></div>
                   </div>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={()=>setIsDialogOpen(false)}>Cancel</Button>
@@ -292,6 +313,7 @@ export default function Items() {
                   <TableHead className="w-28 text-right">Adjustments</TableHead>
                   <TableHead className="w-28 text-right">In Stock</TableHead>
                   <TableHead className="w-20 text-right">Alert At</TableHead>
+                  <TableHead className="w-32">Expiry</TableHead>
                   {canManageCatalog && <TableHead className="w-24 text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -326,6 +348,7 @@ export default function Items() {
                       {isNegative ? item.stockBalance : item.stockBalance<=0 ? "OUT" : item.stockBalance}
                     </TableCell>
                     <TableCell className={`text-right font-mono text-xs ${isNegative?"text-red-200":"text-muted-foreground"}`}>{item.lowStockThreshold!=null?item.lowStockThreshold:10}</TableCell>
+                    <TableCell className={item.expired ? "text-destructive font-bold text-xs" : "text-xs text-muted-foreground"}>{item.expiryDate ? `${item.expiryDate}${item.expired ? " · EXPIRED" : ""}` : "—"}</TableCell>
                     {canManageCatalog&&(
                       <TableCell className="text-right">
                         {canEditCatalog && <Button variant="ghost" size="icon" className={`h-8 w-8 ${isNegative?"text-white hover:bg-red-500":""}`} onClick={()=>openEditDialog(item)}><Pencil className="h-4 w-4"/></Button>}
@@ -336,7 +359,7 @@ export default function Items() {
                   );
                 }) : (
                   <TableRow>
-                    <TableCell colSpan={canManageCatalog?7:6} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={canManageCatalog?8:7} className="h-32 text-center text-muted-foreground">
                       <PackageSearch className="h-8 w-8 mx-auto mb-2 opacity-50"/>
                       {search?"No items match your search":"No items found in catalog"}
                     </TableCell>
@@ -377,6 +400,7 @@ export default function Items() {
                   </Label>
                   <Input type="number" min="0" placeholder="e.g. 10" value={editItem.lowStockThreshold} onChange={e=>setEditItem({...editItem,lowStockThreshold:e.target.value})}/>
                 </div>
+                <div className="space-y-2"><Label>Expiry Date</Label><Input type="date" value={editItem.expiryDate} onChange={e=>setEditItem({...editItem,expiryDate:e.target.value})} /><p className="text-xs text-muted-foreground">Expired stock is excluded from available stock and cannot be issued.</p></div>
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={()=>setEditDialogOpen(false)}>Cancel</Button>
