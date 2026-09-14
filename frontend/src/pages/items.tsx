@@ -260,10 +260,13 @@ export default function Items() {
         </div>
 
         <div className="border rounded-lg p-4 bg-card space-y-3">
-          <p className="text-sm text-muted-foreground">Filter items by category. Add, edit, and delete categories from the Catalog → Categories menu.</p>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant={selectedCategoryId === null ? "default" : "outline"} onClick={()=>setSelectedCategoryId(null)}>All Items</Button>
-            {(categories || []).map(c=><Button key={c.id} size="sm" variant={selectedCategoryId === c.id ? "default" : "outline"} onClick={()=>setSelectedCategoryId(c.id)}>{c.name} ({c.itemCount || 0}) · {c.chargeItemCode || "no code"}</Button>)}
+          <p className="text-sm text-muted-foreground">Choose a category or search by item name. The stock-integrity alert below follows the selected category.</p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <select className="w-full sm:w-80 h-9 rounded-md border border-input bg-background px-3 text-sm" value={selectedCategoryId === null ? "all" : String(selectedCategoryId)} onChange={e=>setSelectedCategoryId(e.target.value === "all" ? null : Number(e.target.value))}>
+              <option value="all">All Items ({items?.length || 0})</option>
+              {(categories || []).map(c=><option key={c.id} value={c.id}>{c.name} ({c.itemCount || 0}){c.chargeItemCode ? ` · ${c.chargeItemCode}` : ""}</option>)}
+            </select>
+            <div className="flex-1"><Input placeholder="Search items in this category..." value={search} onChange={e=>setSearch(e.target.value)} /></div>
           </div>
         </div>
 
@@ -274,7 +277,7 @@ export default function Items() {
           </div>
         )}
         {/* Emergency: negative stock banner */}
-        {negativeStockItems.length > 0 && (
+        {negativeStockItems.filter(item => selectedCategoryId === null || item.categoryId === selectedCategoryId).length > 0 && (
           <div className="border-2 border-red-500 bg-red-50 dark:bg-red-950/40 rounded-lg p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <span className="relative flex h-4 w-4">
@@ -282,7 +285,7 @@ export default function Items() {
                 <span className="relative inline-flex rounded-full h-4 w-4 bg-red-600"/>
               </span>
               <span className="font-bold text-red-700 dark:text-red-400 text-sm uppercase tracking-wide flex items-center gap-1">
-                <Zap className="h-4 w-4"/>STOCK INTEGRITY EMERGENCY — {negativeStockItems.length} item{negativeStockItems.length>1?"s":""} over-issued
+                <Zap className="h-4 w-4"/>STOCK INTEGRITY EMERGENCY — {negativeStockItems.filter(item => selectedCategoryId === null || item.categoryId === selectedCategoryId).length} item{negativeStockItems.filter(item => selectedCategoryId === null || item.categoryId === selectedCategoryId).length>1?"s":""} over-issued
               </span>
             </div>
             <p className="text-xs text-red-700 dark:text-red-400">
@@ -290,7 +293,7 @@ export default function Items() {
               This is a data integrity problem — verify issue vouchers and physical counts immediately.
             </p>
             <div className="flex flex-col gap-1">
-              {negativeStockItems.map(item => (
+              {negativeStockItems.filter(item => selectedCategoryId === null || item.categoryId === selectedCategoryId).map(item => (
                 <div key={item.id} className="flex items-center justify-between bg-red-100 dark:bg-red-900/30 rounded px-3 py-1.5 text-xs font-mono">
                   <span className="font-bold text-red-800 dark:text-red-300">{item.description}</span>
                   <span className="text-red-700 dark:text-red-400">
@@ -304,10 +307,6 @@ export default function Items() {
         )}
 
         <div className="bg-card border rounded-lg overflow-hidden flex flex-col">
-          <div className="p-4 border-b flex items-center gap-2 bg-muted/30">
-            <Search className="h-4 w-4 text-muted-foreground"/>
-            <Input placeholder="Search items..." value={search} onChange={e=>setSearch(e.target.value)} className="max-w-sm h-8 bg-background"/>
-          </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
