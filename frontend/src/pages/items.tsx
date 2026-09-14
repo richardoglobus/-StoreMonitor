@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import {
   useListItemStock, getListItemStockQueryKey,
@@ -75,6 +76,7 @@ function UnitCombobox({ value, onChange, existingUnits }: { value: string; onCha
 export default function Items() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const canViewCatalog = !!user?.permissions?.viewCatalog || !!user?.permissions?.manageCatalog;
   const canManageCatalog = !!user?.permissions?.manageCatalog;
   const canEditCatalog = !!user?.permissions?.editCatalog;
@@ -134,7 +136,10 @@ export default function Items() {
   });
   const bulkCreate = useBulkCreateItems({ mutation: { onSuccess: (result) => { queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); queryClient.invalidateQueries({ queryKey: ["/api/items"] }); queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); refetchItems(); const names = (result.createdItems || []).slice(0, 3).map((i: any) => i.description).join(", "); toast.success(`Imported ${result.created} item(s); skipped ${result.skipped}.${names ? ` Added: ${names}${result.created > 3 ? "…" : ""}` : ""}`); setBulkOpen(false); setBulkText(""); setBulkCategoryId(""); }, onError: (err: any) => toast.error(err?.error || "Bulk import failed") } });
   const handleBulkImport = () => {
-    const rows = bulkText.trim().split(/\r?\n/).filter(Boolean).map(line => line.split(/\t|,/).map(v => v.trim()));
+    // Prefer tab as the delimiter (Excel paste), only falling back to comma for lines with no tab.
+    // Splitting on both unconditionally breaks any description that itself contains a comma
+    // (e.g. "GLOVES, LATEX, LARGE"), which is common for hospital supply names.
+    const rows = bulkText.trim().split(/\r?\n/).filter(Boolean).map(line => (line.includes("\t") ? line.split("\t") : line.split(",")).map(v => v.trim()));
     const first = rows[0] || [];
     const hasHeader = String(first[0]).toLowerCase() === "description";
     const dataRows = hasHeader ? rows.slice(1) : rows;
