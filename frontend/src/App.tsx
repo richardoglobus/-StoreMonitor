@@ -27,6 +27,8 @@ import SuppliersPage from "@/pages/accounts/suppliers";
 import PaymentsPage from "@/pages/accounts/payments";
 import FinancialReportsPage from "@/pages/accounts/financial-reports";
 import ChartOfAccountsPage from "@/pages/accounts/chart-of-accounts";
+import JournalEntriesPage from "@/pages/accounts/journal-entries";
+import ProcurementPage from "@/pages/accounts/procurement";
 import CatalogCategoriesPage from "@/pages/catalog-categories";
 import { AlertTriangle } from "lucide-react";
 import { API_BASE } from "@/lib/api";
@@ -135,6 +137,8 @@ function AppWithAuth() {
         <Route path="/accounts/payments" component={PaymentsPage} />
         <Route path="/accounts/financial-reports" component={FinancialReportsPage} />
         <Route path="/accounts/chart-of-accounts" component={ChartOfAccountsPage} />
+        <Route path="/accounts/journal-entries" component={JournalEntriesPage} />
+        <Route path="/accounts/procurement" component={ProcurementPage} />
         <Route component={NotFound} />
       </Switch>
       <InactivityWarning secondsLeft={warningSeconds} />

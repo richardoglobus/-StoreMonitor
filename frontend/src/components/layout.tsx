@@ -6,7 +6,7 @@ import {
   Download, Menu, ShoppingCart, BarChart3, Users,
   LogOut, User as UserIcon, Sun, Moon, Settings2, TrendingUp,
   Heart, Shield, Star, Cross, Stethoscope, Pill, Activity, Leaf,
-  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked, Tag,
+  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked, BookOpen, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -46,6 +46,8 @@ const NAV_ITEMS = [
       { href: "/accounts/stock-movement",    label: "Stock Movement",       icon: PackageSearch, permission: "viewAccounts" },
       { href: "/accounts/suppliers",         label: "Suppliers",            icon: Users,         permission: "viewAccounts" },
       { href: "/accounts/payments",          label: "Payment Entries",      icon: Wallet,        permission: "viewAccounts" },
+      { href: "/accounts/procurement",       label: "Procurement",           icon: ShoppingCart, permission: "viewAccounts" },
+      { href: "/accounts/journal-entries",   label: "Journal Entries",       icon: BookOpen,     permission: "viewAccounts" },
       { href: "/accounts/financial-reports", label: "Financial Reports",    icon: BarChart3,     permission: "viewAccounts" },
       { href: "/accounts/chart-of-accounts", label: "Chart of Accounts",    icon: BookMarked,    permission: "viewAccounts" },
     ],

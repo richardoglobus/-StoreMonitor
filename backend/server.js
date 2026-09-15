@@ -2491,12 +2491,15 @@ app.get("/api/accounts/payments", requirePermission("viewAccounts"), (req, res) 
   res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null })));
 });
 app.post("/api/accounts/payments", requirePermission("manageAccounts"), (req, res) => {
-  const { date, supplierId, amount, method, reference, note } = req.body;
+  const { date, supplierId, amount, method, reference, note, supplierInvoiceId } = req.body;
   if (!date || !supplierId || !amount) return res.status(400).json({ error: "Date, supplier and amount are required" });
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
   const amt = Number(amount);
-  const row = { id: nextId("paymentEntries"), date, supplierId: Number(supplierId), amount: amt, method: method || "Bank", reference: reference || null, note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
+  const invoice = supplierInvoiceId ? db.get("supplierInvoices").find({ id: Number(supplierInvoiceId) }).value() : null;
+  if (supplierInvoiceId && (!invoice || Number(invoice.supplierId) !== supplier.id)) return res.status(400).json({ error: "Supplier invoice not found for this supplier" });
+  if (invoice && amt > Number(invoice.amount) - Number(invoice.paidAmount || 0)) return res.status(400).json({ error: "Payment exceeds the supplier invoice balance" });
+  const row = { id: nextId("paymentEntries"), date, supplierId: Number(supplierId), supplierInvoiceId: invoice?.id || null, amount: amt, method: method || "Bank", reference: reference || null, note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
   db.get("paymentEntries").push(row).write();
   // Accounting: Debit Accounts Payable, Credit Bank
   postJournalEntry({
@@ -2505,6 +2508,10 @@ app.post("/api/accounts/payments", requirePermission("manageAccounts"), (req, re
     debitAccount: "2000", creditAccount: method === "Cash" ? "1200" : "1100", amount: amt,
   });
   db.get("suppliers").find({ id: supplier.id }).assign({ balance: Number((supplier.balance - amt).toFixed(2)) }).write();
+  if (invoice) {
+    const paidAmount = Number((Number(invoice.paidAmount || 0) + amt).toFixed(2));
+    db.get("supplierInvoices").find({ id: invoice.id }).assign({ paidAmount, status: paidAmount >= Number(invoice.amount) ? "paid" : "part-paid" }).write();
+  }
   logActivity(req, "CREATE_PAYMENT", "PAYMENT", row.id, { supplierId: row.supplierId, amount: amt });
   res.status(201).json(row);
 });
@@ -2514,6 +2521,13 @@ app.delete("/api/accounts/payments/:id", requirePermission("deleteTransactions")
   if (!row) return res.status(404).json({ error: "Payment not found" });
   const supplier = db.get("suppliers").find({ id: row.supplierId });
   if (supplier.value()) supplier.assign({ balance: Number((supplier.value().balance + row.amount).toFixed(2)) }).write();
+  if (row.supplierInvoiceId) {
+    const invoice = db.get("supplierInvoices").find({ id: Number(row.supplierInvoiceId) });
+    if (invoice.value()) {
+      const paidAmount = Math.max(0, Number((Number(invoice.value().paidAmount || 0) - Number(row.amount || 0)).toFixed(2)));
+      invoice.assign({ paidAmount, status: paidAmount > 0 ? "part-paid" : "unpaid" }).write();
+    }
+  }
   db.get("paymentEntries").remove({ id }).write();
   logActivity(req, "DELETE_PAYMENT", "PAYMENT", id, null);
   res.status(204).send();
@@ -2546,6 +2560,61 @@ app.get("/api/accounts/journal-entries", requirePermission("viewAccounts"), (req
   if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
   if (req.query.to) rows = rows.filter(r => r.date <= req.query.to);
   res.json(rows);
+});
+app.post("/api/accounts/journal-entries", requirePermission("manageAccounts"), (req, res) => {
+  const { date, reference, description, debitAccount, creditAccount, amount, note } = req.body;
+  const value = Number(amount);
+  if (!date || !description || !debitAccount || !creditAccount || !(value > 0)) return res.status(400).json({ error: "Date, description, debit account, credit account, and a positive amount are required" });
+  if (String(debitAccount) === String(creditAccount)) return res.status(400).json({ error: "Debit and credit accounts must be different" });
+  if (!db.get("chartOfAccounts").find({ code: String(debitAccount) }).value() || !db.get("chartOfAccounts").find({ code: String(creditAccount) }).value()) return res.status(400).json({ error: "Both accounts must exist in the Chart of Accounts" });
+  const row = postJournalEntry({ date, reference: reference || `JE-${nextId("journalEntries")}`, description: String(description).trim(), debitAccount: String(debitAccount), creditAccount: String(creditAccount), amount: value });
+  db.get("journalEntries").find({ id: row.id }).assign({ note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString(), source: "standalone" }).write();
+  logActivity(req, "CREATE_JOURNAL_ENTRY", "JOURNAL", row.id, { reference: row.reference, amount: value });
+  res.status(201).json(db.get("journalEntries").find({ id: row.id }).value());
+});
+
+app.get("/api/accounts/purchase-orders", requirePermission("viewAccounts"), (req, res) => {
+  const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s]));
+  res.json(db.get("purchaseOrders").value().sort((a, b) => b.id - a.id).map(o => ({ ...o, supplier: suppliers.get(o.supplierId) || null })));
+});
+app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (req, res) => {
+  const { date, supplierId, expectedDate, note, lines } = req.body;
+  const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
+  if (!date || !supplier || !Array.isArray(lines) || !lines.length) return res.status(400).json({ error: "Date, supplier, and at least one order line are required" });
+  const cleanLines = lines.map(l => ({ description: String(l.description || "").trim().toUpperCase(), quantity: Number(l.quantity) || 0, unitPrice: Number(l.unitPrice) || 0, unit: l.unit || null })).filter(l => l.description && l.quantity > 0);
+  if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
+  const totalAmount = Number(cleanLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0).toFixed(2));
+  const row = { id: nextId("purchaseOrders"), poNo: genSequentialNo("PO", "purchaseOrders"), date, supplierId: supplier.id, expectedDate: expectedDate || null, lines: cleanLines, totalAmount, status: "ordered", note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
+  db.get("purchaseOrders").push(row).write();
+  logActivity(req, "CREATE_PURCHASE_ORDER", "PURCHASE_ORDER", row.id, { poNo: row.poNo, totalAmount });
+  res.status(201).json({ ...row, supplier });
+});
+app.patch("/api/accounts/purchase-orders/:id/status", requirePermission("manageAccounts"), (req, res) => {
+  const ref = db.get("purchaseOrders").find({ id: Number(req.params.id) });
+  if (!ref.value()) return res.status(404).json({ error: "Purchase order not found" });
+  const status = String(req.body.status || "");
+  if (!["ordered", "received", "closed", "cancelled"].includes(status)) return res.status(400).json({ error: "Invalid purchase-order status" });
+  ref.assign({ status, updatedAt: new Date().toISOString() }).write();
+  logActivity(req, "UPDATE_PURCHASE_ORDER_STATUS", "PURCHASE_ORDER", Number(req.params.id), { status });
+  res.json(ref.value());
+});
+app.get("/api/accounts/supplier-invoices", requirePermission("viewAccounts"), (req, res) => {
+  const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s]));
+  res.json(db.get("supplierInvoices").value().sort((a, b) => b.id - a.id).map(i => ({ ...i, supplier: suppliers.get(i.supplierId) || null })));
+});
+app.post("/api/accounts/supplier-invoices", requirePermission("manageAccounts"), (req, res) => {
+  const { date, supplierId, invoiceNo, purchaseOrderId, grnId, amount, dueDate, debitAccount, note } = req.body;
+  const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
+  const value = Number(amount);
+  if (!date || !supplier || !invoiceNo || !(value > 0)) return res.status(400).json({ error: "Date, supplier, invoice number, and a positive amount are required" });
+  if (purchaseOrderId && !db.get("purchaseOrders").find({ id: Number(purchaseOrderId) }).value()) return res.status(400).json({ error: "Purchase order not found" });
+  if (grnId && !db.get("grns").find({ id: Number(grnId) }).value()) return res.status(400).json({ error: "GRN not found" });
+  const row = { id: nextId("supplierInvoices"), invoiceNo: String(invoiceNo).trim(), date, supplierId: supplier.id, purchaseOrderId: purchaseOrderId ? Number(purchaseOrderId) : null, grnId: grnId ? Number(grnId) : null, amount: value, paidAmount: 0, dueDate: dueDate || null, status: "unpaid", note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
+  db.get("supplierInvoices").push(row).write();
+  postJournalEntry({ date, reference: row.invoiceNo, description: `Supplier invoice — ${row.invoiceNo}`, debitAccount: debitAccount || "5000", creditAccount: "2000", amount: value });
+  db.get("suppliers").find({ id: supplier.id }).assign({ balance: Number((Number(supplier.balance || 0) + value).toFixed(2)) }).write();
+  logActivity(req, "CREATE_SUPPLIER_INVOICE", "SUPPLIER_INVOICE", row.id, { invoiceNo: row.invoiceNo, amount: value });
+  res.status(201).json({ ...row, supplier });
 });
 
 // ── Financial Reports ────────────────────────────────────────────────────
@@ -3406,7 +3475,7 @@ app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
         if (alias) data[canonical] = data[alias];
       }
     }
-    const collections = ["users","departments","items","inventory","receipts","issues","purchases","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements"];
+    const collections = ["users","departments","items","inventory","receipts","issues","purchases","purchaseOrders","supplierInvoices","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements"];
     for (const key of collections) if (!Array.isArray(data[key])) data[key] = [];
     if (!data.users.length || !data.items.length) return res.status(400).json({error:"Invalid backup file — users and catalog items are missing or empty"});
     data._seq = { ...(data._seq || {}) };
@@ -3539,7 +3608,7 @@ downloadFromSupabase().finally(() => {
   // Older backups may omit newer collections such as suppliers, categories, or GRNs.
   const restoredCollections = [
     'users', 'departments', 'items', 'inventory', 'receipts', 'issues', 'purchases',
-    'activities', 'assets', 'assetCategories', 'categories', 'grns', 'suppliers',
+    'purchaseOrders', 'supplierInvoices', 'activities', 'assets', 'assetCategories', 'categories', 'grns', 'suppliers',
     'paymentEntries', 'chartOfAccounts', 'journalEntries', 'stockMovements',
   ];
   for (const collection of restoredCollections) {

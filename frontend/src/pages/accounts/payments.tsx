@@ -5,6 +5,7 @@ import {
   useListPayments, getListPaymentsQueryKey,
   useCreatePayment, useDeletePayment,
   useListSuppliers, getListSuppliersQueryKey,
+  useListSupplierInvoices, getListSupplierInvoicesQueryKey,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
 const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
-const emptyForm = { date: format(new Date(), "yyyy-MM-dd"), supplierId: "", amount: "", method: "Bank", reference: "", note: "" };
+const emptyForm = { date: format(new Date(), "yyyy-MM-dd"), supplierId: "", supplierInvoiceId: "", amount: "", method: "Bank", reference: "", note: "" };
 
 export default function PaymentsPage() {
   const queryClient = useQueryClient();
@@ -38,10 +39,12 @@ export default function PaymentsPage() {
 
   const { data: payments, isLoading } = useListPayments({}, { query: { queryKey: getListPaymentsQueryKey({}) } });
   const { data: suppliers } = useListSuppliers({ query: { queryKey: getListSuppliersQueryKey() } });
+  const { data: invoices } = useListSupplierInvoices({ query: { queryKey: getListSupplierInvoicesQueryKey() } });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey({}) });
     queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListSupplierInvoicesQueryKey() });
   };
 
   const createPayment = useCreatePayment({ mutation: { onSuccess: () => { toast.success("Payment recorded"); invalidate(); setIsDialogOpen(false); setForm(emptyForm); }, onError: (e: any) => toast.error(e?.error || "Failed to record payment"), onSettled: () => setSubmitting(false) } });
@@ -51,7 +54,7 @@ export default function PaymentsPage() {
     if (!form.supplierId) { toast.error("Select a supplier"); return; }
     if (!Number(form.amount) || Number(form.amount) <= 0) { toast.error("Enter a valid amount"); return; }
     setSubmitting(true);
-    createPayment.mutate({ data: { ...form, supplierId: Number(form.supplierId), amount: Number(form.amount) } });
+    createPayment.mutate({ data: { ...form, supplierId: Number(form.supplierId), supplierInvoiceId: form.supplierInvoiceId ? Number(form.supplierInvoiceId) : null, amount: Number(form.amount) } });
   };
 
   return (
@@ -75,6 +78,7 @@ export default function PaymentsPage() {
                     <SelectContent>{(suppliers ?? []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} (owed KES {s.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })})</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1"><Label>Supplier invoice (optional)</Label><Select value={form.supplierInvoiceId || "none"} onValueChange={v => setForm(f => ({ ...f, supplierInvoiceId: v === "none" ? "" : v }))}><SelectTrigger><SelectValue placeholder="Select invoice"/></SelectTrigger><SelectContent><SelectItem value="none">No invoice</SelectItem>{(invoices ?? []).filter(i => !form.supplierId || i.supplierId === Number(form.supplierId)).filter(i => i.status !== "paid").map(i => <SelectItem key={i.id} value={String(i.id)}>{i.invoiceNo} — balance KES {(Number(i.amount) - Number(i.paidAmount || 0)).toLocaleString()}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1"><Label>Amount (KES)</Label><Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}/></div>
                 <div className="space-y-1">
                   <Label>Method</Label>
