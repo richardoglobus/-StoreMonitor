@@ -2194,10 +2194,11 @@ function genSequentialNo(prefix, table) {
 // ── GRN (Goods Received Note) ───────────────────────────────────────────
 app.get("/api/accounts/grns", requirePermission("viewAccounts"), (req, res) => {
   const supplierMap = new Map(db.get("suppliers").value().map(s => [s.id, s]));
+  const userMap = new Map(db.get("users").value().map(u => [u.id, u.username || u.fullName || `User ${u.id}`]));
   let rows = db.get("grns").value().sort((a, b) => b.id - a.id);
   if (req.query.status) rows = rows.filter(r => r.status === req.query.status);
   if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
-  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null })));
+  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null, voidRequestedByName: r.voidRequestedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null, voidReviewedByName: r.voidReviewedBy ? userMap.get(r.voidReviewedBy) || `User ${r.voidReviewedBy}` : null })));
 });
 app.get("/api/accounts/grns/:id", requirePermission("viewAccounts"), (req, res) => {
   const row = db.get("grns").find({ id: Number(req.params.id) }).value();
@@ -2298,14 +2299,8 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
   logActivity(req, "APPROVE_GRN", "GRN", id, { grnNo: row.grnNo, totalAmount: row.totalAmount });
   res.json(rowRef.value());
 });
-app.patch("/api/accounts/grns/:id/void", requirePermission("manageAccounts"), (req, res) => {
+function applyGrnVoid(req, rowRef, row, reason, action = "VOID_GRN") {
   const id = Number(req.params.id);
-  const ref = db.get("grns").find({ id });
-  const row = ref.value();
-  if (!row) return res.status(404).json({ error: "GRN not found" });
-  if (row.status !== "approved") return res.status(400).json({ error: "Only approved GRNs can be voided" });
-  const reason = String(req.body.reason || "").trim();
-  if (!reason) return res.status(400).json({ error: "Void reason is required" });
   for (const it of row.items || []) {
     if (!it.itemCode && !it.description) continue;
     pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal of ${row.grnNo}: ${reason}` });
@@ -2313,9 +2308,53 @@ app.patch("/api/accounts/grns/:id/void", requirePermission("manageAccounts"), (r
   postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `VOID-${row.grnNo}`, description: `Void goods received — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - row.totalAmount).toFixed(2)) }).write();
-  ref.assign({ status: "voided", voidedBy: req.session.userId, voidedAt: new Date().toISOString(), voidReason: reason }).write();
+  rowRef.assign({ status: "voided", voidedBy: req.session.userId, voidedAt: new Date().toISOString(), voidReason: reason, voidRequestStatus: "approved", voidReviewedBy: req.session.userId, voidReviewedAt: new Date().toISOString() }).write();
   if (row.sourcePurchaseId != null) db.get("purchases").find({ id: Number(row.sourcePurchaseId) }).assign({ status: "voided", voidedAt: new Date().toISOString() }).write();
-  logActivity(req, "VOID_GRN", "GRN", id, { grnNo: row.grnNo, reason });
+  logActivity(req, action, "GRN", row.id, { grnNo: row.grnNo, reason });
+  return rowRef.value();
+}
+app.patch("/api/accounts/grns/:id/void", requirePermission("manageAccounts"), (req, res) => {
+  const id = Number(req.params.id), ref = db.get("grns").find({ id }), row = ref.value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  if (row.status !== "approved") return res.status(400).json({ error: "Only approved GRNs can be voided" });
+  const reason = String(req.body.reason || "").trim();
+  if (!reason) return res.status(400).json({ error: "Void reason is required" });
+  if (req.session.role !== "admin") {
+    ref.assign({ voidRequestStatus: "pending", voidRequestedBy: req.session.userId, voidRequestedAt: new Date().toISOString(), voidRequestReason: reason }).write();
+    logActivity(req, "REQUEST_VOID_GRN", "GRN", id, { grnNo: row.grnNo, reason });
+    return res.json(ref.value());
+  }
+  res.json(applyGrnVoid(req, ref, row, reason));
+});
+app.patch("/api/accounts/grns/:id/void/approve", requirePermission("manageAccounts"), (req, res) => {
+  if (req.session.role !== "admin") return res.status(403).json({ error: "Only an administrator can approve GRN void requests" });
+  const id = Number(req.params.id), ref = db.get("grns").find({ id }), row = ref.value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  if (row.status !== "approved" || row.voidRequestStatus !== "pending") return res.status(400).json({ error: "No pending void request for this GRN" });
+  res.json(applyGrnVoid(req, ref, row, row.voidRequestReason));
+});
+app.patch("/api/accounts/grns/:id/void/reject", requirePermission("manageAccounts"), (req, res) => {
+  if (req.session.role !== "admin") return res.status(403).json({ error: "Only an administrator can reject GRN void requests" });
+  const id = Number(req.params.id), ref = db.get("grns").find({ id }), row = ref.value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  if (row.voidRequestStatus !== "pending") return res.status(400).json({ error: "No pending void request for this GRN" });
+  ref.assign({ voidRequestStatus: "rejected", voidReviewedBy: req.session.userId, voidReviewedAt: new Date().toISOString(), voidReviewNote: String(req.body.note || "Rejected by administrator") }).write();
+  logActivity(req, "REJECT_VOID_GRN", "GRN", id, { grnNo: row.grnNo });
+  res.json(ref.value());
+});
+app.patch("/api/accounts/grns/:id/unvoid", requirePermission("manageAccounts"), (req, res) => {
+  if (req.session.role !== "admin") return res.status(403).json({ error: "Only an administrator can unvoid a GRN" });
+  const id = Number(req.params.id), ref = db.get("grns").find({ id }), row = ref.value();
+  if (!row) return res.status(404).json({ error: "GRN not found" });
+  if (row.status !== "voided") return res.status(400).json({ error: "Only voided GRNs can be unvoided" });
+  const reason = String(req.body.reason || "GRN restored by administrator").trim();
+  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Restored ${row.grnNo}: ${reason}` });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `UNVOID-${row.grnNo}`, description: `Restore voided goods received — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
+  const supplierRef = db.get("suppliers").find({ id: row.supplierId });
+  if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + row.totalAmount).toFixed(2)) }).write();
+  ref.assign({ status: "approved", approvedBy: row.approvedBy || req.session.userId, approvedAt: row.approvedAt || new Date().toISOString(), unvoidedBy: req.session.userId, unvoidedAt: new Date().toISOString(), unvoidReason: reason }).write();
+  if (row.sourcePurchaseId != null) db.get("purchases").find({ id: Number(row.sourcePurchaseId) }).assign({ status: "approved", voidedAt: null }).write();
+  logActivity(req, "UNVOID_GRN", "GRN", id, { grnNo: row.grnNo, reason });
   res.json(ref.value());
 });
 app.delete("/api/accounts/grns/:id", requirePermission("deleteTransactions"), (req, res) => {

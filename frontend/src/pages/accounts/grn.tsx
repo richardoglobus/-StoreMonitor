@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import {
   useListGrns, getListGrnsQueryKey,
-  useCreateGrn, useApproveGrn, useUpdateGrn, useVoidGrn, useDeleteGrn,
+  useCreateGrn, useApproveGrn, useUpdateGrn, useVoidGrn, useApproveVoidGrn, useRejectVoidGrn, useUnvoidGrn, useDeleteGrn,
   useListSuppliers, useChargeItemCodes,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -32,6 +32,7 @@ export default function GrnPage() {
   if (!user?.permissions?.viewAccounts) { setLocation("/"); return null; }
   const canManage = !!user?.permissions?.manageAccounts;
   const canDelete = !!user?.permissions?.deleteTransactions;
+  const isAdmin = user.role === "admin";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -77,6 +78,9 @@ export default function GrnPage() {
       onError: (e: any) => toast.error(e?.error || "Failed to void GRN"),
     },
   });
+  const approveVoidGrn = useApproveVoidGrn({ mutation: { onSuccess: () => { toast.success("Void approved; stock and accounts reversed"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to approve void") } });
+  const rejectVoidGrn = useRejectVoidGrn({ mutation: { onSuccess: () => { toast.success("Void request rejected"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to reject request") } });
+  const unvoidGrn = useUnvoidGrn({ mutation: { onSuccess: () => { toast.success("GRN restored; stock and accounts reinstated"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to unvoid GRN") } });
 
   const resetForm = () => { setEditingGrnId(null); setHeader({ date: format(new Date(), "yyyy-MM-dd"), lpoNo: "", supplierId: "", invoiceNo: "" }); setLines([emptyLine()]); };
   const openEdit = (g: any) => {
@@ -181,7 +185,7 @@ export default function GrnPage() {
                 <TableCell>{g.supplier?.name ?? "—"}</TableCell>
                 <TableCell>{g.invoiceNo ?? "—"}</TableCell>
                 <TableCell>{g.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
-                <TableCell>{g.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : g.status === "voided" ? <Badge variant="destructive">Voided</Badge> : <Badge variant="secondary">Pending</Badge>}</TableCell>
+                <TableCell><div>{g.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : g.status === "voided" ? <Badge variant="destructive">Voided</Badge> : <Badge variant="secondary">Pending</Badge>}{g.voidRequestStatus === "pending" && <Badge className="ml-1 bg-amber-100 text-amber-800">Void requested</Badge>}{g.voidRequestStatus === "rejected" && <Badge className="ml-1">Void rejected</Badge>}</div>{g.voidRequestStatus === "pending" && <p className="text-[11px] text-amber-700 mt-1">By {g.voidRequestedByName || "user"}: {g.voidRequestReason}</p>}</TableCell>
                 <TableCell className="text-right space-x-1">
                   {canManage && g.status === "pending" && (
                     <>
@@ -189,9 +193,9 @@ export default function GrnPage() {
                       <Button size="sm" variant="outline" className="gap-1" onClick={() => approveGrn.mutate({ grnId: g.id })}><CheckCircle2 className="h-3.5 w-3.5"/>Approve</Button>
                     </>
                   )}
-                  {canManage && g.status === "approved" && (
-                    <Button size="sm" variant="outline" className="gap-1 text-destructive" onClick={() => { const reason = prompt("Why are you voiding this approved GRN?"); if (reason?.trim()) voidGrn.mutate({ grnId: g.id, reason: reason.trim() }); }}><Ban className="h-3.5 w-3.5"/>Void</Button>
-                  )}
+                  {canManage && g.status === "approved" && g.voidRequestStatus !== "pending" && <Button size="sm" variant="outline" className="gap-1 text-destructive" onClick={() => { const reason = prompt(isAdmin ? "Why are you voiding this approved GRN?" : "Why are you requesting this GRN to be voided?"); if (reason?.trim()) voidGrn.mutate({ grnId: g.id, reason: reason.trim() }); }}><Ban className="h-3.5 w-3.5"/>{isAdmin ? "Void" : "Request void"}</Button>}
+                  {isAdmin && g.status === "approved" && g.voidRequestStatus === "pending" && <><Button size="sm" variant="outline" className="gap-1 text-destructive" title={g.voidRequestReason || "No reason supplied"} onClick={() => approveVoidGrn.mutate({ grnId: g.id })}><CheckCircle2 className="h-3.5 w-3.5"/>Approve void</Button><Button size="sm" variant="ghost" onClick={() => rejectVoidGrn.mutate({ grnId: g.id })}>Reject</Button></>}
+                  {isAdmin && g.status === "voided" && <Button size="sm" variant="outline" className="gap-1 text-green-700" onClick={() => { const reason = prompt("Why are you restoring this voided GRN?"); if (reason?.trim()) unvoidGrn.mutate({ grnId: g.id, reason: reason.trim() }); }}>Unvoid</Button>}
                   {canDelete && g.status === "pending" && (
                     <Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => { if (confirm("Delete this GRN?")) deleteGrn.mutate({ grnId: g.id }); }}><Trash2 className="h-4 w-4"/></Button>
                   )}

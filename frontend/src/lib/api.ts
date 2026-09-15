@@ -308,7 +308,7 @@ export function useListActivity(params?: any, options?: QueryOpts<ActivityLog[]>
 
 export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; balance: number; createdAt: string };
 export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargeItemCode: string | null; folioNo: string | null };
-export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved" | "voided"; createdBy: number | null; createdAt: string; approvedBy: number | null; approvedAt: string | null; sourcePurchaseId?: number | null; voidedBy?: number | null; voidedAt?: string | null; voidReason?: string | null; supplier?: Supplier | null };
+export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved" | "voided"; createdBy: number | null; createdAt: string; approvedBy: number | null; approvedAt: string | null; sourcePurchaseId?: number | null; voidedBy?: number | null; voidedAt?: string | null; voidReason?: string | null; voidRequestStatus?: "pending" | "approved" | "rejected" | null; voidRequestedBy?: number | null; voidRequestedAt?: string | null; voidRequestedByName?: string | null; voidRequestReason?: string | null; voidReviewedBy?: number | null; voidReviewedByName?: string | null; voidReviewedAt?: string | null; voidReviewNote?: string | null; supplier?: Supplier | null };
 export type StockMovement = { id: number | string; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "OPENING" | "GRN" | "GRN_REVERSAL" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
 export type PaymentEntry = { id: number; date: string; supplierId: number; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };
 export type ChartAccount = { id: number; code: string; name: string; type: string; balance: number; isDefault: boolean };
@@ -330,6 +330,15 @@ export function useUpdateGrn(options?: MutOpts<Grn, { grnId: number; data: any }
 }
 export function useVoidGrn(options?: MutOpts<Grn, { grnId: number; reason: string }>) {
   return useMutation({ mutationFn: ({ grnId, reason }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}/void`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }) }), ...options?.mutation });
+}
+export function useApproveVoidGrn(options?: MutOpts<Grn, { grnId: number }>) {
+  return useMutation({ mutationFn: ({ grnId }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}/void/approve`, { method: "PATCH" }), ...options?.mutation });
+}
+export function useRejectVoidGrn(options?: MutOpts<Grn, { grnId: number; note?: string }>) {
+  return useMutation({ mutationFn: ({ grnId, note }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}/void/reject`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) }), ...options?.mutation });
+}
+export function useUnvoidGrn(options?: MutOpts<Grn, { grnId: number; reason?: string }>) {
+  return useMutation({ mutationFn: ({ grnId, reason }) => apiFetch<Grn>(`/api/accounts/grns/${grnId}/unvoid`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }) }), ...options?.mutation });
 }
 export function useDeleteGrn(options?: MutOpts<void, { grnId: number }>) {
   return useMutation({ mutationFn: ({ grnId }) => apiFetch<void>(`/api/accounts/grns/${grnId}`, { method: "DELETE" }), ...options?.mutation });
