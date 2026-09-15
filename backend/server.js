@@ -1425,6 +1425,7 @@ function migratePurchasesToSuppliers() {
 }
 
 function migratePurchasesToGrns() {
+  if (independentAccountingEnabled()) return;
   const existing = new Set(db.get("grns").value().filter(g => g.sourcePurchaseId != null).map(g => Number(g.sourcePurchaseId)));
   for (const purchase of db.get("purchases").value()) {
     if (existing.has(Number(purchase.id))) continue;
@@ -2100,9 +2101,9 @@ app.post("/api/purchases",requirePermission("managePurchases"),(req,res)=>{
   const {batchNo,expiryDate}=req.body;
   const row={id:nextId("purchases"),supplierId:supplier.id,itemId:Number(itemId),quantity:Number(quantity),unitPrice:Number(unitPrice),invoiceNo:String(invoiceNo).trim(),folioNo:folioNo||null,lpoNo:lpoNo||null,purchasedAt,batchNo:batchNo||null,expiryDate:expiryDate||null,note:note||null};
   db.get("purchases").push(row).write();
-  const grn = createMatchingGrnForPurchase(row, supplier, item, req);
-  logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplierId: supplier.id, itemId: row.itemId, quantity: row.quantity, invoiceNo: row.invoiceNo, grnId: grn.id });
-  res.status(201).json({...row, supplier: supplier.name, supplierRecord: supplier, item, grnId: grn.id});
+  const grn = independentAccountingEnabled() ? null : createMatchingGrnForPurchase(row, supplier, item, req);
+  logActivity(req, "CREATE_PURCHASE", "PURCHASE", row.id, { supplierId: supplier.id, itemId: row.itemId, quantity: row.quantity, invoiceNo: row.invoiceNo, grnId: grn?.id || null, independentAccounting: independentAccountingEnabled() });
+  res.status(201).json({...row, supplier: supplier.name, supplierRecord: supplier, item, grnId: grn?.id || null});
 });
 
 app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) => {
@@ -2131,7 +2132,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
   if (updates.unitPrice !== undefined && !(updates.unitPrice >= 0)) return res.status(400).json({ error: "Unit price must be valid" });
   row.assign(updates).write();
   const updated = row.value();
-  if (linkedGrn.value()) {
+  if (!independentAccountingEnabled() && linkedGrn.value()) {
     const item = db.get("items").find({ id: Number(updated.itemId) }).value();
     const supplier = db.get("suppliers").find({ id: Number(updated.supplierId) }).value();
     if (item && supplier) {
@@ -2271,7 +2272,13 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
   const row = rowRef.value();
   if (!row) return res.status(404).json({ error: "GRN not found" });
   if (row.status === "approved") return res.status(400).json({ error: "GRN already approved" });
-  // Reflect stock: for each item line, push a stock movement (qty in) and roll balance forward
+  // In independent mode, approval changes only the GRN record; historical records remain untouched.
+  if (independentAccountingEnabled()) {
+    rowRef.assign({ status: "approved", approvedBy: req.session.userId, approvedAt: new Date().toISOString() }).write();
+    logActivity(req, "APPROVE_GRN_INDEPENDENT", "GRN", id, { grnNo: row.grnNo, totalAmount: row.totalAmount });
+    return res.json(rowRef.value());
+  }
+  // Legacy integrated mode: reflect stock, accounts, and supplier balance.
   for (const it of row.items) {
     if (!it.itemCode && !it.description) continue;
     pushStockMovement({
@@ -2301,6 +2308,11 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
 });
 function applyGrnVoid(req, rowRef, row, reason, action = "VOID_GRN") {
   const id = Number(req.params.id);
+  if (independentAccountingEnabled()) {
+    rowRef.assign({ status: "voided", voidedBy: req.session.userId, voidedAt: new Date().toISOString(), voidReason: reason, voidRequestStatus: "approved", voidReviewedBy: req.session.userId, voidReviewedAt: new Date().toISOString() }).write();
+    logActivity(req, `${action}_INDEPENDENT`, "GRN", row.id, { grnNo: row.grnNo, reason });
+    return rowRef.value();
+  }
   for (const it of row.items || []) {
     if (!it.itemCode && !it.description) continue;
     pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal of ${row.grnNo}: ${reason}` });
@@ -2348,6 +2360,11 @@ app.patch("/api/accounts/grns/:id/unvoid", requirePermission("manageAccounts"), 
   if (!row) return res.status(404).json({ error: "GRN not found" });
   if (row.status !== "voided") return res.status(400).json({ error: "Only voided GRNs can be unvoided" });
   const reason = String(req.body.reason || "GRN restored by administrator").trim();
+  if (independentAccountingEnabled()) {
+    ref.assign({ status: "approved", approvedBy: row.approvedBy || req.session.userId, approvedAt: row.approvedAt || new Date().toISOString(), unvoidedBy: req.session.userId, unvoidedAt: new Date().toISOString(), unvoidReason: reason }).write();
+    logActivity(req, "UNVOID_GRN_INDEPENDENT", "GRN", id, { grnNo: row.grnNo, reason });
+    return res.json(ref.value());
+  }
   for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Restored ${row.grnNo}: ${reason}` });
   postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `UNVOID-${row.grnNo}`, description: `Restore voided goods received — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
@@ -2582,6 +2599,7 @@ const DEFAULT_SETTINGS = {
   defaultCurrency: "KES",
   requireInvoiceNumber: true,
   requireSupplierName: true,
+  independentAccountingMode: true,
   // Reports & Exports
   reportChargeItem: "221102",
   chargeItemCodes: CHARGE_ITEM_CODES,
@@ -2616,6 +2634,7 @@ function getSettings(){
   if (!settings.chargeItemCodes.some(c => String(c.code) === "2211002")) settings.chargeItemCodes.push({ code: "2211002", name: "NON-PHARM" });
   return settings;
 }
+function independentAccountingEnabled() { return getSettings().independentAccountingMode !== false; }
 app.get("/api/settings",requirePermission("manageUsers"),(req,res)=>{
   res.json(getSettings());
 });

@@ -41,6 +41,7 @@ interface AppSettings {
   defaultCurrency: string;
   requireInvoiceNumber: boolean;
   requireSupplierName: boolean;
+  independentAccountingMode: boolean;
   // Reports & Exports
   reportChargeItem: string;
   chargeItemCodes: { code: string; name: string }[];
@@ -85,6 +86,7 @@ const DEFAULTS: AppSettings = {
   defaultCurrency: "KES",
   requireInvoiceNumber: true,
   requireSupplierName: true,
+  independentAccountingMode: true,
   reportChargeItem: "221102",
   chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }, { code: "2211002", name: "NON-PHARM" }],
   customRoles: [],
@@ -547,6 +549,8 @@ export default function SettingsPage() {
           </div>
           <ToggleRow label="Require Invoice Number" description="Each purchase record must have a supplier invoice number." checked={settings.requireInvoiceNumber} onChange={(v: boolean) => update("requireInvoiceNumber", v)} />
           <ToggleRow label="Require Supplier Name" description="Each purchase must have a named supplier (KEMSA, MEDS, etc.)." checked={settings.requireSupplierName} onChange={(v: boolean) => update("requireSupplierName", v)} />
+          <ToggleRow label="Independent Accounting Mode" description="New GRNs, purchases, accounting, and stock movements remain separate. Existing linked records are preserved as historical data." checked={settings.independentAccountingMode} onChange={(v: boolean) => update("independentAccountingMode", v)} />
+          {settings.independentAccountingMode && <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-900 dark:text-blue-200"><strong>How it works:</strong> approving a new GRN changes only the GRN status. It does not update purchases, stock, supplier balances, or journal entries. New purchases do not automatically create GRNs. Existing records remain unchanged for historical reference.</div>}
         </SectionCard>
 
         {/* 6. Reports & Exports */}
