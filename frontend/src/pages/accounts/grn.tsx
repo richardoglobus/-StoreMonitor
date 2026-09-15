@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, CheckCircle2, ReceiptText, X, Pencil, Ban } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, ReceiptText, X, Pencil, Ban, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -39,12 +39,14 @@ export default function GrnPage() {
   const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), lpoNo: "", supplierId: "", invoiceNo: "" });
   const [lines, setLines] = useState([emptyLine()]);
   const [editingGrnId, setEditingGrnId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
 
-  const { data: grns, isLoading } = useListGrns({}, { query: { queryKey: getListGrnsQueryKey({}) } });
+  const grnQuery = search.trim() ? { search: search.trim() } : {};
+  const { data: grns, isLoading } = useListGrns(grnQuery, { query: { queryKey: getListGrnsQueryKey(grnQuery) } });
   const { data: suppliers } = useListSuppliers();
   const { data: chargeItemCodes } = useChargeItemCodes();
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListGrnsQueryKey({}) });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/accounts/grns"] });
 
   const createGrn = useCreateGrn({
     mutation: {
@@ -118,7 +120,7 @@ export default function GrnPage() {
               <Button className="gap-2" onClick={() => { resetForm(); }}><Plus className="h-4 w-4"/>New GRN</Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>{editingGrnId ? "Edit Pending GRN" : "New Goods Received Note"}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editingGrnId ? "Edit GRN" : "New Goods Received Note"}</DialogTitle><p className="text-sm text-muted-foreground">Approved GRN edits reverse and repost integrated stock/accounting entries automatically.</p></DialogHeader>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-2">
                 <div className="space-y-1"><Label>Date</Label><input type="date" className={dateCls} value={header.date} onChange={e => setHeader(h => ({ ...h, date: e.target.value }))}/></div>
                 <div className="space-y-1"><Label>LPO No.</Label><Input value={header.lpoNo} onChange={e => setHeader(h => ({ ...h, lpoNo: e.target.value }))}/></div>
@@ -167,6 +169,8 @@ export default function GrnPage() {
         )}
       </div>
 
+      <div className="mb-4 relative max-w-xl"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"/><Input className="pl-9" placeholder="Search GRN number, supplier, invoice, LPO, item, batch, folio, or charge item code" value={search} onChange={e => setSearch(e.target.value)} /></div>
+
       <Card className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -187,10 +191,10 @@ export default function GrnPage() {
                 <TableCell>{g.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                 <TableCell><div>{g.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : g.status === "voided" ? <Badge variant="destructive">Voided</Badge> : <Badge variant="secondary">Pending</Badge>}{g.voidRequestStatus === "pending" && <Badge className="ml-1 bg-amber-100 text-amber-800">Void requested</Badge>}{g.voidRequestStatus === "rejected" && <Badge className="ml-1">Void rejected</Badge>}</div>{g.voidRequestStatus === "pending" && <p className="text-[11px] text-amber-700 mt-1">By {g.voidRequestedByName || "user"}: {g.voidRequestReason}</p>}</TableCell>
                 <TableCell className="text-right space-x-1">
-                  {canManage && g.status === "pending" && (
+                  {canManage && ["pending", "approved"].includes(g.status) && (
                     <>
                       <Button size="sm" variant="outline" className="gap-1" onClick={() => openEdit(g)}><Pencil className="h-3.5 w-3.5"/>Edit</Button>
-                      <Button size="sm" variant="outline" className="gap-1" onClick={() => approveGrn.mutate({ grnId: g.id })}><CheckCircle2 className="h-3.5 w-3.5"/>Approve</Button>
+                      {g.status === "pending" && <Button size="sm" variant="outline" className="gap-1" onClick={() => approveGrn.mutate({ grnId: g.id })}><CheckCircle2 className="h-3.5 w-3.5"/>Approve</Button>}
                     </>
                   )}
                   {canManage && g.status === "approved" && g.voidRequestStatus !== "pending" && <Button size="sm" variant="outline" className="gap-1 text-destructive" onClick={() => { const reason = prompt(isAdmin ? "Why are you voiding this approved GRN?" : "Why are you requesting this GRN to be voided?"); if (reason?.trim()) voidGrn.mutate({ grnId: g.id, reason: reason.trim() }); }}><Ban className="h-3.5 w-3.5"/>{isAdmin ? "Void" : "Request void"}</Button>}

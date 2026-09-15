@@ -2213,6 +2213,10 @@ app.get("/api/accounts/grns", requirePermission("viewAccounts"), (req, res) => {
   let rows = db.get("grns").value().sort((a, b) => b.id - a.id);
   if (req.query.status) rows = rows.filter(r => r.status === req.query.status);
   if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
+  if (req.query.search) {
+    const q = String(req.query.search).trim().toLowerCase();
+    rows = rows.filter(r => [r.grnNo, r.date, r.lpoNo, r.invoiceNo, supplierMap.get(r.supplierId)?.name, ...(r.items || []).flatMap(i => [i.itemCode, i.description, i.batchNo, i.folioNo, i.chargeItemCode])].some(v => String(v || "").toLowerCase().includes(q)));
+  }
   res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null, voidRequestedByName: r.voidRequestedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null, voidReviewedByName: r.voidReviewedBy ? userMap.get(r.voidReviewedBy) || `User ${r.voidReviewedBy}` : null })));
 });
 app.get("/api/accounts/grns/:id", requirePermission("viewAccounts"), (req, res) => {
@@ -2228,23 +2232,7 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "At least one item line is required" });
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
-  let totalAmount = 0;
-  const cleanItems = items.map(it => {
-    const qtyReceived = Number(it.qtyReceived) || 0;
-    const unitCost = Number(it.unitCost) || 0;
-    const totalCost = Number((qtyReceived * unitCost).toFixed(2));
-    totalAmount += totalCost;
-    return {
-      itemCode: it.itemCode || null,
-      description: String(it.description || "").trim().toUpperCase(),
-      unit: it.unit || null,
-      qtyReceived, unitCost, totalCost,
-      batchNo: it.batchNo || null,
-      expiryDate: it.expiryDate || null,
-      chargeItemCode: it.chargeItemCode || it.chargedTo || null,
-      folioNo: it.folioNo || null,
-    };
-  });
+  const { cleanItems, totalAmount } = normalizeGrnItems(items);
   const row = {
     id: nextId("grns"),
     grnNo: genSequentialNo("GRN", "grns"),
@@ -2258,25 +2246,44 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
   logActivity(req, "CREATE_GRN", "GRN", row.id, { grnNo: row.grnNo, supplierId: row.supplierId, totalAmount: row.totalAmount });
   res.status(201).json(row);
 });
+function normalizeGrnItems(items) {
+  let totalAmount = 0;
+  const cleanItems = items.map(it => {
+    const qtyReceived = Number(it.qtyReceived) || 0, unitCost = Number(it.unitCost) || 0;
+    const totalCost = Number((qtyReceived * unitCost).toFixed(2)); totalAmount += totalCost;
+    return { itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || null, folioNo: it.folioNo || null };
+  });
+  return { cleanItems, totalAmount: Number(totalAmount.toFixed(2)) };
+}
+function reverseApprovedGrnAccounting(row, req) {
+  if (independentAccountingEnabled()) return;
+  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: `EDIT-${row.grnNo}`, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal before editing ${row.grnNo}` });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `EDIT-REV-${row.grnNo}`, description: `Reverse goods received before editing — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount });
+  const supplierRef = db.get("suppliers").find({ id: row.supplierId });
+  if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - Number(row.totalAmount || 0)).toFixed(2)) }).write();
+}
+function applyApprovedGrnAccounting(row) {
+  if (independentAccountingEnabled()) return;
+  for (const it of row.items || []) pushStockMovement({ date: row.date, itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Received from ${row.grnNo}` });
+  postJournalEntry({ date: row.date, reference: `EDIT-${row.grnNo}`, description: `Goods received after edit — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
+  const supplierRef = db.get("suppliers").find({ id: row.supplierId });
+  if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + Number(row.totalAmount || 0)).toFixed(2)) }).write();
+}
 app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
   const ref = db.get("grns").find({ id });
   const current = ref.value();
   if (!current) return res.status(404).json({ error: "GRN not found" });
-  if (current.status !== "pending") return res.status(400).json({ error: "Only pending GRNs can be edited" });
+  if (!current || !["pending", "approved"].includes(current.status)) return res.status(400).json({ error: "Only pending or approved GRNs can be edited" });
   const { date, lpoNo, supplierId, invoiceNo, items } = req.body;
   if (!date || !supplierId || !Array.isArray(items) || !items.length) return res.status(400).json({ error: "Date, supplier and at least one item are required" });
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
-  let totalAmount = 0;
-  const cleanItems = items.map(it => {
-    const qtyReceived = Number(it.qtyReceived) || 0;
-    const unitCost = Number(it.unitCost) || 0;
-    const totalCost = Number((qtyReceived * unitCost).toFixed(2));
-    totalAmount += totalCost;
-    return { itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || null, folioNo: it.folioNo || null };
-  });
-  ref.assign({ date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount: Number(totalAmount.toFixed(2)), updatedAt: new Date().toISOString() }).write();
+  const { cleanItems, totalAmount } = normalizeGrnItems(items);
+  if (current.status === "approved") reverseApprovedGrnAccounting(current, req);
+  const updated = { ...current, date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount, updatedAt: new Date().toISOString() };
+  ref.assign(updated).write();
+  if (current.status === "approved") applyApprovedGrnAccounting(updated);
   logActivity(req, "UPDATE_GRN", "GRN", id, { grnNo: current.grnNo, totalAmount });
   res.json(ref.value());
 });
@@ -2476,6 +2483,27 @@ app.patch("/api/accounts/suppliers/:id", requirePermission("manageAccounts"), (r
   row.assign(updates).write();
   logActivity(req, "UPDATE_SUPPLIER", "SUPPLIER", id, updates);
   res.json(row.value());
+});
+app.post("/api/accounts/suppliers/merge", requirePermission("manageAccounts"), (req, res) => {
+  const sourceId = Number(req.body.sourceSupplierId), targetId = Number(req.body.targetSupplierId);
+  if (!sourceId || !targetId || sourceId === targetId) return res.status(400).json({ error: "Choose two different suppliers" });
+  const sourceRef = db.get("suppliers").find({ id: sourceId }), targetRef = db.get("suppliers").find({ id: targetId });
+  const source = sourceRef.value(), target = targetRef.value();
+  if (!source || !target) return res.status(404).json({ error: "Supplier not found" });
+  const requestedName = req.body.name !== undefined ? String(req.body.name).trim().toUpperCase() : target.name;
+  if (!requestedName) return res.status(400).json({ error: "Merged supplier name is required" });
+  const collections = ["grns", "purchases", "paymentEntries", "purchaseOrders", "supplierInvoices"];
+  const moved = {};
+  for (const collection of collections) {
+    const rows = db.get(collection).value();
+    let count = 0;
+    for (const row of rows) if (Number(row.supplierId) === sourceId) { db.get(collection).find({ id: row.id }).assign({ supplierId: targetId }).write(); count++; }
+    moved[collection] = count;
+  }
+  targetRef.assign({ name: requestedName, balance: Number((Number(target.balance || 0) + Number(source.balance || 0)).toFixed(2)) }).write();
+  db.get("suppliers").remove({ id: sourceId }).write();
+  logActivity(req, "MERGE_SUPPLIERS", "SUPPLIER", targetId, { sourceSupplierId: sourceId, targetSupplierId: targetId, moved });
+  res.json({ supplier: targetRef.value(), mergedSupplierId: targetId, moved });
 });
 app.delete("/api/accounts/suppliers/:id", requirePermission("deleteTransactions"), (req, res) => {
   const id = Number(req.params.id);

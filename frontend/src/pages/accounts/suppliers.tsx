@@ -3,12 +3,13 @@ import { Layout } from "@/components/layout";
 import {
   useListSuppliers, getListSuppliersQueryKey,
   useCreateSupplier, useUpdateSupplier, useDeleteSupplier, useGetSupplierLedger,
+  useMergeSuppliers,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Pencil, Users, BookOpen } from "lucide-react";
+import { Plus, Trash2, Pencil, Users, BookOpen, GitMerge, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,11 @@ export default function SuppliersPage() {
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [ledgerSupplierId, setLedgerSupplierId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergeName, setMergeName] = useState("");
 
   const { data: suppliers, isLoading } = useListSuppliers({ query: { queryKey: getListSuppliersQueryKey() } });
   const { data: ledger, isLoading: ledgerLoading } = useGetSupplierLedger(ledgerSupplierId ?? 0);
@@ -42,6 +48,7 @@ export default function SuppliersPage() {
   const createSupplier = useCreateSupplier({ mutation: { onSuccess: () => { toast.success("Supplier added"); invalidate(); closeDialog(); }, onError: (e: any) => toast.error(e?.error || "Failed to add supplier"), onSettled: () => setSubmitting(false) } });
   const updateSupplier = useUpdateSupplier({ mutation: { onSuccess: () => { toast.success("Supplier updated"); invalidate(); closeDialog(); }, onError: (e: any) => toast.error(e?.error || "Failed to update supplier"), onSettled: () => setSubmitting(false) } });
   const deleteSupplier = useDeleteSupplier({ mutation: { onSuccess: () => { toast.success("Supplier deleted"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to delete supplier") } });
+  const mergeSuppliers = useMergeSuppliers({ mutation: { onSuccess: (data) => { toast.success(`Suppliers merged; ${Object.values(data.moved).reduce((a, b) => a + b, 0)} linked records moved`); invalidate(); setMergeOpen(false); setMergeSourceId(""); setMergeTargetId(""); setMergeName(""); }, onError: (e: any) => toast.error(e?.error || "Failed to merge suppliers") } });
 
   const closeDialog = () => { setIsDialogOpen(false); setEditingId(null); setForm(emptyForm); };
   const openEdit = (s: any) => { setEditingId(s.id); setForm({ name: s.name, contactPerson: s.contactPerson ?? "", phone: s.phone ?? "", email: s.email ?? "", address: s.address ?? "" }); setIsDialogOpen(true); };
@@ -51,6 +58,14 @@ export default function SuppliersPage() {
     setSubmitting(true);
     if (editingId) updateSupplier.mutate({ supplierId: editingId, data: form });
     else createSupplier.mutate({ data: form });
+  };
+  const visibleSuppliers = (suppliers ?? []).filter(s => !search.trim() || [s.name, s.contactPerson, s.phone, s.email, s.address].some(v => String(v || "").toLowerCase().includes(search.trim().toLowerCase())));
+  const submitMerge = () => {
+    if (!mergeSourceId || !mergeTargetId || mergeSourceId === mergeTargetId) return toast.error("Choose two different suppliers");
+    const source = suppliers?.find(s => s.id === Number(mergeSourceId)), target = suppliers?.find(s => s.id === Number(mergeTargetId));
+    if (!source || !target) return toast.error("Choose a source and target supplier");
+    if (!confirm(`Merge ${source.name} into ${target.name}? All purchases, GRNs, payments and invoices will use the target supplier. This cannot be undone.`)) return;
+    mergeSuppliers.mutate({ sourceSupplierId: Number(mergeSourceId), targetSupplierId: Number(mergeTargetId), name: mergeName.trim() || target.name });
   };
 
   return (
@@ -79,15 +94,18 @@ export default function SuppliersPage() {
             </DialogContent>
           </Dialog>
         )}
+        {canManage && <Dialog open={mergeOpen} onOpenChange={setMergeOpen}><DialogTrigger asChild><Button variant="outline" className="gap-2"><GitMerge className="h-4 w-4"/>Merge Suppliers</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Merge Supplier Records</DialogTitle><p className="text-sm text-muted-foreground">Choose the duplicate supplier as Source and the record to keep as Target. All linked records will be reassigned.</p></DialogHeader><div className="space-y-3"><div className="space-y-1"><Label>Source supplier (will be removed)</Label><select className="w-full h-9 rounded-md border bg-background px-2" value={mergeSourceId} onChange={e => setMergeSourceId(e.target.value)}><option value="">Select source</option>{(suppliers ?? []).filter(s => s.id !== Number(mergeTargetId)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div><div className="space-y-1"><Label>Target supplier (will be kept)</Label><select className="w-full h-9 rounded-md border bg-background px-2" value={mergeTargetId} onChange={e => setMergeTargetId(e.target.value)}><option value="">Select target</option>{(suppliers ?? []).filter(s => s.id !== Number(mergeSourceId)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div><div className="space-y-1"><Label>Final supplier name (optional)</Label><Input value={mergeName} onChange={e => setMergeName(e.target.value)} placeholder="Leave blank to keep target name"/></div></div><DialogFooter><Button variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button><Button onClick={submitMerge} disabled={mergeSuppliers.isPending}>{mergeSuppliers.isPending ? "Merging..." : "Merge records"}</Button></DialogFooter></DialogContent></Dialog>}
       </div>
+
+      <div className="mb-4 relative max-w-xl"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"/><Input className="pl-9" placeholder="Search suppliers" value={search} onChange={e => setSearch(e.target.value)} /></div>
 
       <Card className="overflow-x-auto">
         <Table>
           <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Contact</TableHead><TableHead>Phone</TableHead><TableHead className="text-right">Amount Owed (KES)</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
           <TableBody>
             {isLoading && Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-6 w-full"/></TableCell></TableRow>)}
-            {!isLoading && (suppliers ?? []).length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No suppliers added yet.</TableCell></TableRow>}
-            {(suppliers ?? []).map(s => (
+            {!isLoading && visibleSuppliers.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No suppliers match the search.</TableCell></TableRow>}
+            {visibleSuppliers.map(s => (
               <TableRow key={s.id}>
                 <TableCell className="font-medium">{s.name}</TableCell>
                 <TableCell>{s.contactPerson ?? "—"}</TableCell>

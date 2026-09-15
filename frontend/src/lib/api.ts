@@ -322,6 +322,9 @@ export const getListGrnsQueryKey = (params?: any) => ["/api/accounts/grns", para
 export function useListGrns(params?: any, options?: QueryOpts<Grn[]>) {
   return useQuery({ queryKey: getListGrnsQueryKey(params), queryFn: () => apiFetch<Grn[]>(`/api/accounts/grns${qs(params ?? {})}`), ...options?.query });
 }
+export function useMergeSuppliers(options?: MutOpts<{ supplier: Supplier; mergedSupplierId: number; moved: Record<string, number> }, { sourceSupplierId: number; targetSupplierId: number; name?: string }>) {
+  return useMutation({ mutationFn: ({ sourceSupplierId, targetSupplierId, name }) => apiFetch<{ supplier: Supplier; mergedSupplierId: number; moved: Record<string, number> }>("/api/accounts/suppliers/merge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceSupplierId, targetSupplierId, name }) }), ...options?.mutation });
+}
 export function useCreateGrn(options?: MutOpts<Grn, { data: any }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<Grn>("/api/accounts/grns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
 }
