@@ -7,6 +7,7 @@ import {
   useListPurchases, getListPurchasesQueryKey,
   useDeletePurchase,
   useListItems, getListItemsQueryKey,
+  getListItemStockQueryKey,
   useListSuppliers, getListSuppliersQueryKey,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -83,7 +84,7 @@ export default function Purchases() {
 
   const deletePurchase = useDeletePurchase({
     mutation: {
-      onSuccess: () => { toast.success("Purchase deleted"); queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) }); },
+      onSuccess: () => { toast.success("Purchase deleted"); queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) }); queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); },
       onError: () => toast.error("Failed to delete"),
     }
   });
@@ -148,6 +149,7 @@ export default function Purchases() {
       if (hasError) { toast.error(hasError.error); return; }
       toast.success(`${lines.length} purchase line${lines.length > 1 ? "s" : ""} recorded successfully`);
       queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) });
+      queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() });
       setIsDialogOpen(false);
       setHeader({ supplierId: "", invoiceNo: "", lpoNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
       setLines([emptyLine()]);
@@ -169,6 +171,7 @@ export default function Purchases() {
       if (!res.ok) { const d = await res.json(); toast.error(d.error || "Update failed"); return; }
       toast.success("Purchase updated");
       queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) });
+      queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() });
       setEditDialogOpen(false); setEditForm(null);
     } catch { toast.error("Update failed"); }
     finally { setEditLoading(false); }

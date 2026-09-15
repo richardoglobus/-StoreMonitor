@@ -1351,9 +1351,12 @@ function normalizePermissions(role, permissions) {
 function getCurrentStockForItem(itemId) {
   const item = db.get("items").find({ id: itemId }).value();
   const opening = item?.quantity ?? 0;
-  const purchasedTotal = db.get("purchases").filter({ itemId }).value().reduce((s, p) => s + Number(p.quantity || 0), 0);
+  const linkedPurchaseIds = new Set(db.get("grns").value().filter(g => g.sourcePurchaseId != null).map(g => Number(g.sourcePurchaseId)));
+  const purchasedTotal = db.get("stockMovements").value().filter(m => String(m.itemCode) === String(itemId) && m.transactionType === "GRN").reduce((s, m) => s + Number(m.qtyIn || 0), 0)
+    + (independentAccountingEnabled() ? db.get("purchases").filter({ itemId }).value().filter(p => !linkedPurchaseIds.has(Number(p.id))).reduce((s, p) => s + Number(p.quantity || 0), 0) : 0);
+  const adjustmentTotal = db.get("stockMovements").value().filter(m => String(m.itemCode) === String(itemId) && ["ADJUSTMENT", "GRN_REVERSAL"].includes(m.transactionType)).reduce((s, m) => s + Number(m.qtyIn || 0) - Number(m.qtyOut || 0), 0);
   const issuedTotal = db.get("issues").filter({ itemId }).value().reduce((s, i) => s + Number(i.quantity || 0), 0);
-  return opening + purchasedTotal - issuedTotal;
+  return opening + purchasedTotal + adjustmentTotal - issuedTotal;
 }
 
 function logActivity(req, action, entityType, entityId, details = null) {
@@ -1808,12 +1811,17 @@ app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),
   const items=db.get("items").orderBy("description","asc").value();
   const movementRows=db.get("stockMovements").value();
   const categories = new Map(db.get("categories").value().map(c => [Number(c.id), c]));
+  const independent = independentAccountingEnabled();
   const pMap=new Map(),aMap=new Map(),iMap=new Map();
   for(const m of movementRows){
     if(m.transactionType === "GRN") pMap.set(String(m.itemCode),(pMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0));
     if(m.transactionType === "ADJUSTMENT" || m.transactionType === "GRN_REVERSAL") aMap.set(String(m.itemCode),(aMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0)-Number(m.qtyOut||0));
   }
   for(const i of db.get("issues").value()) iMap.set(String(i.itemId),(iMap.get(String(i.itemId))||0)+Number(i.quantity||0));
+  if (independent) {
+    const linkedPurchaseIds = new Set(db.get("grns").value().filter(g => g.sourcePurchaseId != null).map(g => Number(g.sourcePurchaseId)));
+    for (const p of db.get("purchases").value()) if (!linkedPurchaseIds.has(Number(p.id))) pMap.set(String(p.itemId),(pMap.get(String(p.itemId))||0)+Number(p.quantity||0));
+  }
   res.json(items.filter(it => { const c = categories.get(Number(it.categoryId)); return !c || categoryAllows(req, c, "view"); }).map(it=>{
     const opening=Number(it.quantity)||0, purchased=pMap.get(String(it.id))||0, issued=iMap.get(String(it.id))||0, adjustments=aMap.get(String(it.id))||0;
     const category = categories.get(Number(it.categoryId));
