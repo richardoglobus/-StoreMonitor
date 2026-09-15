@@ -49,6 +49,7 @@ export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; ad
 export type CatalogCategory = { id: number; name: string; chargeItemCode: string | null; viewRoles?: string[]; editRoles?: string[]; itemCount?: number; createdAt?: string };
 export type InventoryRow = { id: number; departmentId: number; itemId: number; month: string; physicalCount: number; receivedKemsa: number; receivedMeds: number; totalUsed: number; balance: number; item: Item };
 export type Issue = { id: number; voucherId: string | null; folioNo: string | null; s11No: string | null; departmentId: number; itemId: number; quantity: number; issuedAt: string; weekday: string; note: string | null; item: Item; department: Department };
+export type IssueListResponse = { rows: Issue[]; total: number; page: number; pageSize: number; totalPages: number };
 export type Receipt = { id: number; departmentId: number; itemId: number; source: string; quantity: number; receivedAt: string; item: Item; department: Department };
 export type Purchase = { id: number; supplierId: number; supplier: string; supplierRecord?: Supplier | null; itemId: number; quantity: number; unitPrice: number; invoiceNo: string | null; folioNo?: string | null; purchasedAt: string; note: string | null; batchNo?: string | null; expiryDate?: string | null; item: Item };
 export type DashboardSummary = { month: string; totalDepartments: number; totalItems: number; totalIssuedThisMonth: number; totalReceivedThisMonth: number; lowStockCount: number; outOfStockCount: number; nextIssueDate: string | null; nextIssueWeekday: string | null };
@@ -235,8 +236,8 @@ export function useCreateReceipt(options?: MutOpts<Receipt, { data: any }>) {
 
 // ─── Issues ────────────────────────────────────────────────────────────────────
 
-export function useListIssues(params?: any, options?: QueryOpts<Issue[]>) {
-  return useQuery({ queryKey: getListIssuesQueryKey(params), queryFn: () => apiFetch<Issue[]>(`/api/issues${qs(params ?? {})}`), ...options?.query });
+export function useListIssues(params?: any, options?: QueryOpts<IssueListResponse>) {
+  return useQuery({ queryKey: getListIssuesQueryKey(params), queryFn: () => apiFetch<IssueListResponse>(`/api/issues${qs(params ?? {})}`), ...options?.query });
 }
 
 export function useCreateIssue(options?: MutOpts<Issue, { data: any }>) {

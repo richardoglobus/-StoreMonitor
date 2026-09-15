@@ -1807,15 +1807,16 @@ app.get("/api/items",requireAnyPermission("viewCatalog", "manageCatalog"),(req,r
 app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),(req,res)=>{
   const items=db.get("items").orderBy("description","asc").value();
   const movementRows=db.get("stockMovements").value();
+  const categories = new Map(db.get("categories").value().map(c => [Number(c.id), c]));
   const pMap=new Map(),aMap=new Map(),iMap=new Map();
   for(const m of movementRows){
     if(m.transactionType === "GRN") pMap.set(String(m.itemCode),(pMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0));
     if(m.transactionType === "ADJUSTMENT" || m.transactionType === "GRN_REVERSAL") aMap.set(String(m.itemCode),(aMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0)-Number(m.qtyOut||0));
   }
   for(const i of db.get("issues").value()) iMap.set(String(i.itemId),(iMap.get(String(i.itemId))||0)+Number(i.quantity||0));
-  res.json(items.filter(it => { const c = db.get("categories").find({ id: Number(it.categoryId) }).value(); return !c || categoryAllows(req, c, "view"); }).map(it=>{
+  res.json(items.filter(it => { const c = categories.get(Number(it.categoryId)); return !c || categoryAllows(req, c, "view"); }).map(it=>{
     const opening=Number(it.quantity)||0, purchased=pMap.get(String(it.id))||0, issued=iMap.get(String(it.id))||0, adjustments=aMap.get(String(it.id))||0;
-    const category = db.get("categories").find({ id: Number(it.categoryId) }).value();
+    const category = categories.get(Number(it.categoryId));
     const rawBalance=opening+purchased+adjustments-issued, expired=!!it.expiryDate && it.expiryDate < new Date().toISOString().slice(0,10);
     return { id:it.id, description:it.description, unit:it.unit, categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:expired ? 0 : rawBalance, rawStockBalance:rawBalance, expiryDate:it.expiryDate || null, expired };
   }));
@@ -1921,7 +1922,9 @@ app.post("/api/receipts",(req,res)=>{
 
 // ISSUES
 app.get("/api/issues",requireAnyPermission("viewIssues", "issueItems"),(req,res)=>{
-  const departmentId=req.query.departmentId?Number(req.query.departmentId):null,month=req.query.month,limit=req.query.limit?Number(req.query.limit):null;
+  const departmentId=req.query.departmentId?Number(req.query.departmentId):null, itemId=req.query.itemId?Number(req.query.itemId):null, month=req.query.month;
+  const page=Math.max(1,Number(req.query.page)||1), pageSize=Math.min(200,Math.max(10,Number(req.query.pageSize)||100));
+  const s11=String(req.query.s11No||"").trim().toLowerCase(), search=String(req.query.search||"").trim().toLowerCase();
   // Support ?from=YYYY-MM-DD&to=YYYY-MM-DD OR ?month=YYYY-MM
   let start=null, end=null;
   if (req.query.from && req.query.to) {
@@ -1932,10 +1935,13 @@ app.get("/api/issues",requireAnyPermission("viewIssues", "issueItems"),(req,res)
   const itemMap=getItemMap(),deptMap=getDeptMap();
   let rows=db.get("issues").value();
   if(departmentId) rows=rows.filter(r=>r.departmentId===departmentId);
+  if(itemId) rows=rows.filter(r=>Number(r.itemId)===itemId);
   if(start) rows=rows.filter(r=>r.issuedAt>=start&&r.issuedAt<=end);
+  if(s11) rows=rows.filter(r=>String(r.s11No||"").toLowerCase().includes(s11));
+  if(search) rows=rows.filter(r=>{ const item= itemMap.get(r.itemId), dept=deptMap.get(r.departmentId); return [item?.description,dept?.name,r.folioNo,r.s11No,r.voucherId].some(v=>String(v||"").toLowerCase().includes(search)); });
   rows=rows.sort((a,b)=>b.issuedAt.localeCompare(a.issuedAt)||b.id-a.id);
-  if(limit) rows=rows.slice(0,limit);
-  res.json(rows.map(r=>({...r,item:itemMap.get(r.itemId),department:deptMap.get(r.departmentId)})));
+  const total=rows.length, startIndex=(page-1)*pageSize;
+  res.json({ rows: rows.slice(startIndex,startIndex+pageSize).map(r=>({...r,item:itemMap.get(r.itemId),department:deptMap.get(r.departmentId)})), total, page, pageSize, totalPages: Math.max(1,Math.ceil(total/pageSize)) });
 });
 app.post("/api/issues",requirePermission("issueItems"),(req,res)=>{
   const {departmentId,itemId,quantity,issuedAt,folioNo,s11No,note}=req.body;

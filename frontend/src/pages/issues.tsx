@@ -185,8 +185,10 @@ export default function Issues() {
   const [itemIdFilter, setItemIdFilter] = useState(() => new URLSearchParams(window.location.search).get("itemId") || "all");
   const [s11Filter, setS11Filter] = useState("");
   const [search, setSearch] = useState("");
+  const [issuePage, setIssuePage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const activeFilterCount = (itemIdFilter !== "all" ? 1 : 0) + (s11Filter.trim() ? 1 : 0);
+  useEffect(() => { setIssuePage(1); setSelectedIssueIds([]); }, [from, to, departmentIdFilter, itemIdFilter, s11Filter, search]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editIssueOpen, setEditIssueOpen] = useState(false);
   const [editIssue, setEditIssue] = useState<any>(null);
@@ -201,8 +203,8 @@ export default function Issues() {
   const { data: departments } = useListDepartments({ query: { queryKey: getListDepartmentsQueryKey() } });
   const { data: itemStock } = useListItemStock({ query: { queryKey: getListItemStockQueryKey() } });
 
-  const queryParams = { from, to, ...(departmentIdFilter !== "all" ? { departmentId: Number(departmentIdFilter) } : {}) };
-  const { data: issues, isLoading, refetch: refetchIssues, isFetching } = useListIssues(queryParams, { query: { queryKey: getListIssuesQueryKey(queryParams) } });
+  const queryParams = { from, to, page: issuePage, pageSize: 100, ...(departmentIdFilter !== "all" ? { departmentId: Number(departmentIdFilter) } : {}), ...(itemIdFilter !== "all" ? { itemId: Number(itemIdFilter) } : {}), ...(s11Filter.trim() ? { s11No: s11Filter.trim() } : {}), ...(search.trim() ? { search: search.trim() } : {}) };
+  const { data: issueResponse, isLoading, refetch: refetchIssues, isFetching } = useListIssues(queryParams, { query: { queryKey: getListIssuesQueryKey(queryParams) } });
 
   const createVoucher = useCreateIssueVoucher({
     mutation: {
@@ -311,21 +313,9 @@ export default function Issues() {
 
   const downloadUrl = `${API_BASE}/api/export/issues.csv?from=${from}&to=${to}${departmentIdFilter !== "all" ? `&departmentId=${departmentIdFilter}` : ""}${itemIdFilter !== "all" ? `&itemId=${itemIdFilter}` : ""}${s11Filter.trim() ? `&s11No=${encodeURIComponent(s11Filter.trim())}` : ""}`;
 
-  const filteredIssues = (issues ?? []).filter(i => {
-    if (itemIdFilter !== "all" && i.itemId !== Number(itemIdFilter)) return false;
-    if (s11Filter.trim() && !i.s11No?.toLowerCase().includes(s11Filter.trim().toLowerCase())) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const matches =
-        i.item?.description?.toLowerCase().includes(q) ||
-        i.department?.name?.toLowerCase().includes(q) ||
-        i.folioNo?.toLowerCase().includes(q) ||
-        i.s11No?.toLowerCase().includes(q) ||
-        i.voucherId?.toLowerCase().includes(q);
-      if (!matches) return false;
-    }
-    return true;
-  });
+  const filteredIssues = issueResponse?.rows ?? [];
+  const totalIssueResults = issueResponse?.total ?? 0;
+  const totalIssuePages = issueResponse?.totalPages ?? 1;
   const filteredIssueIds = filteredIssues.map(i => i.id);
   const allFilteredIssuesSelected = filteredIssueIds.length > 0 && filteredIssueIds.every(id => selectedIssueIds.includes(id));
   const deleteSelectedIssues = async () => {
@@ -534,7 +524,7 @@ export default function Issues() {
             </Popover>
             {(search || activeFilterCount > 0) && (
               <span className="text-xs text-muted-foreground ml-1">
-                {filteredIssues.length} result{filteredIssues.length !== 1 ? "s" : ""}
+                {totalIssueResults} result{totalIssueResults !== 1 ? "s" : ""}
               </span>
             )}
             {canDeleteIssues && selectedIssueIds.length > 0 && (
@@ -635,6 +625,7 @@ export default function Issues() {
               </TableBody>
             </Table>
           </div>
+          {totalIssuePages > 1 && <div className="flex items-center justify-between border-t px-4 py-3 text-sm"><span className="text-muted-foreground">Page {issuePage} of {totalIssuePages} · 100 records per page</span><div className="flex gap-2"><Button variant="outline" size="sm" disabled={issuePage <= 1 || isFetching} onClick={() => setIssuePage(p => p - 1)}>Previous</Button><Button variant="outline" size="sm" disabled={issuePage >= totalIssuePages || isFetching} onClick={() => setIssuePage(p => p + 1)}>Next</Button></div></div>}
         </Card>
       </div>
       {/* Edit Issue Dialog — admin only */}
