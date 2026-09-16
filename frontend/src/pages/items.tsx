@@ -87,7 +87,7 @@ export default function Items() {
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [newItem, setNewItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10", expiryDate: "" });
-  const [editItem, setEditItem] = useState({ description: "", unit: "", categoryId: "", quantity: "0", lowStockThreshold: "10", expiryDate: "" });
+  const [editItem, setEditItem] = useState({ description: "", unit: "", baseUnit: "", packUnit: "", packSize: "1", openingUnit: "", categoryId: "", quantity: "0", lowStockThreshold: "10", expiryDate: "" });
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkCategoryId, setBulkCategoryId] = useState("");
@@ -159,13 +159,13 @@ export default function Items() {
 
   const openEditDialog = (item: any) => {
     setEditItemId(item.id);
-    setEditItem({ description: item.description, unit: item.unit, categoryId: item.categoryId ? String(item.categoryId) : "", quantity: String(item.quantity??0), lowStockThreshold: item.lowStockThreshold!=null?String(item.lowStockThreshold):"10", expiryDate: item.expiryDate || "" });
+    setEditItem({ description: item.description, unit: item.unit, baseUnit: item.unit, packUnit: item.packUnit || "", packSize: String(item.packSize || 1), openingUnit: item.quantityUnit || item.unit, categoryId: item.categoryId ? String(item.categoryId) : "", quantity: String(item.quantity??0), lowStockThreshold: item.lowStockThreshold!=null?String(item.lowStockThreshold):"10", expiryDate: item.expiryDate || "" });
     setEditDialogOpen(true);
   };
   const handleEditSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editItemId || !editItem.description.trim() || !editItem.unit.trim()) return;
-    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), categoryId: editItem.categoryId ? Number(editItem.categoryId) : null, quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null, expiryDate: editItem.expiryDate || null } as any });
+    updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), baseUnit: editItem.baseUnit || editItem.unit, packUnit: editItem.packUnit, packSize: Number(editItem.packSize)||1, openingUnit: editItem.openingUnit || editItem.unit, categoryId: editItem.categoryId ? Number(editItem.categoryId) : null, quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null, expiryDate: editItem.expiryDate || null } as any });
   };
 
   const filteredItems = items?.filter(item => (!selectedCategoryId || item.categoryId === selectedCategoryId) && item.description.toLowerCase().includes(search.toLowerCase()));
@@ -395,6 +395,8 @@ export default function Items() {
                   <Label>Unit</Label>
                   <UnitCombobox value={editItem.unit} onChange={v=>setEditItem({...editItem,unit:v})} existingUnits={existingUnits}/>
                 </div>
+                <div className="grid grid-cols-3 gap-2"><div><Label>Base unit</Label><Input value={editItem.baseUnit} onChange={e=>setEditItem({...editItem,baseUnit:e.target.value})} placeholder="PIECE / PAIR"/></div><div><Label>Pack unit</Label><Input value={editItem.packUnit} onChange={e=>setEditItem({...editItem,packUnit:e.target.value})} placeholder="PACKET / BOX"/></div><div><Label>Units per pack</Label><Input type="number" min="1" value={editItem.packSize} onChange={e=>setEditItem({...editItem,packSize:e.target.value})}/></div></div>
+                <div className="space-y-2"><Label>Existing quantity is recorded as</Label><select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={editItem.openingUnit} onChange={e=>setEditItem({...editItem,openingUnit:e.target.value})}><option value={editItem.baseUnit || editItem.unit}>{editItem.baseUnit || editItem.unit}</option>{editItem.packUnit && <option value={editItem.packUnit}>{editItem.packUnit}</option>}</select><p className="text-xs text-muted-foreground">This controls how the current Catalog quantity is converted. It does not rewrite historical transactions.</p></div>
                 <div className="space-y-2">
                   <Label>Category</Label>
                   <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={editItem.categoryId} onChange={e=>setEditItem({...editItem,categoryId:e.target.value})}>

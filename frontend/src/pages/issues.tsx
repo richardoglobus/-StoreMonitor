@@ -56,7 +56,7 @@ function getWeekdayColor(label: string): string {
 function VoucherItemRow({
   vItem, index, itemStock, onRemove, onChange, canRemove,
 }: {
-  vItem: { itemId: string; quantity: string; note: string; search: string; folioNo: string };
+  vItem: { itemId: string; quantity: string; quantityUnit: string; note: string; search: string; folioNo: string };
   index: number;
   itemStock: any[];
   onRemove: () => void;
@@ -87,7 +87,7 @@ function VoucherItemRow({
           <Label className="text-xs">Item</Label>
           <Select
             value={vItem.itemId}
-            onValueChange={v => { onChange("itemId", v); onChange("search", ""); }}
+            onValueChange={v => { const selected = itemStock.find(i => i.id === Number(v)); onChange("itemId", v); onChange("quantityUnit", selected?.unit || ""); onChange("search", ""); }}
           >
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Select item">
@@ -114,6 +114,14 @@ function VoucherItemRow({
             onChange={e => onChange("quantity", e.target.value)}
             required
           />
+        </div>
+
+        <div className="col-span-6 md:col-span-2 space-y-1">
+          <Label className="text-xs">Issue Unit</Label>
+          <Select value={vItem.quantityUnit} onValueChange={v => onChange("quantityUnit", v)} disabled={!selectedItem}>
+            <SelectTrigger className="h-9"><SelectValue placeholder="Unit"/></SelectTrigger>
+            <SelectContent>{selectedItem && <><SelectItem value={selectedItem.unit}>{selectedItem.unit}</SelectItem>{selectedItem.packUnit && <SelectItem value={selectedItem.packUnit}>{selectedItem.packUnit} ({selectedItem.packSize} {selectedItem.unit})</SelectItem>}</>}</SelectContent>
+          </Select>
         </div>
 
         <div className="col-span-6 md:col-span-2 space-y-1">
@@ -154,7 +162,7 @@ function VoucherItemRow({
   );
 }
 
-const emptyRow = () => ({ itemId: "", quantity: "", note: "", search: "", folioNo: "" });
+const emptyRow = () => ({ itemId: "", quantity: "", quantityUnit: "", note: "", search: "", folioNo: "" });
 
 export default function Issues() {
   const ISSUE_DELETION_PROGRESS_KEY = "storemonitor.issueDeletionProgress";
@@ -283,6 +291,7 @@ export default function Issues() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           quantity: Number(editIssue.quantity),
+          quantityUnit: editIssue.quantityUnit,
           folioNo: editIssue.folioNo,
           s11No: editIssue.s11No,
           issuedAt: editIssue.issuedAt,
@@ -300,7 +309,9 @@ export default function Issues() {
   const openEditIssue = (issue: any) => {
     setEditIssue({
       id: issue.id,
+      itemId: issue.itemId,
       quantity: issue.quantity,
+      quantityUnit: issue.quantityUnit || issue.item?.unit || "",
       folioNo: issue.folioNo || "",
       s11No: issue.s11No || "",
       issuedAt: issue.issuedAt,
@@ -652,6 +663,10 @@ export default function Issues() {
                     <Label>Quantity</Label>
                     <Input type="number" min="1" value={editIssue.quantity}
                       onChange={e => setEditIssue({...editIssue, quantity: e.target.value})} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Issue Unit</Label>
+                    <Select value={editIssue.quantityUnit} onValueChange={v => setEditIssue({...editIssue, quantityUnit: v})}><SelectTrigger><SelectValue placeholder="Unit"/></SelectTrigger><SelectContent>{(() => { const item = itemStock?.find(i => i.id === Number(editIssue.itemId)); return item ? <><SelectItem value={item.unit}>{item.unit}</SelectItem>{item.packUnit && <SelectItem value={item.packUnit}>{item.packUnit} ({item.packSize} {item.unit})</SelectItem>}</> : null; })()}</SelectContent></Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Folio No</Label>

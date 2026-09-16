@@ -34,7 +34,7 @@ export default function StockMovementPage() {
   const [itemFilter, setItemFilter] = useState("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ date: format(new Date(), "yyyy-MM-dd"), itemCode: "", description: "", unit: "", adjustmentQty: "", reason: "" });
+  const [form, setForm] = useState({ date: format(new Date(), "yyyy-MM-dd"), itemCode: "", description: "", unit: "", quantityUnit: "", adjustmentQty: "", reason: "" });
 
   const params = itemFilter !== "all" ? { itemCode: itemFilter } : {};
   const { data: movements, isLoading } = useListStockMovements(params, { query: { queryKey: getListStockMovementsQueryKey(params) } });
@@ -48,7 +48,7 @@ export default function StockMovementPage() {
 
   const createAdjustment = useCreateStockAdjustment({
     mutation: {
-      onSuccess: () => { toast.success("Stock adjustment recorded"); invalidate(); setIsDialogOpen(false); setForm({ date: format(new Date(), "yyyy-MM-dd"), itemCode: "", description: "", unit: "", adjustmentQty: "", reason: "" }); },
+      onSuccess: () => { toast.success("Stock adjustment recorded"); invalidate(); setIsDialogOpen(false); setForm({ date: format(new Date(), "yyyy-MM-dd"), itemCode: "", description: "", unit: "", quantityUnit: "", adjustmentQty: "", reason: "" }); },
       onError: (e: any) => toast.error(e?.error || "Failed to record adjustment"),
       onSettled: () => setSubmitting(false),
     },
@@ -85,9 +85,10 @@ export default function StockMovementPage() {
                 <p className="text-xs text-muted-foreground -mt-2">Use this when a physical count differs from the system balance.</p>
                 <div className="space-y-3 py-2">
                   <div className="space-y-1"><Label>Date</Label><input type="date" className={dateCls} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}/></div>
-                  <div className="space-y-1"><Label>Item Code / Name</Label><Select value={form.itemCode} onValueChange={v => { const item = (catalogItems || []).find(i => String(i.id) === v); setForm(f => ({ ...f, itemCode: v, description: item?.description || "", unit: item?.unit || "" })); }}><SelectTrigger><SelectValue placeholder="Select catalog item"/></SelectTrigger><SelectContent>{(catalogItems || []).map(item => <SelectItem key={item.id} value={String(item.id)}>{item.description} ({item.unit})</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-1"><Label>Item Code / Name</Label><Select value={form.itemCode} onValueChange={v => { const item = (catalogItems || []).find(i => String(i.id) === v); setForm(f => ({ ...f, itemCode: v, description: item?.description || "", unit: item?.unit || "", quantityUnit: item?.unit || "" })); }}><SelectTrigger><SelectValue placeholder="Select catalog item"/></SelectTrigger><SelectContent>{(catalogItems || []).map(item => <SelectItem key={item.id} value={String(item.id)}>{item.description} ({item.unit})</SelectItem>)}</SelectContent></Select></div>
                   <div className="space-y-1"><Label>Description</Label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}/></div>
                   <div className="space-y-1"><Label>Unit</Label><Input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}/></div>
+                  <div className="space-y-1"><Label>Correction Unit</Label><select className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm" value={form.quantityUnit} onChange={e => setForm(f => ({ ...f, quantityUnit: e.target.value }))}>{(() => { const item = (catalogItems || []).find(i => String(i.id) === form.itemCode); return item ? <><option value={item.unit}>{item.unit}</option>{item.packUnit && <option value={item.packUnit}>{item.packUnit} ({item.packSize} {item.unit})</option>}</> : <option value="">Select item first</option>; })()}</select></div>
                   <div className="space-y-1"><Label>Adjustment Qty (use negative to reduce)</Label><Input type="number" value={form.adjustmentQty} onChange={e => setForm(f => ({ ...f, adjustmentQty: e.target.value }))}/></div>
                   <div className="space-y-1"><Label>Reason</Label><Input value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="e.g. Physical count discrepancy"/></div>
                 </div>

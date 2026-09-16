@@ -1348,13 +1348,28 @@ function normalizePermissions(role, permissions) {
   };
 }
 
+function itemConversion(item) {
+  const baseUnit = String(item?.baseUnit || item?.unit || "UNIT").trim().toUpperCase();
+  const packUnit = String(item?.packUnit || "").trim().toUpperCase();
+  const packSize = Number(item?.packSize) > 0 ? Number(item.packSize) : 1;
+  const openingUnit = String(item?.openingUnit || baseUnit).trim().toUpperCase();
+  return { baseUnit, packUnit, packSize, openingUnit };
+}
+function toBaseQuantity(item, quantity, quantityUnit) {
+  const c = itemConversion(item), unit = String(quantityUnit || c.baseUnit).trim().toUpperCase();
+  return Number(quantity || 0) * (c.packUnit && unit === c.packUnit ? c.packSize : 1);
+}
+function quantityLabel(item) {
+  const c = itemConversion(item);
+  return c.packUnit ? `${c.baseUnit}; 1 ${c.packUnit} = ${c.packSize} ${c.baseUnit}` : c.baseUnit;
+}
 function getCurrentStockForItem(itemId) {
   const item = db.get("items").find({ id: itemId }).value();
-  const opening = item?.quantity ?? 0;
+  const opening = toBaseQuantity(item, item?.quantity ?? 0, item?.openingUnit);
   const linkedPurchaseIds = new Set(db.get("grns").value().filter(g => g.sourcePurchaseId != null).map(g => Number(g.sourcePurchaseId)));
-  const purchasedTotal = db.get("stockMovements").value().filter(m => String(m.itemCode) === String(itemId) && m.transactionType === "GRN").reduce((s, m) => s + Number(m.qtyIn || 0), 0)
-    + (independentAccountingEnabled() ? db.get("purchases").filter({ itemId }).value().filter(p => !linkedPurchaseIds.has(Number(p.id))).reduce((s, p) => s + Number(p.quantity || 0), 0) : 0);
-  const adjustmentTotal = db.get("stockMovements").value().filter(m => String(m.itemCode) === String(itemId) && ["ADJUSTMENT", "GRN_REVERSAL"].includes(m.transactionType)).reduce((s, m) => s + Number(m.qtyIn || 0) - Number(m.qtyOut || 0), 0);
+  const purchasedTotal = db.get("stockMovements").value().filter(m => String(m.itemCode) === String(itemId) && m.transactionType === "GRN").reduce((s, m) => s + toBaseQuantity(item, m.qtyIn || 0, m.unit), 0)
+    + (independentAccountingEnabled() ? db.get("purchases").filter({ itemId }).value().filter(p => !linkedPurchaseIds.has(Number(p.id))).reduce((s, p) => s + toBaseQuantity(item, p.quantity || 0, p.quantityUnit), 0) : 0);
+  const adjustmentTotal = db.get("stockMovements").value().filter(m => String(m.itemCode) === String(itemId) && ["ADJUSTMENT", "GRN_REVERSAL"].includes(m.transactionType)).reduce((s, m) => s + toBaseQuantity(item, m.qtyIn || 0, m.unit) - toBaseQuantity(item, m.qtyOut || 0, m.unit), 0);
   const issuedTotal = db.get("issues").filter({ itemId }).value().reduce((s, i) => s + Number(i.quantity || 0), 0);
   return opening + purchasedTotal + adjustmentTotal - issuedTotal;
 }
@@ -1813,26 +1828,29 @@ app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),
   const categories = new Map(db.get("categories").value().map(c => [Number(c.id), c]));
   const independent = independentAccountingEnabled();
   const pMap=new Map(),aMap=new Map(),iMap=new Map();
+  const itemMap = new Map(items.map(i => [String(i.id), i]));
   for(const m of movementRows){
-    if(m.transactionType === "GRN") pMap.set(String(m.itemCode),(pMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0));
-    if(m.transactionType === "ADJUSTMENT" || m.transactionType === "GRN_REVERSAL") aMap.set(String(m.itemCode),(aMap.get(String(m.itemCode))||0)+Number(m.qtyIn||0)-Number(m.qtyOut||0));
+    const item = itemMap.get(String(m.itemCode));
+    if(m.transactionType === "GRN") pMap.set(String(m.itemCode),(pMap.get(String(m.itemCode))||0)+toBaseQuantity(item, m.qtyIn||0, m.unit));
+    if(m.transactionType === "ADJUSTMENT" || m.transactionType === "GRN_REVERSAL") aMap.set(String(m.itemCode),(aMap.get(String(m.itemCode))||0)+toBaseQuantity(item, m.qtyIn||0, m.unit)-toBaseQuantity(item, m.qtyOut||0, m.unit));
   }
-  for(const i of db.get("issues").value()) iMap.set(String(i.itemId),(iMap.get(String(i.itemId))||0)+Number(i.quantity||0));
+  for(const i of db.get("issues").value()) iMap.set(String(i.itemId),(iMap.get(String(i.itemId))||0)+Number(i.baseQuantity ?? i.quantity ?? 0));
   if (independent) {
     const linkedPurchaseIds = new Set(db.get("grns").value().filter(g => g.sourcePurchaseId != null).map(g => Number(g.sourcePurchaseId)));
-    for (const p of db.get("purchases").value()) if (!linkedPurchaseIds.has(Number(p.id))) pMap.set(String(p.itemId),(pMap.get(String(p.itemId))||0)+Number(p.quantity||0));
+    for (const p of db.get("purchases").value()) if (!linkedPurchaseIds.has(Number(p.id))) { const item = itemMap.get(String(p.itemId)); pMap.set(String(p.itemId),(pMap.get(String(p.itemId))||0)+toBaseQuantity(item, p.quantity||0, p.quantityUnit)); }
   }
   res.json(items.filter(it => { const c = categories.get(Number(it.categoryId)); return !c || categoryAllows(req, c, "view"); }).map(it=>{
-    const opening=Number(it.quantity)||0, purchased=pMap.get(String(it.id))||0, issued=iMap.get(String(it.id))||0, adjustments=aMap.get(String(it.id))||0;
+    const opening=toBaseQuantity(it, Number(it.quantity)||0, it.openingUnit), purchased=pMap.get(String(it.id))||0, issued=iMap.get(String(it.id))||0, adjustments=aMap.get(String(it.id))||0;
     const category = categories.get(Number(it.categoryId));
     const rawBalance=opening+purchased+adjustments-issued, expired=!!it.expiryDate && it.expiryDate < new Date().toISOString().slice(0,10);
-    return { id:it.id, description:it.description, unit:it.unit, categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:expired ? 0 : rawBalance, rawStockBalance:rawBalance, expiryDate:it.expiryDate || null, expired };
+    const conversion = itemConversion(it);
+    return { id:it.id, description:it.description, unit:conversion.baseUnit, packUnit:conversion.packUnit || null, packSize:conversion.packSize, quantityUnit:conversion.openingUnit, quantityLabel:quantityLabel(it), categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:expired ? 0 : rawBalance, rawStockBalance:rawBalance, expiryDate:it.expiryDate || null, expired };
   }));
 });
 app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
   const {description,unit,quantity}=req.body; if(!description||!unit) return res.status(400).json({error:"Missing fields"});
   if(db.get("items").find({description}).value()) return res.status(400).json({error:"Already exists"});
-  const row={id:nextId("items"),description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),categoryId:req.body.categoryId!=null?Number(req.body.categoryId):null,quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null,expiryDate:req.body.expiryDate||null};
+  const row={id:nextId("items"),description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),baseUnit:String(req.body.baseUnit||unit).trim().toUpperCase(),packUnit:String(req.body.packUnit||"").trim().toUpperCase()||null,packSize:Number(req.body.packSize)>0?Number(req.body.packSize):1,openingUnit:String(req.body.openingUnit||unit).trim().toUpperCase(),categoryId:req.body.categoryId!=null?Number(req.body.categoryId):null,quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null,expiryDate:req.body.expiryDate||null};
   db.get("items").push(row).write();
   logActivity(req, "CREATE_ITEM", "ITEM", row.id, { description: row.description });
   res.status(201).json(row);
@@ -1877,6 +1895,10 @@ app.patch("/api/items/:id",requirePermission("manageCatalog"),(req,res)=>{
   if(req.body.lowStockThreshold!==undefined) updates.lowStockThreshold=req.body.lowStockThreshold===''||req.body.lowStockThreshold===null?null:Number(req.body.lowStockThreshold);
   if(req.body.categoryId!==undefined) updates.categoryId=req.body.categoryId===''||req.body.categoryId===null?null:Number(req.body.categoryId);
   if(req.body.expiryDate!==undefined) updates.expiryDate=req.body.expiryDate || null;
+  if(req.body.baseUnit!==undefined) updates.baseUnit=String(req.body.baseUnit||row.value().unit).trim().toUpperCase();
+  if(req.body.packUnit!==undefined) updates.packUnit=String(req.body.packUnit||"").trim().toUpperCase()||null;
+  if(req.body.packSize!==undefined) updates.packSize=Number(req.body.packSize)>0?Number(req.body.packSize):1;
+  if(req.body.openingUnit!==undefined) updates.openingUnit=String(req.body.openingUnit||row.value().unit).trim().toUpperCase();
   if(quantity!==undefined) updates.quantity=Number(quantity)||0;
   row.assign(updates).write();
   logActivity(req, "UPDATE_ITEM", "ITEM", id, updates);
@@ -1952,13 +1974,14 @@ app.get("/api/issues",requireAnyPermission("viewIssues", "issueItems"),(req,res)
   res.json({ rows: rows.slice(startIndex,startIndex+pageSize).map(r=>({...r,item:itemMap.get(r.itemId),department:deptMap.get(r.departmentId)})), total, page, pageSize, totalPages: Math.max(1,Math.ceil(total/pageSize)) });
 });
 app.post("/api/issues",requirePermission("issueItems"),(req,res)=>{
-  const {departmentId,itemId,quantity,issuedAt,folioNo,s11No,note}=req.body;
+  const {departmentId,itemId,quantity,quantityUnit,issuedAt,folioNo,s11No,note}=req.body;
   const issueItem = db.get("items").find({ id: Number(itemId) }).value();
   if (issueItem?.expiryDate && issueItem.expiryDate < new Date().toISOString().slice(0,10)) return res.status(400).json({ error: `${issueItem.description} has expired and cannot be issued` });
   const available = getCurrentStockForItem(itemId);
   if (available <= 0) return res.status(400).json({ error: "Item is out of stock" });
-  if (Number(quantity) > available) return res.status(400).json({ error: "Quantity exceeds stock in hand" });
-  const row={id:nextId("issues"),voucherId:null,folioNo:folioNo||null,s11No:s11No||null,departmentId,itemId,quantity,issuedAt,weekday:weekdayFor(issuedAt),note:note||null};
+  const baseQuantity = toBaseQuantity(issueItem, quantity, quantityUnit);
+  if (baseQuantity > available) return res.status(400).json({ error: "Quantity exceeds stock in hand" });
+  const row={id:nextId("issues"),voucherId:null,folioNo:folioNo||null,s11No:s11No||null,departmentId,itemId,quantity:Number(quantity),quantityUnit:quantityUnit || itemConversion(issueItem).baseUnit,baseQuantity,issuedAt,weekday:weekdayFor(issuedAt),note:note||null};
   db.get("issues").push(row).write();
   logActivity(req, "CREATE_ISSUE", "ISSUE", row.id, { departmentId, itemId, quantity });
   res.status(201).json(row);
@@ -1972,13 +1995,15 @@ app.post("/api/issues/voucher",requirePermission("issueItems"),(req,res)=>{
     const issueItem = db.get("items").find({ id: Number(it.itemId) }).value();
     if (issueItem?.expiryDate && issueItem.expiryDate < new Date().toISOString().slice(0,10)) return res.status(400).json({ error: `${issueItem.description} has expired and cannot be issued` });
     if(!it.folioNo||!String(it.folioNo).trim()) return res.status(400).json({error:"Folio number required for each item"});
+    const baseQuantity = toBaseQuantity(issueItem, it.quantity, it.quantityUnit);
     const available = getCurrentStockForItem(it.itemId);
     if (available <= 0) return res.status(400).json({ error: "One or more items are out of stock" });
-    if (Number(it.quantity) > available) return res.status(400).json({ error: "One or more quantities exceed stock in hand" });
+    if (baseQuantity > available) return res.status(400).json({ error: "One or more quantities exceed stock in hand" });
   }
   const voucherId=uuidv4(),wd=weekdayFor(issuedAt),inserted=[];
   for(const it of items){
-    const row={id:nextId("issues"),voucherId,folioNo:String(it.folioNo||"").trim()||null,s11No:s11No||null,departmentId,itemId:it.itemId,quantity:it.quantity,issuedAt,weekday:wd,note:it.note||note||null};
+    const issueItem = db.get("items").find({ id: Number(it.itemId) }).value();
+    const row={id:nextId("issues"),voucherId,folioNo:String(it.folioNo||"").trim()||null,s11No:s11No||null,departmentId,itemId:it.itemId,quantity:Number(it.quantity),quantityUnit:it.quantityUnit || itemConversion(issueItem).baseUnit,baseQuantity:toBaseQuantity(issueItem, it.quantity, it.quantityUnit),issuedAt,weekday:wd,note:it.note||note||null};
     db.get("issues").push(row).write(); inserted.push(row);
   }
   logActivity(req, "CREATE_ISSUE_VOUCHER", "ISSUE", null, { departmentId, itemCount: items.length, voucherId });
@@ -1989,9 +2014,9 @@ app.patch("/api/issues/:id", requirePermission("editIssues"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("issues").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Issue not found" });
-  const { quantity, folioNo, s11No, issuedAt, note, departmentId, itemId } = req.body;
+  const { quantity, quantityUnit, folioNo, s11No, issuedAt, note, departmentId, itemId } = req.body;
   const updates = {};
-  if (quantity !== undefined) updates.quantity = Number(quantity);
+  if (quantity !== undefined) { const updatedItem = db.get("items").find({ id: Number(itemId !== undefined ? itemId : row.value().itemId) }).value(); updates.quantity = Number(quantity); updates.quantityUnit = quantityUnit || itemConversion(updatedItem).baseUnit; updates.baseQuantity = toBaseQuantity(updatedItem, quantity, updates.quantityUnit); }
   if (folioNo !== undefined) updates.folioNo = folioNo || null;
   if (s11No !== undefined) updates.s11No = s11No || null;
   if (issuedAt !== undefined) updates.issuedAt = issuedAt;
@@ -2434,18 +2459,20 @@ app.get("/api/accounts/stock-movements/balances", requirePermission("viewAccount
   res.json([...map.values()].sort((a,b) => String(a.description || "").localeCompare(String(b.description || ""))));
 });
 app.post("/api/accounts/stock-movements/adjustment", requirePermission("manageAccounts"), (req, res) => {
-  const { date, itemCode, description, unit, adjustmentQty, reason, approvedBy } = req.body;
+  const { date, itemCode, description, unit, quantityUnit, adjustmentQty, reason, approvedBy } = req.body;
   if (!date || !itemCode) return res.status(400).json({ error: "Date and item are required" });
   const qty = Number(adjustmentQty);
   if (!qty) return res.status(400).json({ error: "Adjustment quantity is required" });
   if (!reason || !String(reason).trim()) return res.status(400).json({ error: "Reason for adjustment is required" });
+  const catalogItem = db.get("items").find({ id: Number(itemCode) }).value();
+  const baseQty = catalogItem ? toBaseQuantity(catalogItem, qty, quantityUnit) : qty;
   const row = pushStockMovement({
     date, itemCode, description: description || itemCode, unit,
     reference: `ADJ-${db.get("stockMovements").value().length + 1}`,
     transactionType: "ADJUSTMENT",
-    qtyIn: qty > 0 ? qty : 0,
-    qtyOut: qty < 0 ? Math.abs(qty) : 0,
-    note: `${reason}${approvedBy ? ` — Approved by ${approvedBy}` : ""}`,
+    qtyIn: baseQty > 0 ? baseQty : 0,
+    qtyOut: baseQty < 0 ? Math.abs(baseQty) : 0,
+    note: `${reason}${approvedBy ? ` — Approved by ${approvedBy}` : ""}${quantityUnit ? ` (entered as ${qty} ${quantityUnit})` : ""}`,
   });
   logActivity(req, "STOCK_ADJUSTMENT", "STOCK", row.id, { itemCode, adjustmentQty: qty, reason });
   res.status(201).json(row);
