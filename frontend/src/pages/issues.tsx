@@ -155,7 +155,7 @@ function VoucherItemRow({
 
       {selectedItem && (
         <p className="text-xs text-muted-foreground pl-1">
-          Selected: <strong>{selectedItem.description}</strong> — {selectedItem.stockBalance} {selectedItem.unit} in stock{vItem.quantity && vItem.quantityUnit ? <> · This issue deducts <strong>{Number(vItem.quantity) * (selectedItem.packUnit && vItem.quantityUnit.replace(/S$/, "") === selectedItem.packUnit.replace(/S$/, "") ? (selectedItem.packSize || 1) : 1)} {selectedItem.unit}</strong></> : null}
+          Selected: <strong>{selectedItem.description}</strong> — {selectedItem.stockBalance} {selectedItem.unit} in stock{vItem.quantity && vItem.quantityUnit ? <> · This issue deducts <strong>{issueBaseQuantity(selectedItem, vItem.quantity, vItem.quantityUnit)} {selectedItem.unit.toUpperCase()}</strong></> : null}
         </p>
       )}
     </div>
@@ -163,6 +163,12 @@ function VoucherItemRow({
 }
 
 const emptyRow = () => ({ itemId: "", quantity: "", quantityUnit: "", note: "", search: "", folioNo: "" });
+const issueBaseQuantity = (item: any, quantity: string | number, quantityUnit: string) => {
+  const selectedUnit = String(quantityUnit || "").replace(/S$/, "").toUpperCase();
+  const packUnit = String(item?.packUnit || "").replace(/S$/, "").toUpperCase();
+  const multiplier = item?.packUnit && selectedUnit === packUnit ? Number(item.packSize || 1) : 1;
+  return Number(quantity || 0) * multiplier;
+};
 
 export default function Issues() {
   const ISSUE_DELETION_PROGRESS_KEY = "storemonitor.issueDeletionProgress";
@@ -267,8 +273,7 @@ export default function Issues() {
     for (const vItem of voucherItems) {
       const stock = itemStock?.find(s => s.id === Number(vItem.itemId));
       if (!stock || stock.stockBalance <= 0) { toast.error("Cannot issue an item with zero stock"); return; }
-      const multiplier = stock.packUnit && vItem.quantityUnit.replace(/S$/, "") === stock.packUnit.replace(/S$/, "") ? (stock.packSize || 1) : 1;
-      if (Number(vItem.quantity) * multiplier > stock.stockBalance) { toast.error(`Issue quantity exceeds stock for ${stock.description}`); return; }
+      if (issueBaseQuantity(stock, vItem.quantity, vItem.quantityUnit) > stock.stockBalance) { toast.error(`Issue quantity exceeds stock for ${stock.description}`); return; }
     }
     createVoucher.mutate({
       data: {
@@ -276,7 +281,7 @@ export default function Issues() {
         issuedAt: voucherData.issuedAt,
         s11No: voucherData.s11No.trim(),
         note: voucherData.note || undefined,
-        items: voucherItems.map(i => ({ itemId: Number(i.itemId), quantity: Number(i.quantity), folioNo: i.folioNo.trim(), note: i.note || undefined }))
+        items: voucherItems.map(i => ({ itemId: Number(i.itemId), quantity: Number(i.quantity), quantityUnit: i.quantityUnit, folioNo: i.folioNo.trim(), note: i.note || undefined }))
       }
     });
   };
@@ -669,6 +674,7 @@ export default function Issues() {
                     <Label>Issue Unit</Label>
                     <Select value={editIssue.quantityUnit} onValueChange={v => setEditIssue({...editIssue, quantityUnit: v})}><SelectTrigger><SelectValue placeholder="Unit"/></SelectTrigger><SelectContent>{(() => { const item = itemStock?.find(i => i.id === Number(editIssue.itemId)); return item ? <><SelectItem value={item.unit}>{item.unit}</SelectItem>{item.packUnit && <SelectItem value={item.packUnit}>{item.packUnit} ({item.packSize} {item.unit})</SelectItem>}</> : null; })()}</SelectContent></Select>
                   </div>
+                  {(() => { const item = itemStock?.find(i => i.id === Number(editIssue.itemId)); return item && editIssue.quantity && editIssue.quantityUnit ? <p className="col-span-2 -mt-2 text-xs text-muted-foreground">This edit deducts <strong>{issueBaseQuantity(item, editIssue.quantity, editIssue.quantityUnit)} {item.unit.toUpperCase()}</strong> from stock.</p> : null; })()}
                   <div className="space-y-2">
                     <Label>Folio No</Label>
                     <Input value={editIssue.folioNo}
