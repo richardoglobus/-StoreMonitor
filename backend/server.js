@@ -1354,7 +1354,7 @@ function itemConversion(item) {
   let packSize = Number(item?.packSize) > 0 ? Number(item.packSize) : 1;
   if (!packUnit) {
     const d = String(item?.description || "");
-    const inferred = d.match(/2\s*ml.*syringe/i) ? ["PIECE", "PACKET", 100] : d.match(/tongue\s*depressor/i) ? ["PIECE", "PACKET", 100] : d.match(/surgical.*glove/i) ? ["PAIR", "BOX", 50] : d.match(/clean.*glove|latex.*glove/i) ? ["PAIR", "PACKET", 50] : d.match(/crepe.*bandage/i) ? ["PIECE", "DOZEN", 12] : d.match(/fluid.*giving|iv.*infusion.*giving/i) ? ["PIECE", "PACKET", 10] : d.match(/needle/i) ? ["PIECE", "PACKET", 100] : d.match(/surgical.*blade/i) ? ["PIECE", "PACKET", 10] : d.match(/paper.*apron|plastic.*apron/i) ? ["PIECE", "PACK", 100] : null;
+    const inferred = d.match(/syringe/i) ? ["PIECE", "PACKET", 100] : d.match(/tongue\s*depressor/i) ? ["PIECE", "PACKET", 100] : d.match(/surgical.*glove/i) ? ["PAIR", "BOX", 50] : d.match(/clean.*glove|latex.*glove/i) ? ["PAIR", "PACKET", 50] : d.match(/crepe.*bandage/i) ? ["PIECE", "DOZEN", 12] : d.match(/fluid.*giving|iv.*infusion.*giving/i) ? ["PIECE", "PACKET", 10] : d.match(/needle/i) ? ["PIECE", "PACKET", 100] : d.match(/surgical.*blade/i) ? ["PIECE", "PACKET", 10] : d.match(/paper.*apron|plastic.*apron/i) ? ["PIECE", "PACK", 100] : null;
     if (inferred) [baseUnit, packUnit, packSize] = inferred;
   }
   const openingUnit = String(item?.openingUnit || baseUnit).trim().toUpperCase();
@@ -1895,7 +1895,11 @@ app.post("/api/items/bulk", requirePermission("manageCatalog"), (req, res) => {
     const category = rawCategory === "" ? null : (numericCategoryId != null ? db.get("categories").find({ id: numericCategoryId }).value() : db.get("categories").value().find(c => String(c.name).trim().toUpperCase() === rawCategory.toUpperCase()));
     const categoryId = category ? category.id : (rawCategory === "" ? null : numericCategoryId);
     if (categoryId != null && (!category || !categoryAllows(req, category, "edit"))) { skipped.push(`${description} (category is not editable by your role)`); continue; }
-    const row = { id: nextId("items"), description, unit, categoryId, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null, createdByUserId: req.session.userId, createdAt: new Date().toISOString() };
+    const baseUnit = String(input.baseUnit || unit).trim().toUpperCase();
+    const packUnit = String(input.packUnit || "").trim().toUpperCase() || null;
+    const packSize = Number(input.packSize) > 0 ? Number(input.packSize) : 1;
+    const openingUnit = String(input.openingUnit || baseUnit).trim().toUpperCase();
+    const row = { id: nextId("items"), description, unit, baseUnit, packUnit, packSize, openingUnit, categoryId, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null, createdByUserId: req.session.userId, createdAt: new Date().toISOString() };
     db.get("items").push(row);
     seen.add(description); created.push(row);
   }

@@ -87,7 +87,7 @@ function VoucherItemRow({
           <Label className="text-xs">Item</Label>
           <Select
             value={vItem.itemId}
-            onValueChange={v => { const selected = itemStock.find(i => i.id === Number(v)); onChange("itemId", v); onChange("quantityUnit", selected?.unit || ""); onChange("search", ""); }}
+            onValueChange={v => { const selected = itemStock.find(i => i.id === Number(v)); const conversion = displayConversion(selected); onChange("itemId", v); onChange("quantityUnit", conversion.packUnit || conversion.baseUnit); onChange("search", ""); }}
           >
             <SelectTrigger className="h-9">
               <SelectValue placeholder="Select item">
@@ -120,7 +120,7 @@ function VoucherItemRow({
           <Label className="text-xs">Issue Unit</Label>
           <Select value={vItem.quantityUnit} onValueChange={v => onChange("quantityUnit", v)} disabled={!selectedItem}>
             <SelectTrigger className="h-9"><SelectValue placeholder="Unit"/></SelectTrigger>
-            <SelectContent>{selectedItem && <><SelectItem value={selectedItem.unit}>{selectedItem.unit}</SelectItem>{selectedItem.packUnit && <SelectItem value={selectedItem.packUnit}>{selectedItem.packUnit} ({selectedItem.packSize} {selectedItem.unit})</SelectItem>}</>}</SelectContent>
+            <SelectContent>{selectedItem && (() => { const c = displayConversion(selectedItem); return <><SelectItem value={c.baseUnit}>{c.baseUnit}</SelectItem>{c.packUnit && <SelectItem value={c.packUnit}>{c.packUnit} ({c.packSize} {c.baseUnit})</SelectItem>}</>; })()}</SelectContent>
           </Select>
         </div>
 
@@ -155,7 +155,7 @@ function VoucherItemRow({
 
       {selectedItem && (
         <p className="text-xs text-muted-foreground pl-1">
-          Selected: <strong>{selectedItem.description}</strong> — {selectedItem.stockBalance} {selectedItem.unit} in stock{vItem.quantity && vItem.quantityUnit ? <> · This issue deducts <strong>{issueBaseQuantity(selectedItem, vItem.quantity, vItem.quantityUnit)} {selectedItem.unit.toUpperCase()}</strong></> : null}
+          {(() => { const c = displayConversion(selectedItem); return <>Selected: <strong>{selectedItem.description}</strong> — {selectedItem.stockBalance} {c.baseUnit} in stock · This issue deducts <strong>{issueBaseQuantity(selectedItem, vItem.quantity || 0, vItem.quantityUnit || c.baseUnit)} {c.baseUnit.toUpperCase()}</strong></>; })()}
         </p>
       )}
     </div>
@@ -163,10 +163,16 @@ function VoucherItemRow({
 }
 
 const emptyRow = () => ({ itemId: "", quantity: "", quantityUnit: "", note: "", search: "", folioNo: "" });
+const displayConversion = (item: any) => {
+  if (item?.packUnit && Number(item.packSize) > 0) return { baseUnit: item.unit || "PIECE", packUnit: item.packUnit, packSize: Number(item.packSize) };
+  if (/syringe/i.test(String(item?.description || ""))) return { baseUnit: item?.unit || "PIECE", packUnit: "PACKET", packSize: 100 };
+  return { baseUnit: item?.unit || "UNIT", packUnit: "", packSize: 1 };
+};
 const issueBaseQuantity = (item: any, quantity: string | number, quantityUnit: string) => {
+  const conversion = displayConversion(item);
   const selectedUnit = String(quantityUnit || "").replace(/S$/, "").toUpperCase();
-  const packUnit = String(item?.packUnit || "").replace(/S$/, "").toUpperCase();
-  const multiplier = item?.packUnit && selectedUnit === packUnit ? Number(item.packSize || 1) : 1;
+  const packUnit = String(conversion.packUnit || "").replace(/S$/, "").toUpperCase();
+  const multiplier = packUnit && selectedUnit === packUnit ? conversion.packSize : 1;
   return Number(quantity || 0) * multiplier;
 };
 
@@ -672,9 +678,9 @@ export default function Issues() {
                   </div>
                   <div className="space-y-2">
                     <Label>Issue Unit</Label>
-                    <Select value={editIssue.quantityUnit} onValueChange={v => setEditIssue({...editIssue, quantityUnit: v})}><SelectTrigger><SelectValue placeholder="Unit"/></SelectTrigger><SelectContent>{(() => { const item = itemStock?.find(i => i.id === Number(editIssue.itemId)); return item ? <><SelectItem value={item.unit}>{item.unit}</SelectItem>{item.packUnit && <SelectItem value={item.packUnit}>{item.packUnit} ({item.packSize} {item.unit})</SelectItem>}</> : null; })()}</SelectContent></Select>
+                    <Select value={editIssue.quantityUnit} onValueChange={v => setEditIssue({...editIssue, quantityUnit: v})}><SelectTrigger><SelectValue placeholder="Unit"/></SelectTrigger><SelectContent>{(() => { const item = itemStock?.find(i => i.id === Number(editIssue.itemId)); if (!item) return null; const c = displayConversion(item); return <><SelectItem value={c.baseUnit}>{c.baseUnit}</SelectItem>{c.packUnit && <SelectItem value={c.packUnit}>{c.packUnit} ({c.packSize} {c.baseUnit})</SelectItem>}</>; })()}</SelectContent></Select>
                   </div>
-                  {(() => { const item = itemStock?.find(i => i.id === Number(editIssue.itemId)); return item && editIssue.quantity && editIssue.quantityUnit ? <p className="col-span-2 -mt-2 text-xs text-muted-foreground">This edit deducts <strong>{issueBaseQuantity(item, editIssue.quantity, editIssue.quantityUnit)} {item.unit.toUpperCase()}</strong> from stock.</p> : null; })()}
+                  {(() => { const item = itemStock?.find(i => i.id === Number(editIssue.itemId)); const c = displayConversion(item); return item ? <p className="col-span-2 -mt-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:bg-blue-950/30 dark:text-blue-200">This edit deducts <strong>{issueBaseQuantity(item, editIssue.quantity, editIssue.quantityUnit || c.baseUnit)} {c.baseUnit.toUpperCase()}</strong> from stock.</p> : null; })()}
                   <div className="space-y-2">
                     <Label>Folio No</Label>
                     <Input value={editIssue.folioNo}
