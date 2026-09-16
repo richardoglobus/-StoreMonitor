@@ -45,6 +45,7 @@ interface AppSettings {
   // Reports & Exports
   reportChargeItem: string;
   chargeItemCodes: { code: string; name: string }[];
+  procurementMethods: string[];
   customRoles: { name: string; permissions: Record<string, boolean> }[];
   responsibleOfficer: string;
   storeOfficerTitle: string;
@@ -89,6 +90,7 @@ const DEFAULTS: AppSettings = {
   independentAccountingMode: true,
   reportChargeItem: "221102",
   chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }, { code: "2211002", name: "NON-PHARM" }],
+  procurementMethods: ["Request for Quotations", "Framework Agreement", "Direct Procurement", "Low Value Procurement", "Open Tender"],
   customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
@@ -156,6 +158,7 @@ export default function SettingsPage() {
   const [editOfficerName, setEditOfficerName] = useState("");
   const [newChargeCode, setNewChargeCode] = useState("");
   const [newChargeCodeName, setNewChargeCodeName] = useState("");
+  const [newProcurementMethod, setNewProcurementMethod] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
 
   const loadOfficers = async () => {
@@ -251,7 +254,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch(`${API_BASE}/api/settings`, { credentials: "include" })
       .then(r => r.json())
-      .then(data => { const merged = { ...DEFAULTS, ...data }; const codes = Array.isArray(merged.chargeItemCodes) ? merged.chargeItemCodes : []; if (!codes.some((c: any) => String(c.code) === "2211002")) codes.push({ code: "2211002", name: "NON-PHARM" }); setSettings({ ...merged, chargeItemCodes: codes, customRoles: Array.isArray(merged.customRoles) ? merged.customRoles : [] }); setLoading(false); })
+      .then(data => { const merged = { ...DEFAULTS, ...data }; const codes = Array.isArray(merged.chargeItemCodes) ? merged.chargeItemCodes : []; if (!codes.some((c: any) => String(c.code) === "2211002")) codes.push({ code: "2211002", name: "NON-PHARM" }); const methods = Array.isArray(merged.procurementMethods) && merged.procurementMethods.length ? merged.procurementMethods : DEFAULTS.procurementMethods; setSettings({ ...merged, chargeItemCodes: codes, procurementMethods: methods, customRoles: Array.isArray(merged.customRoles) ? merged.customRoles : [] }); setLoading(false); })
       .catch(() => { toast.error("Failed to load settings"); setLoading(false); });
   }, []);
 
@@ -286,6 +289,27 @@ export default function SettingsPage() {
     if (!confirm(`Delete charge item code ${code}?`)) return;
     update("chargeItemCodes", settings.chargeItemCodes.filter(c => c.code !== code));
     if (settings.reportChargeItem === code) update("reportChargeItem", "");
+  };
+
+  const addProcurementMethod = () => {
+    const name = newProcurementMethod.trim();
+    if (!name) return toast.error("Enter a procurement method name");
+    if (settings.procurementMethods.some(m => m.toLowerCase() === name.toLowerCase())) return toast.error("That procurement method already exists");
+    update("procurementMethods", [...settings.procurementMethods, name]);
+    setNewProcurementMethod("");
+  };
+
+  const editProcurementMethod = (name: string) => {
+    const next = prompt("Procurement method:", name)?.trim();
+    if (!next) return;
+    if (next !== name && settings.procurementMethods.some(m => m.toLowerCase() === next.toLowerCase())) return toast.error("That procurement method already exists");
+    update("procurementMethods", settings.procurementMethods.map(m => m === name ? next : m));
+  };
+
+  const deleteProcurementMethod = (name: string) => {
+    if (settings.procurementMethods.length <= 1) return toast.error("Keep at least one procurement method");
+    if (!confirm(`Delete procurement method "${name}"?`)) return;
+    update("procurementMethods", settings.procurementMethods.filter(m => m !== name));
   };
 
   const addRole = () => {
@@ -552,6 +576,16 @@ export default function SettingsPage() {
           <ToggleRow label="Independent Accounting Mode" description="New GRNs, purchases, accounting, and stock movements remain separate. Existing linked records are preserved as historical data." checked={settings.independentAccountingMode} onChange={(v: boolean) => update("independentAccountingMode", v)} />
           {settings.independentAccountingMode && <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-900 dark:text-blue-200"><strong>How it works:</strong> approving a new GRN changes only the GRN status. It does not update purchases, stock, supplier balances, or journal entries. New purchases do not automatically create GRNs. Existing records remain unchanged for historical reference.</div>}
           {!settings.independentAccountingMode && <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 p-3 text-sm text-green-900 dark:text-green-200"><strong>Integrated mode:</strong> each new purchase automatically creates a pending GRN. The purchase will not increase Catalog stock until the linked GRN is approved. Approval then posts the received quantity to Catalog stock, records the stock movement, updates the supplier balance, and creates the accounting entry. Existing historical records are not changed when you switch modes.</div>}
+          <div className="space-y-3 border rounded-lg p-3">
+            <div><Label>Procurement Methods</Label><p className="text-xs text-muted-foreground">Options offered on the Purchase Order form (Request for Quotations, Framework Agreement, etc.).</p></div>
+            <div className="flex gap-2">
+              <Input value={newProcurementMethod} onChange={e => setNewProcurementMethod(e.target.value)} placeholder="e.g. Restricted Tender" />
+              <Button type="button" onClick={addProcurementMethod}><Plus className="h-4 w-4 mr-1" />Add</Button>
+            </div>
+            <div className="space-y-2">
+              {settings.procurementMethods.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editProcurementMethod(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteProcurementMethod(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
+            </div>
+          </div>
         </SectionCard>
 
         {/* 6. Reports & Exports */}

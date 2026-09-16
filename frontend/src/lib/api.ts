@@ -314,7 +314,17 @@ export type StockMovement = { id: number | string; date: string; itemCode: strin
 export type PaymentEntry = { id: number; date: string; supplierId: number; supplierInvoiceId?: number | null; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };
 export type ChartAccount = { id: number; code: string; name: string; type: string; balance: number; isDefault: boolean };
 export type JournalEntry = { id: number; date: string; reference: string; description: string; debitAccount: string; creditAccount: string; amount: number; note?: string | null; source?: string };
-export type PurchaseOrder = { id: number; poNo: string; date: string; supplierId: number; expectedDate?: string | null; lines: any[]; totalAmount: number; status: string; note?: string | null; supplier?: Supplier | null };
+export type PurchaseOrderLine = { itemId: number | null; description: string; unit: string | null; quantity: number; unitPrice: number; totalPrice: number };
+export type PurchaseOrder = {
+  id: number; poNo: string; date: string; supplierId: number;
+  orderRefType?: "LPO NO" | "LSO NO" | "IMPREST NO" | null; orderRefNo?: string | null; orderRefDate?: string | null;
+  requisitionNo?: string | null; procurementRef?: string | null; procurementMethod?: string | null;
+  paymentTerms?: string | null; classification?: "Expense" | "PPE" | "F.C" | null; chargeableVoteCode?: string | null;
+  taxPercent: number; lines: PurchaseOrderLine[];
+  totalExclusiveVat: number; taxAmount: number; totalInclusiveVat: number; totalAmount: number;
+  status: "pending" | "approved"; note?: string | null; supplier?: Supplier | null;
+};
+export type PurchaseOrderMeta = { orderRefTypes: string[]; classifications: string[]; procurementMethods: string[]; chargeItemCodes: { code: string; name: string }[] };
 export type SupplierInvoice = { id: number; invoiceNo: string; date: string; supplierId: number; purchaseOrderId?: number | null; grnId?: number | null; amount: number; paidAmount: number; dueDate?: string | null; status: string; supplier?: Supplier | null };
 export type FinancialSummary = { period: { start: string; end: string }; totalGrnsApproved: number; totalGoodsReceivedValue: number; totalPaidThisPeriod: number; totalAccountsPayable: number; pendingGrnCount: number; inventoryValue: number; topSuppliersByBalance: Supplier[]; accounts: ChartAccount[] };
 
@@ -407,7 +417,10 @@ export function useCreateJournalEntry(options?: MutOpts<JournalEntry, { data: an
 export const getListPurchaseOrdersQueryKey = () => ["/api/accounts/purchase-orders"] as const;
 export function useListPurchaseOrders(options?: QueryOpts<PurchaseOrder[]>) { return useQuery({ queryKey: getListPurchaseOrdersQueryKey(), queryFn: () => apiFetch<PurchaseOrder[]>("/api/accounts/purchase-orders"), ...options?.query }); }
 export function useCreatePurchaseOrder(options?: MutOpts<PurchaseOrder, { data: any }>) { return useMutation({ mutationFn: ({ data }) => apiFetch<PurchaseOrder>("/api/accounts/purchase-orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation }); }
-export function useUpdatePurchaseOrderStatus(options?: MutOpts<PurchaseOrder, { orderId: number; status: string }>) { return useMutation({ mutationFn: ({ orderId, status }) => apiFetch<PurchaseOrder>(`/api/accounts/purchase-orders/${orderId}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }), ...options?.mutation }); }
+export function useUpdatePurchaseOrder(options?: MutOpts<PurchaseOrder, { orderId: number; data: any }>) { return useMutation({ mutationFn: ({ orderId, data }) => apiFetch<PurchaseOrder>(`/api/accounts/purchase-orders/${orderId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation }); }
+export function useDeletePurchaseOrder(options?: MutOpts<void, { orderId: number }>) { return useMutation({ mutationFn: ({ orderId }) => apiFetch<void>(`/api/accounts/purchase-orders/${orderId}`, { method: "DELETE" }), ...options?.mutation }); }
+export const getPurchaseOrderMetaQueryKey = () => ["/api/accounts/purchase-order-meta"] as const;
+export function useGetPurchaseOrderMeta(options?: QueryOpts<PurchaseOrderMeta>) { return useQuery({ queryKey: getPurchaseOrderMetaQueryKey(), queryFn: () => apiFetch<PurchaseOrderMeta>("/api/accounts/purchase-order-meta"), ...options?.query }); }
 export const getListSupplierInvoicesQueryKey = () => ["/api/accounts/supplier-invoices"] as const;
 export function useListSupplierInvoices(options?: QueryOpts<SupplierInvoice[]>) { return useQuery({ queryKey: getListSupplierInvoicesQueryKey(), queryFn: () => apiFetch<SupplierInvoice[]>("/api/accounts/supplier-invoices"), ...options?.query }); }
 export function useCreateSupplierInvoice(options?: MutOpts<SupplierInvoice, { data: any }>) { return useMutation({ mutationFn: ({ data }) => apiFetch<SupplierInvoice>("/api/accounts/supplier-invoices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation }); }

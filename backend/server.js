@@ -13,6 +13,13 @@ const fs = require("fs");
 const { execFileSync } = require("child_process");
 const { createClient } = require("@supabase/supabase-js");
 const CHARGE_ITEM_CODES = require("./charge-item-codes.json");
+const DEFAULT_PROCUREMENT_METHODS = [
+  "Request for Quotations",
+  "Framework Agreement",
+  "Direct Procurement",
+  "Low Value Procurement",
+  "Open Tender",
+];
 // Version 2.1 starts at the current repository commit. Each later Git commit
 // increases the displayed version automatically: 2.1, 2.2, 2.3, ...
 const VERSION_BASE_COMMIT_COUNT = 118;
@@ -1095,10 +1102,12 @@ function seedAssets() {
 
 db.defaults({
   _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0,
-          grns: 0, suppliers: 0, paymentEntries: 0, chartOfAccounts: 0, journalEntries: 0, stockMovements: 0 },
+          grns: 0, suppliers: 0, paymentEntries: 0, chartOfAccounts: 0, journalEntries: 0, stockMovements: 0,
+          purchaseOrders: 0, supplierInvoices: 0 },
   users: [], departments: [], items: [], inventory: [],
   receipts: [], issues: [], purchases: [], activities: [], assets: [], assetCategories: [],
-  grns: [], suppliers: [], paymentEntries: [], chartOfAccounts: [], journalEntries: [], stockMovements: []
+  grns: [], suppliers: [], paymentEntries: [], chartOfAccounts: [], journalEntries: [], stockMovements: [],
+  purchaseOrders: [], supplierInvoices: []
 }).write();
 
 // Seed default Chart of Accounts if empty
@@ -2671,30 +2680,105 @@ app.post("/api/accounts/journal-entries", requirePermission("manageAccounts"), (
   res.status(201).json(db.get("journalEntries").find({ id: row.id }).value());
 });
 
+const PO_ORDER_REF_TYPES = ["LPO NO", "LSO NO", "IMPREST NO"];
+const PO_CLASSIFICATIONS = ["Expense", "PPE", "F.C"];
+function buildPoLines(lines, itemsById) {
+  if (!Array.isArray(lines)) return [];
+  return lines.map(l => {
+    const item = l.itemId ? itemsById.get(Number(l.itemId)) : null;
+    const quantity = Number(l.quantity) || 0;
+    const unitPrice = Number(l.unitPrice) || 0;
+    return {
+      itemId: item ? item.id : null,
+      description: String(l.description || item?.description || "").trim().toUpperCase(),
+      unit: l.unit || item?.unit || null,
+      quantity, unitPrice,
+      totalPrice: Number((quantity * unitPrice).toFixed(2)),
+    };
+  }).filter(l => l.description && l.quantity > 0);
+}
+function poTotals(lines, taxPercent) {
+  const totalExclusiveVat = Number(lines.reduce((sum, l) => sum + l.totalPrice, 0).toFixed(2));
+  const pct = Number(taxPercent) || 0;
+  const taxAmount = Number((totalExclusiveVat * pct / 100).toFixed(2));
+  const totalInclusiveVat = Number((totalExclusiveVat + taxAmount).toFixed(2));
+  return { totalExclusiveVat, taxAmount, totalInclusiveVat };
+}
+app.get("/api/accounts/purchase-order-meta", requirePermission("viewAccounts"), (_req, res) => {
+  res.json({ orderRefTypes: PO_ORDER_REF_TYPES, classifications: PO_CLASSIFICATIONS, procurementMethods: getSettings().procurementMethods, chargeItemCodes: getSettings().chargeItemCodes });
+});
 app.get("/api/accounts/purchase-orders", requirePermission("viewAccounts"), (req, res) => {
   const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s]));
   res.json(db.get("purchaseOrders").value().sort((a, b) => b.id - a.id).map(o => ({ ...o, supplier: suppliers.get(o.supplierId) || null })));
 });
 app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (req, res) => {
-  const { date, supplierId, expectedDate, note, lines } = req.body;
+  const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, approvalStatus, note, lines } = req.body;
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!date || !supplier || !Array.isArray(lines) || !lines.length) return res.status(400).json({ error: "Date, supplier, and at least one order line are required" });
-  const cleanLines = lines.map(l => ({ description: String(l.description || "").trim().toUpperCase(), quantity: Number(l.quantity) || 0, unitPrice: Number(l.unitPrice) || 0, unit: l.unit || null })).filter(l => l.description && l.quantity > 0);
+  if (orderRefType && !PO_ORDER_REF_TYPES.includes(orderRefType)) return res.status(400).json({ error: "Invalid order reference type" });
+  if (classification && !PO_CLASSIFICATIONS.includes(classification)) return res.status(400).json({ error: "Invalid classification" });
+  const itemsById = new Map(db.get("items").value().map(i => [i.id, i]));
+  const cleanLines = buildPoLines(lines, itemsById);
   if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
-  const totalAmount = Number(cleanLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0).toFixed(2));
-  const row = { id: nextId("purchaseOrders"), poNo: genSequentialNo("PO", "purchaseOrders"), date, supplierId: supplier.id, expectedDate: expectedDate || null, lines: cleanLines, totalAmount, status: "ordered", note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
+  const { totalExclusiveVat, taxAmount, totalInclusiveVat } = poTotals(cleanLines, taxPercent);
+  const row = {
+    id: nextId("purchaseOrders"), poNo: genSequentialNo("PO", "purchaseOrders"), date, supplierId: supplier.id,
+    orderRefType: orderRefType || null, orderRefNo: orderRefNo || null, orderRefDate: orderRefDate || null,
+    requisitionNo: requisitionNo || null, procurementRef: procurementRef || null, procurementMethod: procurementMethod || null,
+    paymentTerms: paymentTerms || null, classification: classification || null, chargeableVoteCode: chargeableVoteCode || null,
+    taxPercent: Number(taxPercent) || 0, lines: cleanLines,
+    totalExclusiveVat, taxAmount, totalInclusiveVat, totalAmount: totalInclusiveVat,
+    status: approvalStatus === "approved" ? "approved" : "pending",
+    note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString(),
+  };
   db.get("purchaseOrders").push(row).write();
-  logActivity(req, "CREATE_PURCHASE_ORDER", "PURCHASE_ORDER", row.id, { poNo: row.poNo, totalAmount });
+  logActivity(req, "CREATE_PURCHASE_ORDER", "PURCHASE_ORDER", row.id, { poNo: row.poNo, totalAmount: totalInclusiveVat });
   res.status(201).json({ ...row, supplier });
 });
-app.patch("/api/accounts/purchase-orders/:id/status", requirePermission("manageAccounts"), (req, res) => {
-  const ref = db.get("purchaseOrders").find({ id: Number(req.params.id) });
-  if (!ref.value()) return res.status(404).json({ error: "Purchase order not found" });
-  const status = String(req.body.status || "");
-  if (!["ordered", "received", "closed", "cancelled"].includes(status)) return res.status(400).json({ error: "Invalid purchase-order status" });
-  ref.assign({ status, updatedAt: new Date().toISOString() }).write();
-  logActivity(req, "UPDATE_PURCHASE_ORDER_STATUS", "PURCHASE_ORDER", Number(req.params.id), { status });
-  res.json(ref.value());
+app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts"), (req, res) => {
+  const id = Number(req.params.id);
+  const ref = db.get("purchaseOrders").find({ id });
+  const current = ref.value();
+  if (!current) return res.status(404).json({ error: "Purchase order not found" });
+  const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, approvalStatus, note, lines } = req.body;
+  const supplier = supplierId ? db.get("suppliers").find({ id: Number(supplierId) }).value() : db.get("suppliers").find({ id: current.supplierId }).value();
+  if (!supplier) return res.status(400).json({ error: "Supplier not found" });
+  if (orderRefType && !PO_ORDER_REF_TYPES.includes(orderRefType)) return res.status(400).json({ error: "Invalid order reference type" });
+  if (classification && !PO_CLASSIFICATIONS.includes(classification)) return res.status(400).json({ error: "Invalid classification" });
+  const itemsById = new Map(db.get("items").value().map(i => [i.id, i]));
+  const cleanLines = lines !== undefined ? buildPoLines(lines, itemsById) : current.lines;
+  if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
+  const effectiveTax = taxPercent !== undefined ? Number(taxPercent) || 0 : current.taxPercent || 0;
+  const { totalExclusiveVat, taxAmount, totalInclusiveVat } = poTotals(cleanLines, effectiveTax);
+  const updates = {
+    date: date || current.date, supplierId: supplier.id,
+    orderRefType: orderRefType !== undefined ? (orderRefType || null) : current.orderRefType,
+    orderRefNo: orderRefNo !== undefined ? (orderRefNo || null) : current.orderRefNo,
+    orderRefDate: orderRefDate !== undefined ? (orderRefDate || null) : current.orderRefDate,
+    requisitionNo: requisitionNo !== undefined ? (requisitionNo || null) : current.requisitionNo,
+    procurementRef: procurementRef !== undefined ? (procurementRef || null) : current.procurementRef,
+    procurementMethod: procurementMethod !== undefined ? (procurementMethod || null) : current.procurementMethod,
+    paymentTerms: paymentTerms !== undefined ? (paymentTerms || null) : current.paymentTerms,
+    classification: classification !== undefined ? (classification || null) : current.classification,
+    chargeableVoteCode: chargeableVoteCode !== undefined ? (chargeableVoteCode || null) : current.chargeableVoteCode,
+    taxPercent: effectiveTax, lines: cleanLines,
+    totalExclusiveVat, taxAmount, totalInclusiveVat, totalAmount: totalInclusiveVat,
+    status: approvalStatus !== undefined ? (approvalStatus === "approved" ? "approved" : "pending") : current.status,
+    note: note !== undefined ? (note || null) : current.note,
+    updatedBy: req.session.userId, updatedAt: new Date().toISOString(),
+  };
+  ref.assign(updates).write();
+  logActivity(req, "UPDATE_PURCHASE_ORDER", "PURCHASE_ORDER", id, { poNo: current.poNo });
+  res.json({ ...ref.value(), supplier });
+});
+app.delete("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts"), (req, res) => {
+  const id = Number(req.params.id);
+  const current = db.get("purchaseOrders").find({ id }).value();
+  if (!current) return res.status(404).json({ error: "Purchase order not found" });
+  if (db.get("supplierInvoices").find({ purchaseOrderId: id }).value()) return res.status(400).json({ error: "Cannot delete a purchase order that already has a supplier invoice recorded against it" });
+  db.get("purchaseOrders").remove({ id }).write();
+  logActivity(req, "DELETE_PURCHASE_ORDER", "PURCHASE_ORDER", id, { poNo: current.poNo });
+  res.status(204).send();
 });
 app.get("/api/accounts/supplier-invoices", requirePermission("viewAccounts"), (req, res) => {
   const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s]));
@@ -2770,6 +2854,7 @@ const DEFAULT_SETTINGS = {
   // Reports & Exports
   reportChargeItem: "221102",
   chargeItemCodes: CHARGE_ITEM_CODES,
+  procurementMethods: DEFAULT_PROCUREMENT_METHODS,
   customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
@@ -2799,6 +2884,7 @@ function getSettings(){
   const byCode = new Map(settings.chargeItemCodes.map(c => [String(c.code), c]));
   for (const code of DEFAULT_SETTINGS.chargeItemCodes) if (!byCode.has(String(code.code))) settings.chargeItemCodes.push(code);
   if (!settings.chargeItemCodes.some(c => String(c.code) === "2211002")) settings.chargeItemCodes.push({ code: "2211002", name: "NON-PHARM" });
+  if (!Array.isArray(settings.procurementMethods) || !settings.procurementMethods.length) settings.procurementMethods = [...DEFAULT_PROCUREMENT_METHODS];
   return settings;
 }
 function independentAccountingEnabled() { return getSettings().independentAccountingMode !== false; }
@@ -2821,6 +2907,12 @@ app.patch("/api/settings",requirePermission("manageUsers"),(req,res)=>{
     const assigned = existingUsers.find(u => deleted.includes(u.role));
     if (assigned) return res.status(400).json({ error: `Role "${assigned.role}" is assigned to a user and cannot be deleted` });
     updates.customRoles = updates.customRoles.map(r => ({ name: String(r.name).trim(), permissions: r.permissions && typeof r.permissions === "object" ? r.permissions : {} }));
+  }
+  if (updates.procurementMethods !== undefined) {
+    if (!Array.isArray(updates.procurementMethods)) return res.status(400).json({ error: "Procurement methods must be an array" });
+    const names = updates.procurementMethods.map(m => String(m || "").trim()).filter(Boolean);
+    if (!names.length) return res.status(400).json({ error: "Keep at least one procurement method" });
+    updates.procurementMethods = Array.from(new Set(names));
   }
   const next={...current,...updates};
   db.set("settings",next).write();
@@ -2858,6 +2950,11 @@ app.get("/api/settings/public",(req,res)=>{
 app.get("/api/settings/charge-item-codes", requireAuth, (_req, res) => {
   const codes = getSettings().chargeItemCodes;
   res.json(Array.isArray(codes) ? codes : []);
+});
+
+app.get("/api/settings/procurement-methods", requireAuth, (_req, res) => {
+  const methods = getSettings().procurementMethods;
+  res.json(Array.isArray(methods) ? methods : []);
 });
 
 app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{

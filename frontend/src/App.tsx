@@ -22,13 +22,15 @@ import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import DigitalForms from "@/pages/digital-forms";
 import GrnPage from "@/pages/accounts/grn";
+import PurchaseOrdersPage from "@/pages/accounts/purchase-orders";
+import SupplierInvoicesPage from "@/pages/accounts/supplier-invoices";
 import StockMovementPage from "@/pages/accounts/stock-movement";
 import SuppliersPage from "@/pages/accounts/suppliers";
 import PaymentsPage from "@/pages/accounts/payments";
 import FinancialReportsPage from "@/pages/accounts/financial-reports";
 import ChartOfAccountsPage from "@/pages/accounts/chart-of-accounts";
 import JournalEntriesPage from "@/pages/accounts/journal-entries";
-import ProcurementPage from "@/pages/accounts/procurement";
+
 import CatalogCategoriesPage from "@/pages/catalog-categories";
 import { AlertTriangle } from "lucide-react";
 import { API_BASE } from "@/lib/api";
@@ -131,14 +133,15 @@ function AppWithAuth() {
         <Route path="/admin/settings" component={SettingsPage} />
         <Route path="/stock-valuation" component={StockValuationPage} />
           <Route path="/digital-forms" component={DigitalForms} />
+        <Route path="/accounts/purchase-orders" component={PurchaseOrdersPage} />
         <Route path="/accounts/grn" component={GrnPage} />
+        <Route path="/accounts/supplier-invoices" component={SupplierInvoicesPage} />
         <Route path="/accounts/stock-movement" component={StockMovementPage} />
         <Route path="/accounts/suppliers" component={SuppliersPage} />
         <Route path="/accounts/payments" component={PaymentsPage} />
         <Route path="/accounts/financial-reports" component={FinancialReportsPage} />
         <Route path="/accounts/chart-of-accounts" component={ChartOfAccountsPage} />
         <Route path="/accounts/journal-entries" component={JournalEntriesPage} />
-        <Route path="/accounts/procurement" component={ProcurementPage} />
         <Route component={NotFound} />
       </Switch>
       <InactivityWarning secondsLeft={warningSeconds} />

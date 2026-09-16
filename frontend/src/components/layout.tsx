@@ -42,11 +42,12 @@ const NAV_ITEMS = [
   {
     label: "Accounts", icon: Landmark, permission: "viewAccounts",
     children: [
+      { href: "/accounts/purchase-orders",   label: "Purchase Orders",      icon: ClipboardList, permission: "viewAccounts" },
       { href: "/accounts/grn",               label: "GRN (Goods Received)", icon: ReceiptText,  permission: "viewAccounts" },
+      { href: "/accounts/supplier-invoices", label: "Purchase/Supplier Invoices", icon: FileText, permission: "viewAccounts" },
       { href: "/accounts/stock-movement",    label: "Stock Movement",       icon: PackageSearch, permission: "viewAccounts" },
       { href: "/accounts/suppliers",         label: "Suppliers",            icon: Users,         permission: "viewAccounts" },
       { href: "/accounts/payments",          label: "Payment Entries",      icon: Wallet,        permission: "viewAccounts" },
-      { href: "/accounts/procurement",       label: "Procurement",           icon: ShoppingCart, permission: "viewAccounts" },
       { href: "/accounts/journal-entries",   label: "Journal Entries",       icon: BookOpen,     permission: "viewAccounts" },
       { href: "/accounts/financial-reports", label: "Financial Reports",    icon: BarChart3,     permission: "viewAccounts" },
       { href: "/accounts/chart-of-accounts", label: "Chart of Accounts",    icon: BookMarked,    permission: "viewAccounts" },
