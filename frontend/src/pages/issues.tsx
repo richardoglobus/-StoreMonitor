@@ -155,7 +155,7 @@ function VoucherItemRow({
 
       {selectedItem && (
         <p className="text-xs text-muted-foreground pl-1">
-          Selected: <strong>{selectedItem.description}</strong> — {selectedItem.stockBalance} {selectedItem.unit} in stock
+          Selected: <strong>{selectedItem.description}</strong> — {selectedItem.stockBalance} {selectedItem.unit} in stock{vItem.quantity && vItem.quantityUnit ? <> · This issue deducts <strong>{Number(vItem.quantity) * (selectedItem.packUnit && vItem.quantityUnit.replace(/S$/, "") === selectedItem.packUnit.replace(/S$/, "") ? (selectedItem.packSize || 1) : 1)} {selectedItem.unit}</strong></> : null}
         </p>
       )}
     </div>
@@ -267,7 +267,8 @@ export default function Issues() {
     for (const vItem of voucherItems) {
       const stock = itemStock?.find(s => s.id === Number(vItem.itemId));
       if (!stock || stock.stockBalance <= 0) { toast.error("Cannot issue an item with zero stock"); return; }
-      if (Number(vItem.quantity) > stock.stockBalance) { toast.error(`Issue quantity exceeds stock for ${stock.description}`); return; }
+      const multiplier = stock.packUnit && vItem.quantityUnit.replace(/S$/, "") === stock.packUnit.replace(/S$/, "") ? (stock.packSize || 1) : 1;
+      if (Number(vItem.quantity) * multiplier > stock.stockBalance) { toast.error(`Issue quantity exceeds stock for ${stock.description}`); return; }
     }
     createVoucher.mutate({
       data: {

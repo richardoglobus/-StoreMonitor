@@ -1349,15 +1349,21 @@ function normalizePermissions(role, permissions) {
 }
 
 function itemConversion(item) {
-  const baseUnit = String(item?.baseUnit || item?.unit || "UNIT").trim().toUpperCase();
-  const packUnit = String(item?.packUnit || "").trim().toUpperCase();
-  const packSize = Number(item?.packSize) > 0 ? Number(item.packSize) : 1;
+  let baseUnit = String(item?.baseUnit || item?.unit || "UNIT").trim().toUpperCase();
+  let packUnit = String(item?.packUnit || "").trim().toUpperCase();
+  let packSize = Number(item?.packSize) > 0 ? Number(item.packSize) : 1;
+  if (!packUnit) {
+    const d = String(item?.description || "");
+    const inferred = d.match(/2\s*ml.*syringe/i) ? ["PIECE", "PACKET", 100] : d.match(/tongue\s*depressor/i) ? ["PIECE", "PACKET", 100] : d.match(/surgical.*glove/i) ? ["PAIR", "BOX", 50] : d.match(/clean.*glove|latex.*glove/i) ? ["PAIR", "PACKET", 50] : d.match(/crepe.*bandage/i) ? ["PIECE", "DOZEN", 12] : d.match(/fluid.*giving|iv.*infusion.*giving/i) ? ["PIECE", "PACKET", 10] : d.match(/needle/i) ? ["PIECE", "PACKET", 100] : d.match(/surgical.*blade/i) ? ["PIECE", "PACKET", 10] : d.match(/paper.*apron|plastic.*apron/i) ? ["PIECE", "PACK", 100] : null;
+    if (inferred) [baseUnit, packUnit, packSize] = inferred;
+  }
   const openingUnit = String(item?.openingUnit || baseUnit).trim().toUpperCase();
   return { baseUnit, packUnit, packSize, openingUnit };
 }
 function toBaseQuantity(item, quantity, quantityUnit) {
-  const c = itemConversion(item), unit = String(quantityUnit || c.baseUnit).trim().toUpperCase();
-  return Number(quantity || 0) * (c.packUnit && unit === c.packUnit ? c.packSize : 1);
+  const c = itemConversion(item), unit = String(quantityUnit || c.baseUnit).trim().toUpperCase().replace(/S$/, "");
+  const pack = String(c.packUnit || "").replace(/S$/, "");
+  return Number(quantity || 0) * (pack && unit === pack ? c.packSize : 1);
 }
 function quantityLabel(item) {
   const c = itemConversion(item);
@@ -1468,8 +1474,27 @@ function ensureCatalogCategories() {
     if (item.categoryId == null) db.get("items").find({ id: item.id }).assign({ categoryId: nonPharm.id }).write();
   }
 }
+function ensureKnownPackConversions() {
+  const rules = [
+    [/2\s*ml.*syringe/i, { baseUnit: "PIECE", packUnit: "PACKET", packSize: 100 }],
+    [/tongue\s*depressor/i, { baseUnit: "PIECE", packUnit: "PACKET", packSize: 100 }],
+    [/surgical.*glove/i, { baseUnit: "PAIR", packUnit: "BOX", packSize: 50 }],
+    [/clean.*glove|latex.*glove/i, { baseUnit: "PAIR", packUnit: "PACKET", packSize: 50 }],
+    [/crepe.*bandage/i, { baseUnit: "PIECE", packUnit: "DOZEN", packSize: 12 }],
+    [/fluid.*giving|iv.*infusion.*giving/i, { baseUnit: "PIECE", packUnit: "PACKET", packSize: 10 }],
+    [/needle/i, { baseUnit: "PIECE", packUnit: "PACKET", packSize: 100 }],
+    [/surgical.*blade/i, { baseUnit: "PIECE", packUnit: "PACKET", packSize: 10 }],
+    [/paper.*apron|plastic.*apron/i, { baseUnit: "PIECE", packUnit: "PACK", packSize: 100 }],
+  ];
+  for (const item of db.get("items").value()) {
+    if (item.packUnit) continue;
+    const rule = rules.find(([pattern]) => pattern.test(String(item.description || "")))?.[1];
+    if (rule) db.get("items").find({ id: item.id }).assign({ ...rule, openingUnit: item.openingUnit || item.unit }).write();
+  }
+}
 function runMigrations() {
   ensureCatalogCategories();
+  ensureKnownPackConversions();
   migratePurchasesToSuppliers();
   migratePurchasesToGrns();
   for (const user of db.get("users").value()) {
