@@ -20,6 +20,7 @@ const DEFAULT_PROCUREMENT_METHODS = [
   "Low Value Procurement",
   "Open Tender",
 ];
+const DEFAULT_SUPPLIER_STATUSES = ["Active", "Inactive", "Suspended", "Blacklisted"];
 // Version 2.1 starts at the current repository commit. Each later Git commit
 // increases the displayed version automatically: 2.1, 2.2, 2.3, ...
 const VERSION_BASE_COMMIT_COUNT = 118;
@@ -2521,11 +2522,22 @@ app.get("/api/accounts/suppliers", requireAnyPermission("viewAccounts", "manageP
   res.json(db.get("suppliers").orderBy("name", "asc").value());
 });
 app.post("/api/accounts/suppliers", requirePermission("manageAccounts"), (req, res) => {
-  const { name, contactPerson, phone, email, address } = req.body;
-  if (!name || !String(name).trim()) return res.status(400).json({ error: "Supplier name is required" });
+  const { name, contactPerson, phone, email, address, pin, contractStatus, status } = req.body;
+  const missing = [];
+  if (!name || !String(name).trim()) missing.push("name");
+  if (!address || !String(address).trim()) missing.push("address");
+  if (!pin || !String(pin).trim()) missing.push("PIN");
+  if (!phone || !String(phone).trim()) missing.push("phone");
+  if (missing.length) return res.status(400).json({ error: `${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} required` });
   const normalizedName = String(name).trim().toUpperCase();
   if (db.get("suppliers").value().some(s => String(s.name || "").trim().toUpperCase() === normalizedName)) return res.status(409).json({ error: "A supplier with this name already exists" });
-  const row = { id: nextId("suppliers"), name: normalizedName, contactPerson: contactPerson || null, phone: phone || null, email: email || null, address: address || null, balance: 0, createdAt: new Date().toISOString() };
+  const statuses = getSettings().supplierStatuses;
+  const row = {
+    id: nextId("suppliers"), name: normalizedName, contactPerson: contactPerson || null, phone: String(phone).trim(),
+    email: email || null, address: String(address).trim(), pin: String(pin).trim().toUpperCase(),
+    contractStatus: contractStatus || null, status: status && statuses.includes(status) ? status : (statuses[0] || "Active"),
+    balance: 0, createdAt: new Date().toISOString(),
+  };
   db.get("suppliers").push(row).write();
   logActivity(req, "CREATE_SUPPLIER", "SUPPLIER", row.id, { name: row.name });
   res.status(201).json(row);
@@ -2534,17 +2546,25 @@ app.patch("/api/accounts/suppliers/:id", requirePermission("manageAccounts"), (r
   const id = Number(req.params.id);
   const row = db.get("suppliers").find({ id });
   if (!row.value()) return res.status(404).json({ error: "Supplier not found" });
-  const { name, contactPerson, phone, email, address } = req.body;
+  const { name, contactPerson, phone, email, address, pin, contractStatus, status } = req.body;
   const updates = {};
   if (name !== undefined) {
+    if (!String(name).trim()) return res.status(400).json({ error: "Supplier name is required" });
     const normalizedName = String(name).trim().toUpperCase();
     if (db.get("suppliers").value().some(s => s.id !== id && String(s.name || "").trim().toUpperCase() === normalizedName)) return res.status(409).json({ error: "A supplier with this name already exists" });
     updates.name = normalizedName;
   }
+  if (address !== undefined) { if (!String(address).trim()) return res.status(400).json({ error: "Address is required" }); updates.address = String(address).trim(); }
+  if (pin !== undefined) { if (!String(pin).trim()) return res.status(400).json({ error: "PIN is required" }); updates.pin = String(pin).trim().toUpperCase(); }
+  if (phone !== undefined) { if (!String(phone).trim()) return res.status(400).json({ error: "Phone is required" }); updates.phone = String(phone).trim(); }
   if (contactPerson !== undefined) updates.contactPerson = contactPerson || null;
-  if (phone !== undefined) updates.phone = phone || null;
   if (email !== undefined) updates.email = email || null;
-  if (address !== undefined) updates.address = address || null;
+  if (contractStatus !== undefined) updates.contractStatus = contractStatus || null;
+  if (status !== undefined) {
+    const statuses = getSettings().supplierStatuses;
+    if (status && !statuses.includes(status)) return res.status(400).json({ error: "Invalid supplier status" });
+    updates.status = status || null;
+  }
   row.assign(updates).write();
   logActivity(req, "UPDATE_SUPPLIER", "SUPPLIER", id, updates);
   res.json(row.value());
@@ -2704,12 +2724,41 @@ function poTotals(lines, taxPercent) {
   const totalInclusiveVat = Number((totalExclusiveVat + taxAmount).toFixed(2));
   return { totalExclusiveVat, taxAmount, totalInclusiveVat };
 }
+function createMatchingGrnForPurchaseOrder(po, supplier, req) {
+  if (db.get("grns").find({ sourcePurchaseOrderId: po.id }).value()) return null;
+  const grn = {
+    id: nextId("grns"),
+    grnNo: genSequentialNo("GRN", "grns"),
+    date: po.date,
+    lpoNo: po.orderRefNo || po.poNo,
+    supplierId: supplier.id,
+    invoiceNo: null,
+    items: (po.lines || []).map(l => ({
+      itemCode: l.itemId != null ? String(l.itemId) : null, description: l.description,
+      unit: l.unit || null, qtyReceived: Number(l.quantity) || 0,
+      unitCost: Number(l.unitPrice) || 0, totalCost: Number(l.totalPrice) || 0,
+      batchNo: null, expiryDate: null, chargeItemCode: po.chargeableVoteCode || null, folioNo: null,
+    })),
+    totalAmount: po.totalExclusiveVat,
+    status: "pending",
+    sourcePurchaseOrderId: po.id,
+    autoCreated: true,
+    createdBy: req.session.userId,
+    createdAt: new Date().toISOString(),
+    approvedBy: null,
+    approvedAt: null,
+  };
+  db.get("grns").push(grn).write();
+  logActivity(req, "AUTO_CREATE_GRN_FROM_PO", "GRN", grn.id, { grnNo: grn.grnNo, poNo: po.poNo });
+  return grn;
+}
 app.get("/api/accounts/purchase-order-meta", requirePermission("viewAccounts"), (_req, res) => {
   res.json({ orderRefTypes: PO_ORDER_REF_TYPES, classifications: PO_CLASSIFICATIONS, procurementMethods: getSettings().procurementMethods, chargeItemCodes: getSettings().chargeItemCodes });
 });
 app.get("/api/accounts/purchase-orders", requirePermission("viewAccounts"), (req, res) => {
   const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s]));
-  res.json(db.get("purchaseOrders").value().sort((a, b) => b.id - a.id).map(o => ({ ...o, supplier: suppliers.get(o.supplierId) || null })));
+  const grnByPoId = new Map(db.get("grns").value().filter(g => g.sourcePurchaseOrderId != null).map(g => [g.sourcePurchaseOrderId, g]));
+  res.json(db.get("purchaseOrders").value().sort((a, b) => b.id - a.id).map(o => ({ ...o, supplier: suppliers.get(o.supplierId) || null, grn: grnByPoId.get(o.id) || null })));
 });
 app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (req, res) => {
   const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, approvalStatus, note, lines } = req.body;
@@ -2732,8 +2781,10 @@ app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (
     note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString(),
   };
   db.get("purchaseOrders").push(row).write();
+  let grn = null;
+  if (row.status === "approved") grn = createMatchingGrnForPurchaseOrder(row, supplier, req);
   logActivity(req, "CREATE_PURCHASE_ORDER", "PURCHASE_ORDER", row.id, { poNo: row.poNo, totalAmount: totalInclusiveVat });
-  res.status(201).json({ ...row, supplier });
+  res.status(201).json({ ...row, supplier, grn });
 });
 app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
@@ -2750,6 +2801,7 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
   if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
   const effectiveTax = taxPercent !== undefined ? Number(taxPercent) || 0 : current.taxPercent || 0;
   const { totalExclusiveVat, taxAmount, totalInclusiveVat } = poTotals(cleanLines, effectiveTax);
+  const newStatus = approvalStatus !== undefined ? (approvalStatus === "approved" ? "approved" : "pending") : current.status;
   const updates = {
     date: date || current.date, supplierId: supplier.id,
     orderRefType: orderRefType !== undefined ? (orderRefType || null) : current.orderRefType,
@@ -2763,19 +2815,23 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
     chargeableVoteCode: chargeableVoteCode !== undefined ? (chargeableVoteCode || null) : current.chargeableVoteCode,
     taxPercent: effectiveTax, lines: cleanLines,
     totalExclusiveVat, taxAmount, totalInclusiveVat, totalAmount: totalInclusiveVat,
-    status: approvalStatus !== undefined ? (approvalStatus === "approved" ? "approved" : "pending") : current.status,
+    status: newStatus,
     note: note !== undefined ? (note || null) : current.note,
     updatedBy: req.session.userId, updatedAt: new Date().toISOString(),
   };
   ref.assign(updates).write();
+  const updated = ref.value();
+  let grn = null;
+  if (newStatus === "approved" && current.status !== "approved") grn = createMatchingGrnForPurchaseOrder(updated, supplier, req);
   logActivity(req, "UPDATE_PURCHASE_ORDER", "PURCHASE_ORDER", id, { poNo: current.poNo });
-  res.json({ ...ref.value(), supplier });
+  res.json({ ...updated, supplier, grn });
 });
 app.delete("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
   const current = db.get("purchaseOrders").find({ id }).value();
   if (!current) return res.status(404).json({ error: "Purchase order not found" });
   if (db.get("supplierInvoices").find({ purchaseOrderId: id }).value()) return res.status(400).json({ error: "Cannot delete a purchase order that already has a supplier invoice recorded against it" });
+  if (db.get("grns").find({ sourcePurchaseOrderId: id }).value()) return res.status(400).json({ error: "Cannot delete a purchase order that already has a GRN recorded against it — void or delete the GRN first" });
   db.get("purchaseOrders").remove({ id }).write();
   logActivity(req, "DELETE_PURCHASE_ORDER", "PURCHASE_ORDER", id, { poNo: current.poNo });
   res.status(204).send();
@@ -2855,6 +2911,7 @@ const DEFAULT_SETTINGS = {
   reportChargeItem: "221102",
   chargeItemCodes: CHARGE_ITEM_CODES,
   procurementMethods: DEFAULT_PROCUREMENT_METHODS,
+  supplierStatuses: DEFAULT_SUPPLIER_STATUSES,
   customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
@@ -2885,6 +2942,7 @@ function getSettings(){
   for (const code of DEFAULT_SETTINGS.chargeItemCodes) if (!byCode.has(String(code.code))) settings.chargeItemCodes.push(code);
   if (!settings.chargeItemCodes.some(c => String(c.code) === "2211002")) settings.chargeItemCodes.push({ code: "2211002", name: "NON-PHARM" });
   if (!Array.isArray(settings.procurementMethods) || !settings.procurementMethods.length) settings.procurementMethods = [...DEFAULT_PROCUREMENT_METHODS];
+  if (!Array.isArray(settings.supplierStatuses) || !settings.supplierStatuses.length) settings.supplierStatuses = [...DEFAULT_SUPPLIER_STATUSES];
   return settings;
 }
 function independentAccountingEnabled() { return getSettings().independentAccountingMode !== false; }
@@ -2913,6 +2971,12 @@ app.patch("/api/settings",requirePermission("manageUsers"),(req,res)=>{
     const names = updates.procurementMethods.map(m => String(m || "").trim()).filter(Boolean);
     if (!names.length) return res.status(400).json({ error: "Keep at least one procurement method" });
     updates.procurementMethods = Array.from(new Set(names));
+  }
+  if (updates.supplierStatuses !== undefined) {
+    if (!Array.isArray(updates.supplierStatuses)) return res.status(400).json({ error: "Supplier statuses must be an array" });
+    const names = updates.supplierStatuses.map(m => String(m || "").trim()).filter(Boolean);
+    if (!names.length) return res.status(400).json({ error: "Keep at least one supplier status" });
+    updates.supplierStatuses = Array.from(new Set(names));
   }
   const next={...current,...updates};
   db.set("settings",next).write();
@@ -2955,6 +3019,11 @@ app.get("/api/settings/charge-item-codes", requireAuth, (_req, res) => {
 app.get("/api/settings/procurement-methods", requireAuth, (_req, res) => {
   const methods = getSettings().procurementMethods;
   res.json(Array.isArray(methods) ? methods : []);
+});
+
+app.get("/api/settings/supplier-statuses", requireAuth, (_req, res) => {
+  const statuses = getSettings().supplierStatuses;
+  res.json(Array.isArray(statuses) ? statuses : []);
 });
 
 app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{

@@ -3,7 +3,7 @@ import { Layout } from "@/components/layout";
 import {
   useListSuppliers, getListSuppliersQueryKey,
   useCreateSupplier, useUpdateSupplier, useDeleteSupplier, useGetSupplierLedger,
-  useMergeSuppliers,
+  useMergeSuppliers, useListSupplierStatuses,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,14 @@ import { Plus, Trash2, Pencil, Users, BookOpen, GitMerge, Search } from "lucide-
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
-const emptyForm = { name: "", contactPerson: "", phone: "", email: "", address: "" };
+const emptyForm = { name: "", contactPerson: "", phone: "", email: "", address: "", pin: "", contractStatus: "", status: "" };
 
 export default function SuppliersPage() {
   const queryClient = useQueryClient();
@@ -42,6 +43,7 @@ export default function SuppliersPage() {
 
   const { data: suppliers, isLoading } = useListSuppliers({ query: { queryKey: getListSuppliersQueryKey() } });
   const { data: ledger, isLoading: ledgerLoading } = useGetSupplierLedger(ledgerSupplierId ?? 0);
+  const { data: supplierStatuses } = useListSupplierStatuses();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
 
@@ -51,10 +53,13 @@ export default function SuppliersPage() {
   const mergeSuppliers = useMergeSuppliers({ mutation: { onSuccess: (data) => { toast.success(`Suppliers merged; ${Object.values(data.moved).reduce((a, b) => a + b, 0)} linked records moved`); invalidate(); setMergeOpen(false); setMergeSourceId(""); setMergeTargetId(""); setMergeName(""); }, onError: (e: any) => toast.error(e?.error || "Failed to merge suppliers") } });
 
   const closeDialog = () => { setIsDialogOpen(false); setEditingId(null); setForm(emptyForm); };
-  const openEdit = (s: any) => { setEditingId(s.id); setForm({ name: s.name, contactPerson: s.contactPerson ?? "", phone: s.phone ?? "", email: s.email ?? "", address: s.address ?? "" }); setIsDialogOpen(true); };
+  const openEdit = (s: any) => { setEditingId(s.id); setForm({ name: s.name, contactPerson: s.contactPerson ?? "", phone: s.phone ?? "", email: s.email ?? "", address: s.address ?? "", pin: s.pin ?? "", contractStatus: s.contractStatus ?? "", status: s.status ?? "" }); setIsDialogOpen(true); };
 
   const handleSubmit = () => {
     if (!form.name.trim()) { toast.error("Supplier name is required"); return; }
+    if (!form.address.trim()) { toast.error("Address is required"); return; }
+    if (!form.pin.trim()) { toast.error("PIN is required"); return; }
+    if (!form.phone.trim()) { toast.error("Phone is required"); return; }
     setSubmitting(true);
     if (editingId) updateSupplier.mutate({ supplierId: editingId, data: form });
     else createSupplier.mutate({ data: form });
@@ -81,11 +86,23 @@ export default function SuppliersPage() {
             <DialogContent>
               <DialogHeader><DialogTitle>{editingId ? "Edit Supplier" : "New Supplier"}</DialogTitle></DialogHeader>
               <div className="space-y-3 py-2">
-                <div className="space-y-1"><Label>Name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
-                <div className="space-y-1"><Label>Contact Person</Label><Input value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))}/></div>
-                <div className="space-y-1"><Label>Phone</Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}/></div>
-                <div className="space-y-1"><Label>Email</Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}/></div>
-                <div className="space-y-1"><Label>Address</Label><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}/></div>
+                <div className="space-y-1"><Label>Name <span className="text-destructive">*</span></Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}/></div>
+                <div className="space-y-1"><Label>Address <span className="text-destructive">*</span></Label><Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}/></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>PIN <span className="text-destructive">*</span></Label><Input value={form.pin} onChange={e => setForm(f => ({ ...f, pin: e.target.value }))} placeholder="e.g. P0XXXXXXXXX" /></div>
+                  <div className="space-y-1"><Label>Phone <span className="text-destructive">*</span></Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}/></div>
+                </div>
+                <div className="space-y-1"><Label>Contact Person <span className="text-muted-foreground font-normal">(optional)</span></Label><Input value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))}/></div>
+                <div className="space-y-1"><Label>Email <span className="text-muted-foreground font-normal">(optional)</span></Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}/></div>
+                <div className="space-y-1"><Label>Contract Status <span className="text-muted-foreground font-normal">(optional)</span></Label><Input value={form.contractStatus} onChange={e => setForm(f => ({ ...f, contractStatus: e.target.value }))} placeholder="e.g. Active until Dec 2026"/></div>
+                <div className="space-y-1">
+                  <Label>Supplier Status</Label>
+                  <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                    <SelectContent>{(supplierStatuses || []).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">Manage the list in Settings → Purchases.</p>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={closeDialog}>Cancel</Button>
@@ -101,15 +118,16 @@ export default function SuppliersPage() {
 
       <Card className="overflow-x-auto">
         <Table>
-          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Contact</TableHead><TableHead>Phone</TableHead><TableHead className="text-right">Amount Owed (KES)</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Contact</TableHead><TableHead>Phone</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Amount Owed (KES)</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
           <TableBody>
-            {isLoading && Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={5}><Skeleton className="h-6 w-full"/></TableCell></TableRow>)}
-            {!isLoading && visibleSuppliers.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No suppliers match the search.</TableCell></TableRow>}
+            {isLoading && Array.from({ length: 3 }).map((_, i) => <TableRow key={i}><TableCell colSpan={6}><Skeleton className="h-6 w-full"/></TableCell></TableRow>)}
+            {!isLoading && visibleSuppliers.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No suppliers match the search.</TableCell></TableRow>}
             {visibleSuppliers.map(s => (
               <TableRow key={s.id}>
                 <TableCell className="font-medium">{s.name}</TableCell>
                 <TableCell>{s.contactPerson ?? "—"}</TableCell>
                 <TableCell>{s.phone ?? "—"}</TableCell>
+                <TableCell>{s.status ? <Badge variant={s.status === "Active" ? "outline" : "secondary"}>{s.status}</Badge> : "—"}</TableCell>
                 <TableCell className="text-right">{s.balance > 0 ? <Badge variant="destructive">{s.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Badge> : "0.00"}</TableCell>
                 <TableCell className="text-right space-x-1">
                   <Button size="icon" variant="ghost" className="h-8 w-8" title="View ledger" onClick={() => setLedgerSupplierId(s.id)}><BookOpen className="h-4 w-4"/></Button>

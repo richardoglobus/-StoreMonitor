@@ -23,6 +23,17 @@ const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 te
 
 const emptyInv = { date: format(new Date(), "yyyy-MM-dd"), supplierId: "", invoiceNo: "", purchaseOrderId: "", grnId: "", amount: "", dueDate: "", debitAccount: "5000", note: "" };
 
+function addDaysToDate(dateStr: string, days: number) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return format(d, "yyyy-MM-dd");
+}
+function parsePaymentTermsDays(terms: string | null | undefined): number | null {
+  if (!terms) return null;
+  const match = String(terms).match(/(\d+)\s*day/i);
+  return match ? Number(match[1]) : null;
+}
+
 export default function SupplierInvoicesPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -48,6 +59,24 @@ export default function SupplierInvoicesPage() {
   const is = (k: string, v: string) => setInv(x => ({ ...x, [k]: v }));
   const fmt = (n: number) => `KES ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
+  const selectedPo = inv.purchaseOrderId ? (orders || []).find(o => String(o.id) === inv.purchaseOrderId) : null;
+  const matchingGrns = selectedPo ? (grns || []).filter((g: any) => g.sourcePurchaseOrderId === selectedPo.id || g.supplierId === selectedPo.supplierId) : (grns || []);
+
+  const onSelectPo = (v: string) => {
+    if (v === "none") { setInv(x => ({ ...x, purchaseOrderId: "" })); return; }
+    const po = (orders || []).find(o => String(o.id) === v);
+    if (!po) return;
+    setInv(x => {
+      const days = parsePaymentTermsDays(po.paymentTerms);
+      const dueDate = days != null ? addDaysToDate(x.date, days) : x.dueDate;
+      return {
+        ...x, purchaseOrderId: v, supplierId: String(po.supplierId),
+        amount: String(po.totalInclusiveVat ?? po.totalAmount ?? ""),
+        dueDate, grnId: po.grn ? String(po.grn.id) : x.grnId,
+      };
+    });
+  };
+
   return (
     <Layout>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -65,28 +94,39 @@ export default function SupplierInvoicesPage() {
                   <div><Label>Invoice date</Label><input type="date" className={dateCls} value={inv.date} onChange={e => is("date", e.target.value)} /></div>
                   <div><Label>Invoice no.</Label><Input value={inv.invoiceNo} onChange={e => is("invoiceNo", e.target.value)} /></div>
                 </div>
-                <div>
-                  <Label>Supplier</Label>
-                  <Select value={inv.supplierId} onValueChange={v => is("supplierId", v)}>
-                    <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-                    <SelectContent>{(suppliers || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label>Purchase order</Label>
-                    <Select value={inv.purchaseOrderId || "none"} onValueChange={v => is("purchaseOrderId", v === "none" ? "" : v)}>
+                    <Select value={inv.purchaseOrderId || "none"} onValueChange={onSelectPo}>
                       <SelectTrigger><SelectValue placeholder="Optional PO" /></SelectTrigger>
-                      <SelectContent><SelectItem value="none">None</SelectItem>{(orders || []).map(o => <SelectItem key={o.id} value={String(o.id)}>{o.poNo}</SelectItem>)}</SelectContent>
+                      <SelectContent><SelectItem value="none">None</SelectItem>{(orders || []).map(o => <SelectItem key={o.id} value={String(o.id)}>{o.poNo} — {o.supplier?.name}</SelectItem>)}</SelectContent>
                     </Select>
+                    <p className="text-[11px] text-muted-foreground">Selecting a PO fills in the supplier, amount and due date for you.</p>
                   </div>
                   <div>
                     <Label>GRN / delivery note</Label>
                     <Select value={inv.grnId || "none"} onValueChange={v => is("grnId", v === "none" ? "" : v)}>
                       <SelectTrigger><SelectValue placeholder="Optional GRN" /></SelectTrigger>
-                      <SelectContent><SelectItem value="none">None</SelectItem>{(grns || []).map(g => <SelectItem key={g.id} value={String(g.id)}>{g.grnNo}</SelectItem>)}</SelectContent>
+                      <SelectContent><SelectItem value="none">None</SelectItem>{matchingGrns.map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.grnNo}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                </div>
+                {selectedPo && (
+                  <div className="rounded-lg border bg-muted/40 p-3 text-xs space-y-1">
+                    <div className="font-medium text-sm">{selectedPo.poNo} summary</div>
+                    {(selectedPo.lines || []).map((l: any, i: number) => <div key={i} className="flex justify-between"><span>{l.description} × {l.quantity}</span><span>{fmt(l.totalPrice)}</span></div>)}
+                    <div className="flex justify-between pt-1 border-t"><span>Excl. VAT</span><span>{fmt(selectedPo.totalExclusiveVat)}</span></div>
+                    <div className="flex justify-between"><span>VAT ({selectedPo.taxPercent}%)</span><span>{fmt(selectedPo.taxAmount)}</span></div>
+                    <div className="flex justify-between font-semibold"><span>Total incl. VAT</span><span>{fmt(selectedPo.totalInclusiveVat)}</span></div>
+                  </div>
+                )}
+                <div>
+                  <Label>Supplier</Label>
+                  <Select value={inv.supplierId} onValueChange={v => is("supplierId", v)} disabled={!!selectedPo}>
+                    <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                    <SelectContent>{(suppliers || []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                  {selectedPo && <p className="text-[11px] text-muted-foreground">Locked to the purchase order's supplier — clear the PO to change.</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><Label>Amount (KES)</Label><Input type="number" value={inv.amount} onChange={e => is("amount", e.target.value)} /></div>

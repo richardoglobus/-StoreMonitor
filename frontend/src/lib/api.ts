@@ -145,6 +145,10 @@ export const getChargeItemCodesQueryKey = () => ["/api/settings/charge-item-code
 export function useChargeItemCodes(options?: QueryOpts<ChargeItemCode[]>) {
   return useQuery({ queryKey: getChargeItemCodesQueryKey(), queryFn: () => apiFetch<ChargeItemCode[]>("/api/settings/charge-item-codes"), ...options?.query });
 }
+export const getSupplierStatusesQueryKey = () => ["/api/settings/supplier-statuses"] as const;
+export function useListSupplierStatuses(options?: QueryOpts<string[]>) {
+  return useQuery({ queryKey: getSupplierStatusesQueryKey(), queryFn: () => apiFetch<string[]>("/api/settings/supplier-statuses"), ...options?.query });
+}
 
 export function useListUsers(options?: QueryOpts<AuthUser[]>) {
   return useQuery({ queryKey: getListUsersQueryKey(), queryFn: () => apiFetch<AuthUser[]>("/api/auth/users"), ...options?.query });
@@ -307,7 +311,7 @@ export function useListActivity(params?: any, options?: QueryOpts<ActivityLog[]>
 
 // ─── Accounts Section ───────────────────────────────────────────────────────
 
-export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; balance: number; createdAt: string };
+export type Supplier = { id: number; name: string; contactPerson: string | null; phone: string | null; email: string | null; address: string | null; pin: string | null; contractStatus: string | null; status: string | null; balance: number; createdAt: string };
 export type GrnItem = { itemCode: string | null; description: string; unit: string | null; qtyReceived: number; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargeItemCode: string | null; folioNo: string | null };
 export type Grn = { id: number; grnNo: string; date: string; lpoNo: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved" | "voided"; createdBy: number | null; createdAt: string; approvedBy: number | null; approvedAt: string | null; sourcePurchaseId?: number | null; voidedBy?: number | null; voidedAt?: string | null; voidReason?: string | null; voidRequestStatus?: "pending" | "approved" | "rejected" | null; voidRequestedBy?: number | null; voidRequestedAt?: string | null; voidRequestedByName?: string | null; voidRequestReason?: string | null; voidReviewedBy?: number | null; voidReviewedByName?: string | null; voidReviewedAt?: string | null; voidReviewNote?: string | null; supplier?: Supplier | null };
 export type StockMovement = { id: number | string; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "OPENING" | "GRN" | "GRN_REVERSAL" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
@@ -322,7 +326,7 @@ export type PurchaseOrder = {
   paymentTerms?: string | null; classification?: "Expense" | "PPE" | "F.C" | null; chargeableVoteCode?: string | null;
   taxPercent: number; lines: PurchaseOrderLine[];
   totalExclusiveVat: number; taxAmount: number; totalInclusiveVat: number; totalAmount: number;
-  status: "pending" | "approved"; note?: string | null; supplier?: Supplier | null;
+  status: "pending" | "approved"; note?: string | null; supplier?: Supplier | null; grn?: any;
 };
 export type PurchaseOrderMeta = { orderRefTypes: string[]; classifications: string[]; procurementMethods: string[]; chargeItemCodes: { code: string; name: string }[] };
 export type SupplierInvoice = { id: number; invoiceNo: string; date: string; supplierId: number; purchaseOrderId?: number | null; grnId?: number | null; amount: number; paidAmount: number; dueDate?: string | null; status: string; supplier?: Supplier | null };

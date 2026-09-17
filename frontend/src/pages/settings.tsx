@@ -46,6 +46,7 @@ interface AppSettings {
   reportChargeItem: string;
   chargeItemCodes: { code: string; name: string }[];
   procurementMethods: string[];
+  supplierStatuses: string[];
   customRoles: { name: string; permissions: Record<string, boolean> }[];
   responsibleOfficer: string;
   storeOfficerTitle: string;
@@ -91,6 +92,7 @@ const DEFAULTS: AppSettings = {
   reportChargeItem: "221102",
   chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }, { code: "2211002", name: "NON-PHARM" }],
   procurementMethods: ["Request for Quotations", "Framework Agreement", "Direct Procurement", "Low Value Procurement", "Open Tender"],
+  supplierStatuses: ["Active", "Inactive", "Suspended", "Blacklisted"],
   customRoles: [],
   responsibleOfficer: "",
   storeOfficerTitle: "Store Officer",
@@ -159,6 +161,7 @@ export default function SettingsPage() {
   const [newChargeCode, setNewChargeCode] = useState("");
   const [newChargeCodeName, setNewChargeCodeName] = useState("");
   const [newProcurementMethod, setNewProcurementMethod] = useState("");
+  const [newSupplierStatus, setNewSupplierStatus] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
 
   const loadOfficers = async () => {
@@ -254,7 +257,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch(`${API_BASE}/api/settings`, { credentials: "include" })
       .then(r => r.json())
-      .then(data => { const merged = { ...DEFAULTS, ...data }; const codes = Array.isArray(merged.chargeItemCodes) ? merged.chargeItemCodes : []; if (!codes.some((c: any) => String(c.code) === "2211002")) codes.push({ code: "2211002", name: "NON-PHARM" }); const methods = Array.isArray(merged.procurementMethods) && merged.procurementMethods.length ? merged.procurementMethods : DEFAULTS.procurementMethods; setSettings({ ...merged, chargeItemCodes: codes, procurementMethods: methods, customRoles: Array.isArray(merged.customRoles) ? merged.customRoles : [] }); setLoading(false); })
+      .then(data => { const merged = { ...DEFAULTS, ...data }; const codes = Array.isArray(merged.chargeItemCodes) ? merged.chargeItemCodes : []; if (!codes.some((c: any) => String(c.code) === "2211002")) codes.push({ code: "2211002", name: "NON-PHARM" }); const methods = Array.isArray(merged.procurementMethods) && merged.procurementMethods.length ? merged.procurementMethods : DEFAULTS.procurementMethods; const supStatuses = Array.isArray(merged.supplierStatuses) && merged.supplierStatuses.length ? merged.supplierStatuses : DEFAULTS.supplierStatuses; setSettings({ ...merged, chargeItemCodes: codes, procurementMethods: methods, supplierStatuses: supStatuses, customRoles: Array.isArray(merged.customRoles) ? merged.customRoles : [] }); setLoading(false); })
       .catch(() => { toast.error("Failed to load settings"); setLoading(false); });
   }, []);
 
@@ -310,6 +313,27 @@ export default function SettingsPage() {
     if (settings.procurementMethods.length <= 1) return toast.error("Keep at least one procurement method");
     if (!confirm(`Delete procurement method "${name}"?`)) return;
     update("procurementMethods", settings.procurementMethods.filter(m => m !== name));
+  };
+
+  const addSupplierStatus = () => {
+    const name = newSupplierStatus.trim();
+    if (!name) return toast.error("Enter a supplier status name");
+    if (settings.supplierStatuses.some(m => m.toLowerCase() === name.toLowerCase())) return toast.error("That supplier status already exists");
+    update("supplierStatuses", [...settings.supplierStatuses, name]);
+    setNewSupplierStatus("");
+  };
+
+  const editSupplierStatus = (name: string) => {
+    const next = prompt("Supplier status:", name)?.trim();
+    if (!next) return;
+    if (next !== name && settings.supplierStatuses.some(m => m.toLowerCase() === next.toLowerCase())) return toast.error("That supplier status already exists");
+    update("supplierStatuses", settings.supplierStatuses.map(m => m === name ? next : m));
+  };
+
+  const deleteSupplierStatus = (name: string) => {
+    if (settings.supplierStatuses.length <= 1) return toast.error("Keep at least one supplier status");
+    if (!confirm(`Delete supplier status "${name}"?`)) return;
+    update("supplierStatuses", settings.supplierStatuses.filter(m => m !== name));
   };
 
   const addRole = () => {
@@ -584,6 +608,16 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2">
               {settings.procurementMethods.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editProcurementMethod(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteProcurementMethod(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
+            </div>
+          </div>
+          <div className="space-y-3 border rounded-lg p-3">
+            <div><Label>Supplier Statuses</Label><p className="text-xs text-muted-foreground">Options offered on the Supplier form's Status dropdown.</p></div>
+            <div className="flex gap-2">
+              <Input value={newSupplierStatus} onChange={e => setNewSupplierStatus(e.target.value)} placeholder="e.g. Under Review" />
+              <Button type="button" onClick={addSupplierStatus}><Plus className="h-4 w-4 mr-1" />Add</Button>
+            </div>
+            <div className="space-y-2">
+              {settings.supplierStatuses.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editSupplierStatus(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteSupplierStatus(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
             </div>
           </div>
         </SectionCard>
