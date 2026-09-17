@@ -2277,11 +2277,13 @@ app.get("/api/accounts/grns", requirePermission("viewAccounts"), (req, res) => {
   let rows = db.get("grns").value().sort((a, b) => b.id - a.id);
   if (req.query.status) rows = rows.filter(r => r.status === req.query.status);
   if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
+  if (req.query.purchaseOrderId) rows = rows.filter(r => Number(r.sourcePurchaseOrderId) === Number(req.query.purchaseOrderId));
   if (req.query.search) {
     const q = String(req.query.search).trim().toLowerCase();
     rows = rows.filter(r => [r.grnNo, r.date, r.lpoNo, r.invoiceNo, supplierMap.get(r.supplierId)?.name, ...(r.items || []).flatMap(i => [i.itemCode, i.description, i.batchNo, i.folioNo, i.chargeItemCode])].some(v => String(v || "").toLowerCase().includes(q)));
   }
-  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null, voidRequestedByName: r.voidRequestedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null, voidReviewedByName: r.voidReviewedBy ? userMap.get(r.voidReviewedBy) || `User ${r.voidReviewedBy}` : null })));
+  const items = new Map(db.get("items").value().map(i => [Number(i.id), i]));
+  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null, sourcePurchaseOrder: r.sourcePurchaseOrderId ? db.get("purchaseOrders").find({ id: Number(r.sourcePurchaseOrderId) }).value() || null : null, items: (r.items || []).map(i => ({ ...i, catalogItem: i.itemId != null ? items.get(Number(i.itemId)) || null : null })), voidRequestedByName: r.voidRequestedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null, voidReviewedByName: r.voidReviewedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null })));
 });
 app.get("/api/accounts/grns/:id", requirePermission("viewAccounts"), (req, res) => {
   const row = db.get("grns").find({ id: Number(req.params.id) }).value();
@@ -2296,13 +2298,17 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "At least one item line is required" });
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
+  const po = req.body.purchaseOrderId ? db.get("purchaseOrders").find({ id: Number(req.body.purchaseOrderId) }).value() : null;
+  if (req.body.purchaseOrderId && (!po || Number(po.supplierId) !== Number(supplierId))) return res.status(400).json({ error: "Purchase order not found or belongs to another supplier" });
+  const poLine = po && req.body.purchaseOrderLineId != null ? (po.lines || [])[Number(req.body.purchaseOrderLineId)] : null;
+  if (po && req.body.purchaseOrderLineId != null && !poLine) return res.status(400).json({ error: "Purchase order line not found" });
   const { cleanItems, totalAmount } = normalizeGrnItems(items);
   const row = {
     id: nextId("grns"),
     grnNo: genSequentialNo("GRN", "grns"),
-    date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null,
+    date, lpoNo: lpoNo || req.body.orderRefNo || po?.orderRefNo || null, orderRefType: req.body.orderRefType || po?.orderRefType || null, orderRefNo: req.body.orderRefNo || po?.orderRefNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null,
     items: cleanItems, totalAmount: Number(totalAmount.toFixed(2)),
-    status: "pending",
+    status: "pending", sourcePurchaseOrderId: po?.id || null, sourcePurchaseOrderLineId: req.body.purchaseOrderLineId != null ? Number(req.body.purchaseOrderLineId) : null, orderedQuantity: poLine ? Number(poLine.quantity) : null,
     createdBy: req.session.userId, createdAt: new Date().toISOString(),
     approvedBy: null, approvedAt: null,
   };
@@ -2752,6 +2758,28 @@ function createMatchingGrnForPurchaseOrder(po, supplier, req) {
   logActivity(req, "AUTO_CREATE_GRN_FROM_PO", "GRN", grn.id, { grnNo: grn.grnNo, poNo: po.poNo });
   return grn;
 }
+function generateGrnsForApprovedPurchaseOrder(po, supplier, req) {
+  const existing = db.get("grns").value().filter(g => Number(g.sourcePurchaseOrderId) === Number(po.id));
+  const created = [];
+  for (const [index, line] of (po.lines || []).entries()) {
+    const received = existing.filter(g => Number(g.sourcePurchaseOrderLineId) === index).reduce((s, g) => s + Number(g.items?.[0]?.qtyReceived || 0), 0);
+    const remaining = Math.max(0, Number(line.quantity || 0) - received);
+    if (remaining <= 0) continue;
+    const row = { id: nextId("grns"), grnNo: genSequentialNo("GRN", "grns"), date: po.date, lpoNo: po.orderRefNo || po.poNo, orderRefType: po.orderRefType || null, orderRefNo: po.orderRefNo || null, supplierId: supplier.id, invoiceNo: null, items: [{ itemId: line.itemId || null, itemCode: line.itemId != null ? String(line.itemId) : null, description: line.description, unit: line.unit || null, qtyReceived: remaining, unitCost: Number(line.unitPrice || 0), totalCost: Number((remaining * Number(line.unitPrice || 0)).toFixed(2)), batchNo: null, expiryDate: null, chargeItemCode: po.chargeableVoteCode || null, folioNo: null }], totalAmount: Number((remaining * Number(line.unitPrice || 0)).toFixed(2)), status: "pending", sourcePurchaseOrderId: po.id, sourcePurchaseOrderLineId: index, orderedQuantity: Number(line.quantity || 0), autoCreated: true, createdBy: req.session.userId, createdAt: new Date().toISOString(), approvedBy: null, approvedAt: null };
+    db.get("grns").push(row).write(); created.push(row);
+  }
+  return created;
+}
+app.post("/api/accounts/purchase-orders/:id/generate-grns", requirePermission("manageAccounts"), (req, res) => {
+  const po = db.get("purchaseOrders").find({ id: Number(req.params.id) }).value();
+  if (!po) return res.status(404).json({ error: "Purchase order not found" });
+  if (po.status !== "approved") return res.status(400).json({ error: "Only approved purchase orders can generate GRNs" });
+  const supplier = db.get("suppliers").find({ id: Number(po.supplierId) }).value();
+  const created = generateGrnsForApprovedPurchaseOrder(po, supplier, req);
+  if (!created.length) return res.status(400).json({ error: "No remaining quantities to receive for this purchase order" });
+  logActivity(req, "GENERATE_GRNS_FROM_PO", "PURCHASE_ORDER", po.id, { poNo: po.poNo, grnCount: created.length });
+  res.status(201).json(created);
+});
 app.get("/api/accounts/purchase-order-meta", requirePermission("viewAccounts"), (_req, res) => {
   res.json({ orderRefTypes: PO_ORDER_REF_TYPES, classifications: PO_CLASSIFICATIONS, procurementMethods: getSettings().procurementMethods, chargeItemCodes: getSettings().chargeItemCodes });
 });
@@ -2782,7 +2810,7 @@ app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (
   };
   db.get("purchaseOrders").push(row).write();
   let grn = null;
-  if (row.status === "approved") grn = createMatchingGrnForPurchaseOrder(row, supplier, req);
+  if (row.status === "approved") grn = generateGrnsForApprovedPurchaseOrder(row, supplier, req);
   logActivity(req, "CREATE_PURCHASE_ORDER", "PURCHASE_ORDER", row.id, { poNo: row.poNo, totalAmount: totalInclusiveVat });
   res.status(201).json({ ...row, supplier, grn });
 });
@@ -2822,7 +2850,7 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
   ref.assign(updates).write();
   const updated = ref.value();
   let grn = null;
-  if (newStatus === "approved" && current.status !== "approved") grn = createMatchingGrnForPurchaseOrder(updated, supplier, req);
+  if (newStatus === "approved" && current.status !== "approved") grn = generateGrnsForApprovedPurchaseOrder(updated, supplier, req);
   logActivity(req, "UPDATE_PURCHASE_ORDER", "PURCHASE_ORDER", id, { poNo: current.poNo });
   res.json({ ...updated, supplier, grn });
 });

@@ -5,6 +5,7 @@ import {
   useListGrns, getListGrnsQueryKey,
   useCreateGrn, useApproveGrn, useUpdateGrn, useVoidGrn, useApproveVoidGrn, useRejectVoidGrn, useUnvoidGrn, useDeleteGrn,
   useListSuppliers, useChargeItemCodes,
+  useListPurchaseOrders, useGeneratePurchaseOrderGrns, useListItems,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ import { useLocation } from "wouter";
 
 const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
-const emptyLine = () => ({ itemCode: "", description: "", unit: "", qtyReceived: "", unitCost: "", batchNo: "", expiryDate: "", chargeItemCode: "", folioNo: "" });
+  const emptyLine = () => ({ itemId: "", itemCode: "", description: "", unit: "", qtyReceived: "", unitCost: "", batchNo: "", expiryDate: "", chargeItemCode: "", folioNo: "" });
 
 export default function GrnPage() {
   const queryClient = useQueryClient();
@@ -36,15 +37,18 @@ export default function GrnPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), lpoNo: "", supplierId: "", invoiceNo: "" });
+  const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", invoiceNo: "", purchaseOrderId: "", purchaseOrderLineId: "" });
   const [lines, setLines] = useState([emptyLine()]);
   const [editingGrnId, setEditingGrnId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [folder, setFolder] = useState<"pending" | "approved" | "voided">("pending");
 
   const grnQuery = search.trim() ? { search: search.trim() } : {};
   const { data: grns, isLoading } = useListGrns(grnQuery, { query: { queryKey: getListGrnsQueryKey(grnQuery) } });
   const { data: suppliers } = useListSuppliers();
   const { data: chargeItemCodes } = useChargeItemCodes();
+  const { data: purchaseOrders } = useListPurchaseOrders();
+  const { data: catalogItems } = useListItems();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/accounts/grns"] });
 
@@ -83,12 +87,13 @@ export default function GrnPage() {
   const approveVoidGrn = useApproveVoidGrn({ mutation: { onSuccess: () => { toast.success("Void approved; stock and accounts reversed"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to approve void") } });
   const rejectVoidGrn = useRejectVoidGrn({ mutation: { onSuccess: () => { toast.success("Void request rejected"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to reject request") } });
   const unvoidGrn = useUnvoidGrn({ mutation: { onSuccess: () => { toast.success("GRN restored; stock and accounts reinstated"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to unvoid GRN") } });
+  const generatePoGrns = useGeneratePurchaseOrderGrns({ mutation: { onSuccess: (rows) => { toast.success(`${rows.length} pending GRN(s) created from the approved PO`); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to create GRNs from PO") } });
 
-  const resetForm = () => { setEditingGrnId(null); setHeader({ date: format(new Date(), "yyyy-MM-dd"), lpoNo: "", supplierId: "", invoiceNo: "" }); setLines([emptyLine()]); };
+  const resetForm = () => { setEditingGrnId(null); setHeader({ date: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", invoiceNo: "", purchaseOrderId: "", purchaseOrderLineId: "" }); setLines([emptyLine()]); };
   const openEdit = (g: any) => {
     setEditingGrnId(g.id);
-    setHeader({ date: g.date, lpoNo: g.lpoNo || "", supplierId: String(g.supplierId), invoiceNo: g.invoiceNo || "" });
-    setLines((g.items || []).map((l: any) => ({ ...l, itemCode: l.itemCode || "", description: l.description || "", unit: l.unit || "", qtyReceived: String(l.qtyReceived ?? ""), unitCost: String(l.unitCost ?? ""), batchNo: l.batchNo || "", expiryDate: l.expiryDate || "", chargeItemCode: l.chargeItemCode || l.chargedTo || "", folioNo: l.folioNo || "" })));
+    setHeader({ date: g.date, orderRefType: g.orderRefType || "LPO NO", orderRefNo: g.orderRefNo || g.lpoNo || "", lpoNo: g.lpoNo || "", supplierId: String(g.supplierId), invoiceNo: g.invoiceNo || "", purchaseOrderId: g.sourcePurchaseOrderId ? String(g.sourcePurchaseOrderId) : "", purchaseOrderLineId: g.sourcePurchaseOrderLineId != null ? String(g.sourcePurchaseOrderLineId) : "" });
+    setLines((g.items || []).map((l: any) => ({ ...l, itemId: l.itemId ? String(l.itemId) : "", itemCode: l.itemCode || "", description: l.description || "", unit: l.unit || "", qtyReceived: String(l.qtyReceived ?? ""), unitCost: String(l.unitCost ?? ""), batchNo: l.batchNo || "", expiryDate: l.expiryDate || "", chargeItemCode: l.chargeItemCode || l.chargedTo || "", folioNo: l.folioNo || "" })));
     setIsDialogOpen(true);
   };
   const updateLine = (i: number, field: string, value: string) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
@@ -96,13 +101,14 @@ export default function GrnPage() {
   const removeLine = (i: number) => setLines(ls => ls.filter((_, idx) => idx !== i));
   const lineTotal = (l: typeof lines[0]) => (Number(l.qtyReceived) || 0) * (Number(l.unitCost) || 0);
   const grandTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
+  const visibleGrns = (grns || []).filter((g: any) => g.status === folder);
 
   const handleSubmit = () => {
     if (!header.supplierId) { toast.error("Select a supplier"); return; }
     const validLines = lines.filter(l => l.description.trim() && Number(l.qtyReceived) > 0);
     if (validLines.length === 0) { toast.error("Add at least one valid item line"); return; }
     setSubmitting(true);
-    const data = { ...header, supplierId: Number(header.supplierId), items: validLines.map(l => ({ ...l, qtyReceived: Number(l.qtyReceived), unitCost: Number(l.unitCost) })) };
+    const data = { ...header, supplierId: Number(header.supplierId), purchaseOrderId: header.purchaseOrderId ? Number(header.purchaseOrderId) : null, purchaseOrderLineId: header.purchaseOrderLineId !== "" ? Number(header.purchaseOrderLineId) : null, items: validLines.map(l => ({ ...l, itemId: l.itemId ? Number(l.itemId) : null, qtyReceived: Number(l.qtyReceived), unitCost: Number(l.unitCost) })) };
     if (editingGrnId) updateGrn.mutate({ grnId: editingGrnId, data });
     else createGrn.mutate({ data });
   };
@@ -123,7 +129,8 @@ export default function GrnPage() {
               <DialogHeader><DialogTitle>{editingGrnId ? "Edit GRN" : "New Goods Received Note"}</DialogTitle><p className="text-sm text-muted-foreground">Approved GRN edits reverse and repost integrated stock/accounting entries automatically.</p></DialogHeader>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-2">
                 <div className="space-y-1"><Label>Date</Label><input type="date" className={dateCls} value={header.date} onChange={e => setHeader(h => ({ ...h, date: e.target.value }))}/></div>
-                <div className="space-y-1"><Label>LPO No.</Label><Input value={header.lpoNo} onChange={e => setHeader(h => ({ ...h, lpoNo: e.target.value }))}/></div>
+                <div className="space-y-1"><Label>Document format</Label><Select value={header.orderRefType} onValueChange={v => setHeader(h => ({ ...h, orderRefType: v }))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="LPO NO">LPO</SelectItem><SelectItem value="LSO NO">LSO</SelectItem><SelectItem value="IMPREST NO">Imprest</SelectItem></SelectContent></Select></div>
+                <div className="space-y-1"><Label>{header.orderRefType}</Label><Input value={header.orderRefNo} onChange={e => setHeader(h => ({ ...h, orderRefNo: e.target.value, lpoNo: e.target.value }))}/></div>
                 <div className="space-y-1 col-span-2 md:col-span-1">
                   <Label>Supplier</Label>
                   <Select value={header.supplierId} onValueChange={v => setHeader(h => ({ ...h, supplierId: v }))}>
@@ -132,6 +139,8 @@ export default function GrnPage() {
                   </Select>
                 </div>
                 <div className="space-y-1"><Label>Invoice No.</Label><Input value={header.invoiceNo} onChange={e => setHeader(h => ({ ...h, invoiceNo: e.target.value }))}/></div>
+                <div className="space-y-1 col-span-2"><Label>Approved Purchase Order (optional)</Label><Select value={header.purchaseOrderId} onValueChange={v => { const po = (purchaseOrders || []).find((p: any) => String(p.id) === v); setHeader(h => ({ ...h, purchaseOrderId: v, supplierId: po ? String(po.supplierId) : h.supplierId, orderRefType: po?.orderRefType || h.orderRefType, orderRefNo: po?.orderRefNo || h.orderRefNo, lpoNo: po?.orderRefNo || h.lpoNo })); }}><SelectTrigger><SelectValue placeholder="Select approved PO to receive"/></SelectTrigger><SelectContent>{(purchaseOrders || []).filter((p: any) => p.status === "approved").map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.poNo} — {p.supplier?.name || "Supplier"} — {p.orderRefNo || "No reference"}</SelectItem>)}</SelectContent></Select></div>
+                {header.purchaseOrderId && <div className="space-y-1 col-span-2"><Label>Commodity to receive in this GRN</Label><Select value={header.purchaseOrderLineId} onValueChange={v => { const po: any = (purchaseOrders || []).find((p: any) => String(p.id) === header.purchaseOrderId); const line: any = po?.lines?.[Number(v)]; if (line) { setHeader(h => ({ ...h, purchaseOrderLineId: v })); setLines([{ ...emptyLine(), itemId: line.itemId ? String(line.itemId) : "", itemCode: line.itemId ? String(line.itemId) : "", description: line.description || "", unit: line.unit || "", qtyReceived: String(line.quantity || ""), unitCost: String(line.unitPrice || "") }]); } }}><SelectTrigger><SelectValue placeholder="Select one PO commodity"/></SelectTrigger><SelectContent>{(((purchaseOrders || []).find((p: any) => String(p.id) === header.purchaseOrderId)?.lines) || []).map((line: any, index: number) => <SelectItem key={index} value={String(index)}>{line.description} — ordered {line.quantity} {line.unit}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Each commodity can be received in its own GRN. Adjust Qty Received if the supplier delivers less.</p></div>}
               </div>
 
               <div className="space-y-3">
@@ -141,8 +150,9 @@ export default function GrnPage() {
                       <button onClick={() => removeLine(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"><X className="h-4 w-4"/></button>
                     )}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <div className="space-y-1"><Label className="text-xs">Item Code</Label><Input value={l.itemCode} onChange={e => updateLine(i, "itemCode", e.target.value)}/></div>
-                      <div className="space-y-1 col-span-2 md:col-span-1"><Label className="text-xs">Description</Label><Input value={l.description} onChange={e => updateLine(i, "description", e.target.value)}/></div>
+                      <div className="space-y-1 col-span-2"><Label className="text-xs">Catalog item master</Label><Select value={l.itemId} onValueChange={v => { const item = (catalogItems || []).find((x: any) => String(x.id) === v); updateLine(i, "itemId", v); updateLine(i, "itemCode", v); updateLine(i, "description", item?.description || ""); updateLine(i, "unit", item?.unit || ""); }}><SelectTrigger><SelectValue placeholder="Select item from Catalog"/></SelectTrigger><SelectContent>{(catalogItems || []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.description} ({item.unit})</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1 col-span-2 md:col-span-1"><Label className="text-xs">Item Code</Label><Input value={l.itemCode} readOnly/></div>
+                      <div className="space-y-1 col-span-2 md:col-span-1"><Label className="text-xs">Description</Label><Input value={l.description} readOnly/></div>
                       <div className="space-y-1"><Label className="text-xs">Unit</Label><Input value={l.unit} onChange={e => updateLine(i, "unit", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Qty Received</Label><Input type="number" value={l.qtyReceived} onChange={e => updateLine(i, "qtyReceived", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Unit Cost</Label><Input type="number" value={l.unitCost} onChange={e => updateLine(i, "unitCost", e.target.value)}/></div>
@@ -169,7 +179,11 @@ export default function GrnPage() {
         )}
       </div>
 
+      {canManage && (purchaseOrders || []).some((p: any) => p.status === "approved") && <Card className="mb-4 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Approved Purchase Orders</h2><p className="text-xs text-muted-foreground">Generate one pending GRN per commodity. Existing deliveries are deducted from the remaining balance.</p></div><div className="flex flex-wrap gap-2">{(purchaseOrders || []).filter((p: any) => p.status === "approved").map((p: any) => <Button key={p.id} size="sm" variant="outline" onClick={() => generatePoGrns.mutate({ orderId: p.id })} disabled={generatePoGrns.isPending}>{p.poNo}: Generate GRNs</Button>)}</div></div></Card>}
+
       <div className="mb-4 relative max-w-xl"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground"/><Input className="pl-9" placeholder="Search GRN number, supplier, invoice, LPO, item, batch, folio, or charge item code" value={search} onChange={e => setSearch(e.target.value)} /></div>
+
+      <div className="flex gap-2 mb-4"><Button variant={folder === "pending" ? "default" : "outline"} onClick={() => setFolder("pending")}>Fresh / Pending ({(grns || []).filter((g: any) => g.status === "pending").length})</Button><Button variant={folder === "approved" ? "default" : "outline"} onClick={() => setFolder("approved")}>Approved ({(grns || []).filter((g: any) => g.status === "approved").length})</Button><Button variant={folder === "voided" ? "default" : "outline"} onClick={() => setFolder("voided")}>Voided ({(grns || []).filter((g: any) => g.status === "voided").length})</Button></div>
 
       <Card className="overflow-x-auto">
         <Table>
@@ -181,8 +195,8 @@ export default function GrnPage() {
           </TableHeader>
           <TableBody>
             {isLoading && Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={7}><Skeleton className="h-6 w-full"/></TableCell></TableRow>)}
-            {!isLoading && (grns ?? []).length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No GRNs recorded yet.</TableCell></TableRow>}
-            {(grns ?? []).map(g => (
+            {!isLoading && visibleGrns.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No {folder} GRNs.</TableCell></TableRow>}
+            {visibleGrns.map(g => (
               <TableRow key={g.id}>
                 <TableCell className="font-medium">{g.grnNo}</TableCell>
                 <TableCell>{g.date}</TableCell>

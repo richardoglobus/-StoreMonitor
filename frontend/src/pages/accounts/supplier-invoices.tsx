@@ -61,6 +61,7 @@ export default function SupplierInvoicesPage() {
 
   const selectedPo = inv.purchaseOrderId ? (orders || []).find(o => String(o.id) === inv.purchaseOrderId) : null;
   const matchingGrns = selectedPo ? (grns || []).filter((g: any) => g.sourcePurchaseOrderId === selectedPo.id || g.supplierId === selectedPo.supplierId) : (grns || []);
+  const selectedGrn: any = inv.grnId ? (grns || []).find((g: any) => String(g.id) === inv.grnId) : null;
 
   const onSelectPo = (v: string) => {
     if (v === "none") { setInv(x => ({ ...x, purchaseOrderId: "" })); return; }
@@ -107,7 +108,7 @@ export default function SupplierInvoicesPage() {
                     <Label>GRN / delivery note</Label>
                     <Select value={inv.grnId || "none"} onValueChange={v => is("grnId", v === "none" ? "" : v)}>
                       <SelectTrigger><SelectValue placeholder="Optional GRN" /></SelectTrigger>
-                      <SelectContent><SelectItem value="none">None</SelectItem>{matchingGrns.map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.grnNo}</SelectItem>)}</SelectContent>
+                      <SelectContent><SelectItem value="none">None</SelectItem>{matchingGrns.filter((g: any) => g.status !== "voided").map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.grnNo} — {(g.items || [])[0]?.description || "Commodity"} ({(g.items || [])[0]?.qtyReceived || 0})</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -120,6 +121,7 @@ export default function SupplierInvoicesPage() {
                     <div className="flex justify-between font-semibold"><span>Total incl. VAT</span><span>{fmt(selectedPo.totalInclusiveVat)}</span></div>
                   </div>
                 )}
+                {selectedGrn && <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-3 text-xs space-y-1"><div className="font-semibold">Invoice delivery line</div><div>{(selectedGrn.items || [])[0]?.description || "—"} · Qty {(selectedGrn.items || [])[0]?.qtyReceived || 0} {(selectedGrn.items || [])[0]?.unit || ""}</div><div>GRN {selectedGrn.grnNo} · PO {selectedGrn.sourcePurchaseOrder?.poNo || selectedGrn.orderRefNo || selectedGrn.lpoNo || "—"}</div><div className="font-medium">Invoice amount can be adjusted to the quantity actually delivered.</div></div>}
                 <div>
                   <Label>Supplier</Label>
                   <Select value={inv.supplierId} onValueChange={v => is("supplierId", v)} disabled={!!selectedPo}>
