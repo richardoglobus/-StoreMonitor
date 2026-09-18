@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext, useContext } from "react";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -120,9 +120,14 @@ const ROLE_PERMISSIONS = [["viewDashboard", "View Dashboard"], ["viewCatalog", "
 function kenyaLocalToIso(value: string) { if (!value) return null; const [date, time] = value.split("T"); const [year, month, day] = date.split("-").map(Number); const [hour, minute] = time.split(":").map(Number); return new Date(Date.UTC(year, month - 1, day, hour - 3, minute)).toISOString(); }
 function isoToKenyaLocal(value: string | null) { if (!value) return ""; const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value)); const get = (type: string) => parts.find(p => p.type === type)?.value || ""; return `${get("year")}-${get("month")}-${get("day")}T${get("hour")==="24" ? "00" : get("hour")}:${get("minute")}`; }
 
+const settingsModeContext = createContext<"general" | "manage">("general");
+const managedSectionTitles = new Set(["User Roles", "Dropdown Lists", "Reports & Exports", "Units Management", "ICT Officers"]);
+
 function SectionCard({ icon: Icon, title, description, children }: any) {
+  const mode = useContext(settingsModeContext);
+  const sectionMode = managedSectionTitles.has(title) ? "manage" : "general";
   return (
-    <Card>
+    <Card className={sectionMode === mode ? "" : "hidden"}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Icon className="h-5 w-5 text-primary" />{title}
@@ -153,6 +158,7 @@ export default function SettingsPage() {
 
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<AppSettings>(DEFAULTS);
+  const [settingsMode, setSettingsMode] = useState<"general" | "manage">("general");
   const { data: catalogCategories } = useListCategories();
   const updateCategory = useUpdateCategory({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() }); toast.success("Category charge code updated"); } } });
   const [officers, setOfficers] = useState<{id:number,name:string}[]>([]);
@@ -461,6 +467,7 @@ export default function SettingsPage() {
 
   return (
     <Layout>
+      <settingsModeContext.Provider value={settingsMode}>
       <div className="flex flex-col gap-6 max-w-2xl mx-auto">
 
         {/* Header */}
@@ -487,6 +494,11 @@ export default function SettingsPage() {
             Unsaved changes — click "Save Settings" to apply.
           </div>
         )}
+
+        <div className="flex gap-2 border-b pb-2">
+          <Button variant={settingsMode === "general" ? "default" : "outline"} onClick={() => setSettingsMode("general")}>General Settings</Button>
+          <Button variant={settingsMode === "manage" ? "default" : "outline"} onClick={() => setSettingsMode("manage")}>Manage Lists & Dropdowns</Button>
+        </div>
 
         <SectionCard icon={Shield} title="User Roles" description="Add custom roles for assigning users. Built-in roles cannot be deleted.">
           <div className="flex gap-2">
@@ -609,8 +621,8 @@ export default function SettingsPage() {
           </div>
         </SectionCard>
 
-        {/* 5. Purchases */}
-        <SectionCard icon={ShoppingCart} title="Purchases" description="Rules for recording incoming stock purchases.">
+        {/* 5. Purchase records */}
+        <SectionCard icon={ShoppingCart} title="Purchase Records" description="Rules for recording incoming stock purchases.">
           <div className="space-y-2">
             <Label>Default Currency</Label>
             <Input value={settings.defaultCurrency} onChange={e => update("defaultCurrency", e.target.value.toUpperCase())} placeholder="KES" className="max-w-xs font-mono" />
@@ -618,6 +630,10 @@ export default function SettingsPage() {
           </div>
           <ToggleRow label="Require Invoice Number" description="Each purchase record must have a supplier invoice number." checked={settings.requireInvoiceNumber} onChange={(v: boolean) => update("requireInvoiceNumber", v)} />
           <ToggleRow label="Require Supplier Name" description="Each purchase must have a named supplier (KEMSA, MEDS, etc.)." checked={settings.requireSupplierName} onChange={(v: boolean) => update("requireSupplierName", v)} />
+        </SectionCard>
+
+        {/* 6. Purchase orders and accounting */}
+        <SectionCard icon={FileText} title="Purchase Orders & Accounting" description="Controls for purchase orders, GRNs, and accounting integration.">
           <ToggleRow label="Independent Accounting Mode" description="New GRNs, purchases, accounting, and stock movements remain separate. Existing linked records are preserved as historical data." checked={settings.independentAccountingMode} onChange={(v: boolean) => update("independentAccountingMode", v)} />
           {settings.independentAccountingMode && <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-900 dark:text-blue-200"><strong>How it works:</strong> approving a new GRN changes only the GRN status. It does not update purchases, stock, supplier balances, or journal entries. New purchases do not automatically create GRNs. Existing records remain unchanged for historical reference.</div>}
           {!settings.independentAccountingMode && <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 p-3 text-sm text-green-900 dark:text-green-200"><strong>Integrated mode:</strong> each new purchase automatically creates a pending GRN. The purchase will not increase Catalog stock until the linked GRN is approved. Approval then posts the received quantity to Catalog stock, records the stock movement, updates the supplier balance, and creates the accounting entry. Existing historical records are not changed when you switch modes.</div>}
@@ -1015,6 +1031,7 @@ export default function SettingsPage() {
           </Button>
         </div>
       </div>
+      </settingsModeContext.Provider>
     </Layout>
   );
 }

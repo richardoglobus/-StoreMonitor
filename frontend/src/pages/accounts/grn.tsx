@@ -235,7 +235,7 @@ export default function GrnPage() {
           <TableHeader>
             <TableRow>
               <TableHead>GRN No.</TableHead><TableHead>Date</TableHead><TableHead>Supplier</TableHead>
-              <TableHead>Commodity / Item</TableHead><TableHead>Qty received</TableHead><TableHead>Qty ordered</TableHead><TableHead>Approved / Voided by</TableHead><TableHead>Total (KES)</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
+              <TableHead>Commodity / Item</TableHead><TableHead>Qty ordered</TableHead><TableHead>Qty received</TableHead><TableHead>Approved / Voided by</TableHead><TableHead>Total (KES)</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -247,8 +247,8 @@ export default function GrnPage() {
                 <TableCell>{g.date}</TableCell>
                 <TableCell>{g.supplier?.name ?? "—"}</TableCell>
                 <TableCell className="min-w-48">{(g.items || []).map((item: any) => item.description || item.itemCode || "—").join(", ") || "—"}</TableCell>
-                <TableCell>{(g.items || []).reduce((sum: number, item: any) => sum + Number(item.qtyReceived || 0), 0) || "—"}</TableCell>
                 <TableCell>{g.orderedQuantity ?? ((g.items || []).reduce((sum: number, item: any) => sum + Number(item.orderedQuantity || 0), 0) || "—")}</TableCell>
+                <TableCell>{(g.items || []).reduce((sum: number, item: any) => sum + Number(item.qtyReceived || 0), 0) || "—"}</TableCell>
                 <TableCell className="whitespace-nowrap">{g.status === "voided" ? (g.voidedByName || "—") : g.approvedByName || "—"}</TableCell>
                 <TableCell>{g.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                 <TableCell><div>{g.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : g.status === "voided" ? <Badge variant="destructive">Voided</Badge> : <Badge variant="secondary">Pending</Badge>}{g.voidRequestStatus === "pending" && <Badge className="ml-1 bg-amber-100 text-amber-800">Void requested</Badge>}{g.voidRequestStatus === "rejected" && <Badge className="ml-1">Void rejected</Badge>}</div>{g.voidRequestStatus === "pending" && <p className="text-[11px] text-amber-700 mt-1">By {g.voidRequestedByName || "user"}: {g.voidRequestReason}</p>}</TableCell>

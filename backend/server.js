@@ -2394,7 +2394,7 @@ function createRemainingPurchaseOrderGrn(row, req) {
   if (!supplier) return null;
   const remainder = {
     id: nextId("grns"),
-    grnNo: genSequentialNo("GRN", "grns"),
+    grnNo: getPurchaseOrderGrnNo(po.id),
     date: row.date,
     receivedDate: row.receivedDate || row.date,
     lpoNo: row.lpoNo || po.orderRefNo || po.poNo,
@@ -2419,6 +2419,12 @@ function createRemainingPurchaseOrderGrn(row, req) {
   logActivity(req, "CREATE_REMAINING_GRN_FROM_PO", "GRN", remainder.id, { grnNo: remainder.grnNo, poNo: po.poNo });
   return remainder;
 }
+function getPurchaseOrderGrnNo(purchaseOrderId) {
+  const linked = db.get("grns").value().filter(g => Number(g.sourcePurchaseOrderId) === Number(purchaseOrderId));
+  const base = linked.map(g => String(g.grnNo || "").replace(/[A-Z]$/, "")).find(Boolean) || genSequentialNo("GRN", "grns");
+  const suffix = String.fromCharCode(65 + linked.length);
+  return `${base}${suffix}`;
+}
 app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
   const ref = db.get("grns").find({ id });
@@ -2431,7 +2437,23 @@ app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, r
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
   const { cleanItems, totalAmount } = normalizeGrnItems(items);
   if (current.status === "approved") reverseApprovedGrnAccounting(current, req);
-  const updated = { ...current, date, receivedDate: receivedDate || date, lpoNo: lpoNo || null, deliveryNoteNo: deliveryNoteNo !== undefined ? (deliveryNoteNo || null) : current.deliveryNoteNo, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount, updatedAt: new Date().toISOString() };
+  const updated = {
+    ...current,
+    date,
+    receivedDate: receivedDate || date,
+    lpoNo: lpoNo || null,
+    deliveryNoteNo: deliveryNoteNo !== undefined ? (deliveryNoteNo || null) : current.deliveryNoteNo,
+    orderRefType: req.body.orderRefType !== undefined ? (req.body.orderRefType || null) : current.orderRefType,
+    orderRefNo: req.body.orderRefNo !== undefined ? (req.body.orderRefNo || null) : current.orderRefNo,
+    supplierId: Number(supplierId),
+    invoiceNo: invoiceNo || null,
+    sourcePurchaseOrderId: req.body.purchaseOrderId != null ? Number(req.body.purchaseOrderId) : current.sourcePurchaseOrderId || null,
+    sourcePurchaseOrderLineId: req.body.purchaseOrderLineId != null ? Number(req.body.purchaseOrderLineId) : current.sourcePurchaseOrderLineId ?? null,
+    orderedQuantity: cleanItems.reduce((sum, item) => sum + Number(item.orderedQuantity || 0), 0) || current.orderedQuantity || null,
+    items: cleanItems,
+    totalAmount,
+    updatedAt: new Date().toISOString(),
+  };
   ref.assign(updated).write();
   if (current.status === "approved") applyApprovedGrnAccounting(updated);
   logActivity(req, "UPDATE_GRN", "GRN", id, { grnNo: current.grnNo, totalAmount });
@@ -2863,7 +2885,7 @@ function generateGrnsForApprovedPurchaseOrder(po, supplier, req) {
     chargeItemCode: po.chargeableVoteCode || null, folioNo: null,
   }));
   const row = {
-    id: nextId("grns"), grnNo: genSequentialNo("GRN", "grns"), date: po.date,
+    id: nextId("grns"), grnNo: getPurchaseOrderGrnNo(po.id), date: po.date,
     lpoNo: po.orderRefNo || po.poNo, orderRefType: po.orderRefType || null,
     orderRefNo: po.orderRefNo || null, supplierId: supplier.id, invoiceNo: null,
     items, totalAmount: Number(items.reduce((sum, item) => sum + item.totalCost, 0).toFixed(2)),

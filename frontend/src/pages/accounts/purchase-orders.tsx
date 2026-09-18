@@ -175,6 +175,7 @@ export default function PurchaseOrdersPage() {
     return {
       items: items.map((item: any) => item.description || item.itemCode || "—").filter(Boolean).join(", ") || "—",
       quantity: items.reduce((sum: number, item: any) => sum + Number(item.qtyReceived || 0), 0),
+      ordered: (o.lines || []).reduce((sum: number, line: any) => sum + Number(line.quantity || 0), 0),
       approvers: grns.filter((g: any) => g.status === "approved").map((g: any) => g.approvedByName).filter(Boolean).join(", ") || "—",
       voiders: grns.filter((g: any) => g.status === "voided").map((g: any) => g.voidedByName).filter(Boolean).join(", ") || "—",
     };
@@ -321,13 +322,13 @@ export default function PurchaseOrdersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>PO No.</TableHead><TableHead>Date</TableHead><TableHead>Supplier</TableHead>
-              <TableHead>Ref</TableHead><TableHead>Commodity / Item</TableHead><TableHead>Qty received</TableHead><TableHead>Approved / Voided by</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total (incl. VAT)</TableHead>
+              <TableHead>Ref</TableHead><TableHead>Commodity / Item</TableHead><TableHead>Qty ordered</TableHead><TableHead>Qty received</TableHead><TableHead>Approved / Voided by</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total (incl. VAT)</TableHead>
               <TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading && Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={11}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)}
-            {!isLoading && visibleOrders.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No {folder} purchase orders.</TableCell></TableRow>}
+            {isLoading && Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={12}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)}
+            {!isLoading && visibleOrders.length === 0 && <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">No {folder} purchase orders.</TableCell></TableRow>}
             {visibleOrders.map(o => (
               <TableRow key={o.id}>
                 <TableCell className="font-medium">{o.poNo}</TableCell>
@@ -335,6 +336,7 @@ export default function PurchaseOrdersPage() {
                 <TableCell>{o.supplier?.name ?? "—"}</TableCell>
                 <TableCell className="text-xs font-mono">{o.orderRefType ? `${o.orderRefType}: ${o.orderRefNo || "—"}` : "—"}</TableCell>
                 <TableCell className="min-w-48">{receivedSummary(o).items}</TableCell>
+                <TableCell>{receivedSummary(o).ordered || "—"}</TableCell>
                 <TableCell>{receivedSummary(o).quantity || "—"}</TableCell>
                 <TableCell className="whitespace-nowrap">{receivedSummary(o).approvers !== "—" ? `Approved: ${receivedSummary(o).approvers}` : receivedSummary(o).voiders !== "—" ? `Voided: ${receivedSummary(o).voiders}` : "—"}</TableCell>
                 <TableCell className="text-xs">{o.procurementMethod || "—"}</TableCell>
