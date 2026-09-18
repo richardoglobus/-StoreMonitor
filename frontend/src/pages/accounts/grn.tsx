@@ -41,6 +41,8 @@ export default function GrnPage() {
   const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), receivedDate: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", deliveryNoteNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" });
   const [lines, setLines] = useState([emptyLine()]);
   const [editingGrnId, setEditingGrnId] = useState<number | null>(null);
+  const [editingStatus, setEditingStatus] = useState<string | null>(null);
+  const [approveAfterSave, setApproveAfterSave] = useState(false);
   const [search, setSearch] = useState("");
   const [folder, setFolder] = useState<"pending" | "approved" | "voided">("pending");
   useEffect(() => {
@@ -69,7 +71,7 @@ export default function GrnPage() {
   });
   const approveGrn = useApproveGrn({
     mutation: {
-      onSuccess: () => { toast.success("GRN approved — stock and accounts updated"); invalidate(); },
+      onSuccess: () => { toast.success("GRN approved — stock and accounts updated"); invalidate(); setApproveAfterSave(false); setIsDialogOpen(false); resetForm(); },
       onError: (e: any) => toast.error(e?.error || "Failed to approve GRN"),
     },
   });
@@ -81,7 +83,16 @@ export default function GrnPage() {
   });
   const updateGrn = useUpdateGrn({
     mutation: {
-      onSuccess: () => { toast.success("Pending GRN updated"); invalidate(); resetForm(); setIsDialogOpen(false); },
+      onSuccess: (updated) => {
+        invalidate();
+        if (approveAfterSave) {
+          approveGrn.mutate({ grnId: updated.id });
+        } else {
+          toast.success("Pending GRN updated");
+          resetForm();
+          setIsDialogOpen(false);
+        }
+      },
       onError: (e: any) => toast.error(e?.error || "Failed to update GRN"),
       onSettled: () => setSubmitting(false),
     },
@@ -97,9 +108,10 @@ export default function GrnPage() {
   const unvoidGrn = useUnvoidGrn({ mutation: { onSuccess: () => { toast.success("GRN restored; stock and accounts reinstated"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to unvoid GRN") } });
   const generatePoGrns = useGeneratePurchaseOrderGrns({ mutation: { onSuccess: (rows) => { toast.success(`${rows.length} pending GRN(s) created from the approved PO`); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to create GRNs from PO") } });
 
-  const resetForm = () => { const today = format(new Date(), "yyyy-MM-dd"); setEditingGrnId(null); setHeader({ date: today, receivedDate: today, orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", deliveryNoteNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" }); setLines([emptyLine()]); };
+  const resetForm = () => { const today = format(new Date(), "yyyy-MM-dd"); setEditingGrnId(null); setEditingStatus(null); setApproveAfterSave(false); setHeader({ date: today, receivedDate: today, orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", deliveryNoteNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" }); setLines([emptyLine()]); };
   const openEdit = (g: any) => {
     setEditingGrnId(g.id);
+    setEditingStatus(g.status);
     setHeader({ date: g.date, receivedDate: g.receivedDate || g.date, orderRefType: g.orderRefType || "LPO NO", orderRefNo: g.orderRefNo || g.lpoNo || "", lpoNo: g.lpoNo || "", deliveryNoteNo: g.deliveryNoteNo || "", supplierId: String(g.supplierId), purchaseOrderId: g.sourcePurchaseOrderId ? String(g.sourcePurchaseOrderId) : "", purchaseOrderLineId: g.sourcePurchaseOrderLineId != null ? String(g.sourcePurchaseOrderLineId) : "" });
     const purchaseOrder = (purchaseOrders || []).find((p: any) => Number(p.id) === Number(g.sourcePurchaseOrderId)) || g.sourcePurchaseOrder;
     setLines((g.items || []).map((l: any, index: number) => {
@@ -130,11 +142,12 @@ export default function GrnPage() {
   const grandTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
   const visibleGrns = (grns || []).filter((g: any) => g.status === folder);
 
-  const handleSubmit = () => {
+  const handleSubmit = (approve = false) => {
     if (!header.supplierId) { toast.error("Select a supplier"); return; }
     const validLines = lines.filter(l => l.description.trim() && (header.purchaseOrderId ? Number(l.qtyReceived) >= 0 : Number(l.qtyReceived) > 0));
     if (validLines.length === 0) { toast.error("Add at least one valid item line"); return; }
     setSubmitting(true);
+    setApproveAfterSave(approve);
     const data = { ...header, supplierId: Number(header.supplierId), purchaseOrderId: header.purchaseOrderId ? Number(header.purchaseOrderId) : null, purchaseOrderLineId: header.purchaseOrderLineId !== "" ? Number(header.purchaseOrderLineId) : null, items: validLines.map(l => ({ ...l, itemId: l.itemId ? Number(l.itemId) : null, qtyReceived: Number(l.qtyReceived), orderedQuantity: l.orderedQuantity ? Number(l.orderedQuantity) : null, unitCost: Number(l.unitCost) })) };
     if (editingGrnId) updateGrn.mutate({ grnId: editingGrnId, data });
     else createGrn.mutate({ data });
@@ -191,7 +204,7 @@ export default function GrnPage() {
                       <div className="space-y-1"><Label className="text-xs">Batch No.</Label><Input value={l.batchNo} onChange={e => updateLine(i, "batchNo", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Expiry Date</Label><input type="date" className={dateCls} value={l.expiryDate} onChange={e => updateLine(i, "expiryDate", e.target.value)}/></div>
                       <div className="space-y-1"><Label className="text-xs">Charge Item Code</Label><select value={l.chargeItemCode} onChange={e => updateLine(i, "chargeItemCode", e.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="">Select code</option>{(chargeItemCodes || []).map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}</select></div>
-                      <div className="space-y-1"><Label className="text-xs">Folio No.</Label><Input value={l.folioNo} onChange={e => updateLine(i, "folioNo", e.target.value)}/></div>
+                      <div className="space-y-1"><Label className="text-xs">Folio No.</Label><Input value={l.folioNo} onChange={e => updateLine(i, "folioNo", e.target.value)}/>{editingGrnId && editingStatus === "pending" && i === lines.length - 1 && <Button type="button" size="sm" className="mt-2 w-full gap-1" onClick={() => handleSubmit(true)} disabled={submitting || approveGrn.isPending}><CheckCircle2 className="h-3.5 w-3.5"/>Approve received quantity</Button>}</div>
                     </div>
                   </div>
                 ))}
@@ -203,7 +216,7 @@ export default function GrnPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleSubmit} disabled={submitting}>{submitting ? "Saving..." : editingGrnId ? "Update GRN" : "Save GRN"}</Button>
+                <Button onClick={() => handleSubmit()} disabled={submitting}>{submitting ? "Saving..." : editingGrnId ? "Update GRN" : "Save GRN"}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
