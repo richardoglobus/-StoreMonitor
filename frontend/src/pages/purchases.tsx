@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, firstOfMonth, todayStr } from "@/components/date-range-picker";
@@ -76,6 +76,12 @@ export default function Purchases() {
   // Multi-line voucher state
   const [header, setHeader] = useState({ supplierId: "", invoiceNo: "", lpoNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
   const [lines, setLines] = useState([emptyLine()]);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") === "1" && canManagePurchases) {
+      setIsDialogOpen(true);
+      window.history.replaceState({}, "", "/purchases");
+    }
+  }, [canManagePurchases]);
 
   const { data: items } = useListItems({ query: { queryKey: getListItemsQueryKey() } });
   const { data: suppliers } = useListSuppliers({ query: { queryKey: getListSuppliersQueryKey() } });

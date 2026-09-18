@@ -214,6 +214,13 @@ export default function Issues() {
   const [editIssue, setEditIssue] = useState<any>(null);
   const [editLoading, setEditLoading] = useState(false);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") === "1" && canCreateIssues) {
+      setIsDialogOpen(true);
+      window.history.replaceState({}, "", "/issues");
+    }
+  }, [canCreateIssues]);
+
   const [voucherData, setVoucherData] = useState({
     departmentId: "", issuedAt: format(new Date(), "yyyy-MM-dd"),
     s11No: "", note: ""

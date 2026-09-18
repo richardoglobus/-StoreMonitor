@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import {
@@ -42,6 +42,13 @@ export default function GrnPage() {
   const [editingGrnId, setEditingGrnId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [folder, setFolder] = useState<"pending" | "approved" | "voided">("pending");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") === "1" && canManage) {
+      resetForm();
+      setIsDialogOpen(true);
+      window.history.replaceState({}, "", "/accounts/grn");
+    }
+  }, [canManage]);
 
   const grnQuery = search.trim() ? { search: search.trim() } : {};
   const { data: grns, isLoading } = useListGrns(grnQuery, { query: { queryKey: getListGrnsQueryKey(grnQuery) } });

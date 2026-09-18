@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import {
@@ -65,6 +65,13 @@ export default function PurchaseOrdersPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
   const resetForm = () => { setEditingId(null); setHeader(emptyHeader()); setLines([emptyLine()]); };
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") === "1" && canManage) {
+      resetForm();
+      setIsDialogOpen(true);
+      window.history.replaceState({}, "", "/accounts/purchase-orders");
+    }
+  }, [canManage]);
 
   const createPo = useCreatePurchaseOrder({
     mutation: {

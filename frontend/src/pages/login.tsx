@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Copy, CheckCircle, Download, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme, LOGOS } from "@/lib/theme-context";
+import { useLocation } from "wouter";
 
 type Panel = "login" | "signup" | "forgot" | "reset_token";
 type Effect = "split" | "particles" | "glass" | "wave" | "gradient";
@@ -333,6 +334,7 @@ function EffectBg({effect}:{effect:Effect}){
 // ── Main layout ───────────────────────────────────────────────────────────
 export default function LoginPage(){
   const {login}=useAuth();
+  const [, setLocation] = useLocation();
   const {appLogo}=useTheme();
   const [panel,setPanel]=useState<Panel>("login");
   const [effect,setEffect]=useState<Effect>("split");
@@ -389,7 +391,7 @@ export default function LoginPage(){
   const reshuffleEffect=()=>{ const next=(effectIdx+1)%effects.length; setEffectIdx(next); setEffect(effects[next]); };
 
   const onLogin=async(u:string,p:string)=>{
-    try{ await login({data:{username:u,password:p}}); toast.success("Welcome back!"); }
+    try{ await login({data:{username:u,password:p}}); setLocation("/"); toast.success("Welcome back!"); }
     catch{ setShake(true); setTimeout(()=>setShake(false),600); throw new Error(""); }
   };
 

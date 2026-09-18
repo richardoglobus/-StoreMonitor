@@ -149,6 +149,23 @@ export function Layout({ children }: { children: ReactNode }) {
     try { localStorage.setItem("sidebar-collapsed", String(collapsed)); } catch {}
   }, [collapsed]);
 
+  useEffect(() => {
+    if (!user?.id || location === "/" || location.startsWith("/login")) return;
+    const labels: Record<string, string> = {
+      "/issues": "Issues Log", "/purchases": "Purchases", "/items": "Item Catalog",
+      "/accounts/purchase-orders": "Purchase Orders", "/accounts/grn": "GRN / Delivery Notes",
+      "/accounts/supplier-invoices": "Supplier Invoices", "/accounts/payments": "Payment Entries",
+      "/accounts/journal-entries": "Journal Entries", "/reports": "Reports",
+    };
+    const key = `storemonitor.recentVisits.${user.id}`;
+    try {
+      const current = JSON.parse(localStorage.getItem(key) || "[]") as { href: string; label: string }[];
+      const entry = { href: location.split("?")[0], label: labels[location.split("?")[0]] || "Module" };
+      const next = [entry, ...current.filter(v => v.href !== entry.href)].slice(0, 6);
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {}
+  }, [location, user?.id]);
+
   // Close mobile sheet on navigation
   useEffect(() => { setMobileOpen(false); }, [location]);
   useEffect(() => { fetch("/api/version", { credentials: "include", cache: "no-store" }).then(r => r.json()).then(v => { if (v.version) setAppVersion(String(v.version)); }).catch(() => {}); }, []);
