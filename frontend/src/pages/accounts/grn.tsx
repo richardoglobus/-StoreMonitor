@@ -37,7 +37,7 @@ export default function GrnPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", invoiceNo: "", purchaseOrderId: "", purchaseOrderLineId: "" });
+  const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), receivedDate: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" });
   const [lines, setLines] = useState([emptyLine()]);
   const [editingGrnId, setEditingGrnId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -89,10 +89,10 @@ export default function GrnPage() {
   const unvoidGrn = useUnvoidGrn({ mutation: { onSuccess: () => { toast.success("GRN restored; stock and accounts reinstated"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to unvoid GRN") } });
   const generatePoGrns = useGeneratePurchaseOrderGrns({ mutation: { onSuccess: (rows) => { toast.success(`${rows.length} pending GRN(s) created from the approved PO`); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to create GRNs from PO") } });
 
-  const resetForm = () => { setEditingGrnId(null); setHeader({ date: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", invoiceNo: "", purchaseOrderId: "", purchaseOrderLineId: "" }); setLines([emptyLine()]); };
+  const resetForm = () => { const today = format(new Date(), "yyyy-MM-dd"); setEditingGrnId(null); setHeader({ date: today, receivedDate: today, orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" }); setLines([emptyLine()]); };
   const openEdit = (g: any) => {
     setEditingGrnId(g.id);
-    setHeader({ date: g.date, orderRefType: g.orderRefType || "LPO NO", orderRefNo: g.orderRefNo || g.lpoNo || "", lpoNo: g.lpoNo || "", supplierId: String(g.supplierId), invoiceNo: g.invoiceNo || "", purchaseOrderId: g.sourcePurchaseOrderId ? String(g.sourcePurchaseOrderId) : "", purchaseOrderLineId: g.sourcePurchaseOrderLineId != null ? String(g.sourcePurchaseOrderLineId) : "" });
+    setHeader({ date: g.date, receivedDate: g.receivedDate || g.date, orderRefType: g.orderRefType || "LPO NO", orderRefNo: g.orderRefNo || g.lpoNo || "", lpoNo: g.lpoNo || "", supplierId: String(g.supplierId), purchaseOrderId: g.sourcePurchaseOrderId ? String(g.sourcePurchaseOrderId) : "", purchaseOrderLineId: g.sourcePurchaseOrderLineId != null ? String(g.sourcePurchaseOrderLineId) : "" });
     setLines((g.items || []).map((l: any) => ({ ...l, itemId: l.itemId ? String(l.itemId) : "", itemCode: l.itemCode || "", description: l.description || "", unit: l.unit || "", qtyReceived: String(l.qtyReceived ?? ""), unitCost: String(l.unitCost ?? ""), batchNo: l.batchNo || "", expiryDate: l.expiryDate || "", chargeItemCode: l.chargeItemCode || l.chargedTo || "", folioNo: l.folioNo || "" })));
     setIsDialogOpen(true);
   };
@@ -138,7 +138,7 @@ export default function GrnPage() {
                     <SelectContent>{(suppliers ?? []).map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1"><Label>Invoice No.</Label><Input value={header.invoiceNo} onChange={e => setHeader(h => ({ ...h, invoiceNo: e.target.value }))}/></div>
+                <div className="space-y-1"><Label>Date of goods received</Label><input type="date" className={dateCls} value={header.receivedDate} onChange={e => setHeader(h => ({ ...h, receivedDate: e.target.value }))}/></div>
                 <div className="space-y-1 col-span-2"><Label>Approved Purchase Order (optional)</Label><Select value={header.purchaseOrderId} onValueChange={v => { const po = (purchaseOrders || []).find((p: any) => String(p.id) === v); setHeader(h => ({ ...h, purchaseOrderId: v, supplierId: po ? String(po.supplierId) : h.supplierId, orderRefType: po?.orderRefType || h.orderRefType, orderRefNo: po?.orderRefNo || h.orderRefNo, lpoNo: po?.orderRefNo || h.lpoNo })); }}><SelectTrigger><SelectValue placeholder="Select approved PO to receive"/></SelectTrigger><SelectContent>{(purchaseOrders || []).filter((p: any) => p.status === "approved").map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.poNo} — {p.supplier?.name || "Supplier"} — {p.orderRefNo || "No reference"}</SelectItem>)}</SelectContent></Select></div>
                 {header.purchaseOrderId && <div className="space-y-1 col-span-2"><Label>Commodity to receive in this GRN</Label><Select value={header.purchaseOrderLineId} onValueChange={v => { const po: any = (purchaseOrders || []).find((p: any) => String(p.id) === header.purchaseOrderId); const line: any = po?.lines?.[Number(v)]; if (line) { setHeader(h => ({ ...h, purchaseOrderLineId: v })); setLines([{ ...emptyLine(), itemId: line.itemId ? String(line.itemId) : "", itemCode: line.itemId ? String(line.itemId) : "", description: line.description || "", unit: line.unit || "", qtyReceived: String(line.quantity || ""), unitCost: String(line.unitPrice || "") }]); } }}><SelectTrigger><SelectValue placeholder="Select one PO commodity"/></SelectTrigger><SelectContent>{(((purchaseOrders || []).find((p: any) => String(p.id) === header.purchaseOrderId)?.lines) || []).map((line: any, index: number) => <SelectItem key={index} value={String(index)}>{line.description} — ordered {line.quantity} {line.unit}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Each commodity can be received in its own GRN. Adjust Qty Received if the supplier delivers less.</p></div>}
               </div>
@@ -146,7 +146,7 @@ export default function GrnPage() {
               <div className="space-y-3">
                 {lines.map((l, i) => (
                   <div key={i} className="border rounded-lg p-3 space-y-2 relative">
-                    {lines.length > 1 && (
+                    {lines.length > 1 && !header.purchaseOrderId && (
                       <button onClick={() => removeLine(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"><X className="h-4 w-4"/></button>
                     )}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -164,7 +164,7 @@ export default function GrnPage() {
                     </div>
                   </div>
                 ))}
-                <Button variant="outline" size="sm" className="gap-2" onClick={addLine}><Plus className="h-3.5 w-3.5"/>Add Line</Button>
+                {!header.purchaseOrderId && <Button variant="outline" size="sm" className="gap-2" onClick={addLine}><Plus className="h-3.5 w-3.5"/>Add Line</Button>}
               </div>
 
               <div className="flex justify-end text-sm font-semibold pt-2 border-t">
@@ -190,7 +190,7 @@ export default function GrnPage() {
           <TableHeader>
             <TableRow>
               <TableHead>GRN No.</TableHead><TableHead>Date</TableHead><TableHead>Supplier</TableHead>
-              <TableHead>Invoice No.</TableHead><TableHead>Total (KES)</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
+              <TableHead>Goods received</TableHead><TableHead>Total (KES)</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -201,7 +201,7 @@ export default function GrnPage() {
                 <TableCell className="font-medium">{g.grnNo}</TableCell>
                 <TableCell>{g.date}</TableCell>
                 <TableCell>{g.supplier?.name ?? "—"}</TableCell>
-                <TableCell>{g.invoiceNo ?? "—"}</TableCell>
+                <TableCell>{g.receivedDate || g.date || "—"}</TableCell>
                 <TableCell>{g.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
                 <TableCell><div>{g.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : g.status === "voided" ? <Badge variant="destructive">Voided</Badge> : <Badge variant="secondary">Pending</Badge>}{g.voidRequestStatus === "pending" && <Badge className="ml-1 bg-amber-100 text-amber-800">Void requested</Badge>}{g.voidRequestStatus === "rejected" && <Badge className="ml-1">Void rejected</Badge>}</div>{g.voidRequestStatus === "pending" && <p className="text-[11px] text-amber-700 mt-1">By {g.voidRequestedByName || "user"}: {g.voidRequestReason}</p>}</TableCell>
                 <TableCell className="text-right space-x-1">

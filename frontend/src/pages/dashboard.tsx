@@ -152,7 +152,7 @@ export default function Dashboard() {
     { limit: 5 }, { query: { queryKey: getGetRecentIssuesQueryKey({ limit: 5 }) } }
   );
   const { data: lowStockRaw, isLoading: isLoadingLowStock, error: lowStockError } = useGetLowStock(
-    { threshold: 10 }, { query: { queryKey: getGetLowStockQueryKey("global"), refetchInterval: 30_000 } }
+    { threshold: 10 }, { query: { queryKey: getGetLowStockQueryKey("global"), refetchInterval: 300_000 } }
   );
   const { data: deptUsage, isLoading: isLoadingUsage } = useGetDepartmentUsage(
     { month }, { query: { queryKey: getGetDepartmentUsageQueryKey({ month }) } }
@@ -165,7 +165,7 @@ export default function Dashboard() {
   const { data: activityLog, isLoading: isLoadingActivity } = useListActivity(
     { limit: activityLimit }, { query: { enabled: canViewActivity, queryKey: getListActivityQueryKey({ limit: activityLimit }) } }
   );
-  const { data: allItems } = useListItemStock({ query: { queryKey: getListItemStockQueryKey(), refetchInterval: 30_000 } });
+  const { data: allItems } = useListItemStock({ query: { queryKey: getListItemStockQueryKey(), refetchInterval: 300_000 } });
   const negativeStock = (allItems ?? []).filter(i => i.stockBalance < 0);
 
   // Deduplicate low stock — one entry per item, worst balance wins

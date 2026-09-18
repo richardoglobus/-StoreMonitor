@@ -39,6 +39,7 @@ const emptyHeader = () => ({
   classification: "",
   chargeableVoteCode: "",
   taxPercent: "16",
+  taxEnabled: true,
   approvalStatus: "pending",
   note: "",
 });
@@ -114,7 +115,7 @@ export default function PurchaseOrdersPage() {
       orderRefType: o.orderRefType || "", orderRefNo: o.orderRefNo || "", orderRefDate: o.orderRefDate || "",
       requisitionNo: o.requisitionNo || "", procurementRef: o.procurementRef || "", procurementMethod: o.procurementMethod || "",
       paymentTerms: o.paymentTerms || "", classification: o.classification || "", chargeableVoteCode: o.chargeableVoteCode || "",
-      taxPercent: String(o.taxPercent ?? 0), approvalStatus: o.status || "pending", note: o.note || "",
+      taxPercent: String(o.taxPercent ?? 0), taxEnabled: o.taxEnabled !== false && Number(o.taxPercent || 0) > 0, approvalStatus: o.status || "pending", note: o.note || "",
     });
     setLines((o.lines || []).map((l: any) => ({ itemId: l.itemId ? String(l.itemId) : "", description: l.description || "", unit: l.unit || "", quantity: String(l.quantity ?? ""), unitPrice: String(l.unitPrice ?? ""), search: l.description || "" })));
     setIsDialogOpen(true);
@@ -132,7 +133,7 @@ export default function PurchaseOrdersPage() {
       orderRefType: header.orderRefType || null, orderRefNo: header.orderRefNo || null, orderRefDate: header.orderRefDate || null,
       requisitionNo: header.requisitionNo || null, procurementRef: header.procurementRef || null, procurementMethod: header.procurementMethod || null,
       paymentTerms: header.paymentTerms || null, classification: header.classification || null, chargeableVoteCode: header.chargeableVoteCode || null,
-      taxPercent: Number(header.taxPercent) || 0, approvalStatus: header.approvalStatus, note: header.note || null,
+      taxEnabled: header.taxEnabled, taxPercent: header.taxEnabled ? Number(header.taxPercent) || 0 : 0, approvalStatus: header.approvalStatus, note: header.note || null,
       lines: cleanLines,
     };
     setSubmitting(true);
@@ -255,10 +256,10 @@ export default function PurchaseOrdersPage() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end border-t pt-3">
-                <div className="space-y-1"><Label>Tax (%)</Label><Input type="number" step="0.01" min="0" max="100" value={header.taxPercent} onChange={e => setHeader(h => ({ ...h, taxPercent: e.target.value }))} placeholder="16 or 0" /></div>
+                <div className="space-y-2"><Label>Tax</Label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={header.taxEnabled} onChange={e => setHeader(h => ({ ...h, taxEnabled: e.target.checked }))} /> Apply tax</label><Input type="number" step="0.01" min="0" max="100" disabled={!header.taxEnabled} value={header.taxPercent} onChange={e => setHeader(h => ({ ...h, taxPercent: e.target.value }))} placeholder="16" /></div>
                 <div className="text-sm"><div className="text-muted-foreground text-xs">Total excl. VAT</div><div className="font-semibold">{fmt(totalExclusiveVat)}</div></div>
                 <div className="text-sm"><div className="text-muted-foreground text-xs">VAT amount</div><div className="font-semibold">{fmt(taxAmount)}</div></div>
-                <div className="text-sm"><div className="text-muted-foreground text-xs">Total incl. VAT</div><div className="font-bold text-primary">{fmt(totalInclusiveVat)}</div></div>
+                <div className="text-sm"><div className="text-muted-foreground text-xs">Total price {header.taxEnabled ? "(incl. tax)" : "(no tax)"}</div><div className="font-bold text-primary">{fmt(totalInclusiveVat)}</div></div>
               </div>
 
               <div className="space-y-1"><Label>Note</Label><Input value={header.note} onChange={e => setHeader(h => ({ ...h, note: e.target.value }))} /></div>

@@ -50,6 +50,10 @@ const dataPath = process.env.DATA_PATH || path.join(__dirname, "store.json");
 let syncTimer = null;
 let syncInFlight = false;
 let pendingSyncContent = null;
+let lastSyncStartedAt = 0;
+let lastUploadedHash = null;
+const SYNC_DEBOUNCE_MS = 5000;
+const SYNC_MIN_INTERVAL_MS = 30000;
 
 async function downloadFromSupabase() {
   if (!supabase) return;
@@ -95,7 +99,7 @@ function syncToSupabase() {
   // Coalesce bursts of lowdb writes and serialize uploads. Without this, an
   // older upload can finish after a newer upload and overwrite it in Storage.
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
+    syncTimer = setTimeout(() => {
     syncTimer = null;
     try {
       // Keep only the newest snapshot. Do not queue one full store.json string
@@ -106,20 +110,33 @@ function syncToSupabase() {
       return;
     }
     flushSupabaseSync();
-  }, 250);
+    }, SYNC_DEBOUNCE_MS);
 }
 
 async function flushSupabaseSync() {
   if (syncInFlight || !pendingSyncContent) return;
+  const wait = SYNC_MIN_INTERVAL_MS - (Date.now() - lastSyncStartedAt);
+  if (wait > 0) {
+    if (!syncTimer) syncTimer = setTimeout(() => { syncTimer = null; flushSupabaseSync(); }, wait);
+    return;
+  }
   syncInFlight = true;
   const content = pendingSyncContent;
   pendingSyncContent = null;
+  const contentHash = require("crypto").createHash("sha256").update(content).digest("hex");
+  if (contentHash === lastUploadedHash) {
+    syncInFlight = false;
+    if (pendingSyncContent) flushSupabaseSync();
+    return;
+  }
+  lastSyncStartedAt = Date.now();
   try {
     const { error } = await supabase.storage.from(BUCKET).upload(
       BACKUP_FILE, Buffer.from(content, "utf8"),
       { contentType: "application/json", upsert: true }
     );
     if (error) console.error("Supabase sync failed:", error.message);
+    else lastUploadedHash = contentHash;
   } catch (e) { console.error("Supabase sync error:", e.message); }
   finally {
     syncInFlight = false;
@@ -2292,7 +2309,7 @@ app.get("/api/accounts/grns/:id", requirePermission("viewAccounts"), (req, res) 
   res.json({ ...row, supplier: supplier || null });
 });
 app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) => {
-  const { date, lpoNo, supplierId, invoiceNo, items } = req.body;
+  const { date, receivedDate, lpoNo, supplierId, invoiceNo, items } = req.body;
   if (!date) return res.status(400).json({ error: "Date is required" });
   if (!supplierId) return res.status(400).json({ error: "Supplier is required" });
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "At least one item line is required" });
@@ -2306,7 +2323,7 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
   const row = {
     id: nextId("grns"),
     grnNo: genSequentialNo("GRN", "grns"),
-    date, lpoNo: lpoNo || req.body.orderRefNo || po?.orderRefNo || null, orderRefType: req.body.orderRefType || po?.orderRefType || null, orderRefNo: req.body.orderRefNo || po?.orderRefNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null,
+    date, receivedDate: receivedDate || date, lpoNo: lpoNo || req.body.orderRefNo || po?.orderRefNo || null, orderRefType: req.body.orderRefType || po?.orderRefType || null, orderRefNo: req.body.orderRefNo || po?.orderRefNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null,
     items: cleanItems, totalAmount: Number(totalAmount.toFixed(2)),
     status: "pending", sourcePurchaseOrderId: po?.id || null, sourcePurchaseOrderLineId: req.body.purchaseOrderLineId != null ? Number(req.body.purchaseOrderLineId) : null, orderedQuantity: poLine ? Number(poLine.quantity) : null,
     createdBy: req.session.userId, createdAt: new Date().toISOString(),
@@ -2345,13 +2362,13 @@ app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, r
   const current = ref.value();
   if (!current) return res.status(404).json({ error: "GRN not found" });
   if (!current || !["pending", "approved"].includes(current.status)) return res.status(400).json({ error: "Only pending or approved GRNs can be edited" });
-  const { date, lpoNo, supplierId, invoiceNo, items } = req.body;
+  const { date, receivedDate, lpoNo, supplierId, invoiceNo, items } = req.body;
   if (!date || !supplierId || !Array.isArray(items) || !items.length) return res.status(400).json({ error: "Date, supplier and at least one item are required" });
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
   const { cleanItems, totalAmount } = normalizeGrnItems(items);
   if (current.status === "approved") reverseApprovedGrnAccounting(current, req);
-  const updated = { ...current, date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount, updatedAt: new Date().toISOString() };
+  const updated = { ...current, date, receivedDate: receivedDate || date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount, updatedAt: new Date().toISOString() };
   ref.assign(updated).write();
   if (current.status === "approved") applyApprovedGrnAccounting(updated);
   logActivity(req, "UPDATE_GRN", "GRN", id, { grnNo: current.grnNo, totalAmount });
@@ -2789,7 +2806,7 @@ app.get("/api/accounts/purchase-orders", requirePermission("viewAccounts"), (req
   res.json(db.get("purchaseOrders").value().sort((a, b) => b.id - a.id).map(o => ({ ...o, supplier: suppliers.get(o.supplierId) || null, grn: grnByPoId.get(o.id) || null })));
 });
 app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (req, res) => {
-  const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, approvalStatus, note, lines } = req.body;
+  const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, taxEnabled, approvalStatus, note, lines } = req.body;
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!date || !supplier || !Array.isArray(lines) || !lines.length) return res.status(400).json({ error: "Date, supplier, and at least one order line are required" });
   if (orderRefType && !PO_ORDER_REF_TYPES.includes(orderRefType)) return res.status(400).json({ error: "Invalid order reference type" });
@@ -2797,13 +2814,14 @@ app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (
   const itemsById = new Map(db.get("items").value().map(i => [i.id, i]));
   const cleanLines = buildPoLines(lines, itemsById);
   if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
-  const { totalExclusiveVat, taxAmount, totalInclusiveVat } = poTotals(cleanLines, taxPercent);
+  const effectiveTax = taxEnabled === false ? 0 : (Number(taxPercent) || 0);
+  const { totalExclusiveVat, taxAmount, totalInclusiveVat } = poTotals(cleanLines, effectiveTax);
   const row = {
     id: nextId("purchaseOrders"), poNo: genSequentialNo("PO", "purchaseOrders"), date, supplierId: supplier.id,
     orderRefType: orderRefType || null, orderRefNo: orderRefNo || null, orderRefDate: orderRefDate || null,
     requisitionNo: requisitionNo || null, procurementRef: procurementRef || null, procurementMethod: procurementMethod || null,
     paymentTerms: paymentTerms || null, classification: classification || null, chargeableVoteCode: chargeableVoteCode || null,
-    taxPercent: Number(taxPercent) || 0, lines: cleanLines,
+    taxEnabled: taxEnabled !== false && effectiveTax > 0, taxPercent: effectiveTax, lines: cleanLines,
     totalExclusiveVat, taxAmount, totalInclusiveVat, totalAmount: totalInclusiveVat,
     status: approvalStatus === "approved" ? "approved" : "pending",
     note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString(),
@@ -2819,7 +2837,7 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
   const ref = db.get("purchaseOrders").find({ id });
   const current = ref.value();
   if (!current) return res.status(404).json({ error: "Purchase order not found" });
-  const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, approvalStatus, note, lines } = req.body;
+  const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, taxEnabled, approvalStatus, note, lines } = req.body;
   const supplier = supplierId ? db.get("suppliers").find({ id: Number(supplierId) }).value() : db.get("suppliers").find({ id: current.supplierId }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
   if (orderRefType && !PO_ORDER_REF_TYPES.includes(orderRefType)) return res.status(400).json({ error: "Invalid order reference type" });
@@ -2827,7 +2845,7 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
   const itemsById = new Map(db.get("items").value().map(i => [i.id, i]));
   const cleanLines = lines !== undefined ? buildPoLines(lines, itemsById) : current.lines;
   if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
-  const effectiveTax = taxPercent !== undefined ? Number(taxPercent) || 0 : current.taxPercent || 0;
+  const effectiveTax = taxEnabled === false ? 0 : (taxPercent !== undefined ? Number(taxPercent) || 0 : (current.taxPercent || 0));
   const { totalExclusiveVat, taxAmount, totalInclusiveVat } = poTotals(cleanLines, effectiveTax);
   const newStatus = approvalStatus !== undefined ? (approvalStatus === "approved" ? "approved" : "pending") : current.status;
   const updates = {
@@ -2841,7 +2859,7 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
     paymentTerms: paymentTerms !== undefined ? (paymentTerms || null) : current.paymentTerms,
     classification: classification !== undefined ? (classification || null) : current.classification,
     chargeableVoteCode: chargeableVoteCode !== undefined ? (chargeableVoteCode || null) : current.chargeableVoteCode,
-    taxPercent: effectiveTax, lines: cleanLines,
+    taxEnabled: taxEnabled !== undefined ? taxEnabled !== false && effectiveTax > 0 : (current.taxEnabled !== false && effectiveTax > 0), taxPercent: effectiveTax, lines: cleanLines,
     totalExclusiveVat, taxAmount, totalInclusiveVat, totalAmount: totalInclusiveVat,
     status: newStatus,
     note: note !== undefined ? (note || null) : current.note,
@@ -2859,7 +2877,10 @@ app.delete("/api/accounts/purchase-orders/:id", requirePermission("manageAccount
   const current = db.get("purchaseOrders").find({ id }).value();
   if (!current) return res.status(404).json({ error: "Purchase order not found" });
   if (db.get("supplierInvoices").find({ purchaseOrderId: id }).value()) return res.status(400).json({ error: "Cannot delete a purchase order that already has a supplier invoice recorded against it" });
-  if (db.get("grns").find({ sourcePurchaseOrderId: id }).value()) return res.status(400).json({ error: "Cannot delete a purchase order that already has a GRN recorded against it — void or delete the GRN first" });
+  const linkedGrns = db.get("grns").filter({ sourcePurchaseOrderId: id }).value();
+  if (linkedGrns.some(g => g.status === "approved")) return res.status(400).json({ error: "Cannot delete a purchase order while a linked GRN is approved — void it first" });
+  if (linkedGrns.some(g => !["voided", "pending"].includes(g.status))) return res.status(400).json({ error: "Cannot delete this purchase order until all linked GRNs are voided" });
+  db.get("grns").remove(g => Number(g.sourcePurchaseOrderId) === id).write();
   db.get("purchaseOrders").remove({ id }).write();
   logActivity(req, "DELETE_PURCHASE_ORDER", "PURCHASE_ORDER", id, { poNo: current.poNo });
   res.status(204).send();
