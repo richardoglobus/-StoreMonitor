@@ -58,6 +58,7 @@ export default function PurchaseOrdersPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [header, setHeader] = useState(emptyHeader());
   const [lines, setLines] = useState([emptyLine()]);
+  const [folder, setFolder] = useState<"pending" | "approved">("pending");
 
   const { data: orders, isLoading } = useListPurchaseOrders();
   const { data: suppliers } = useListSuppliers();
@@ -167,6 +168,17 @@ export default function PurchaseOrdersPage() {
   };
 
   const fmt = (n: number) => `KES ${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  const visibleOrders = (orders || []).filter(o => o.status === folder);
+  const receivedSummary = (o: any) => {
+    const grns = o.grns || (o.grn ? [o.grn] : []);
+    const items = grns.flatMap((g: any) => g.items || []);
+    return {
+      items: items.map((item: any) => item.description || item.itemCode || "—").filter(Boolean).join(", ") || "—",
+      quantity: items.reduce((sum: number, item: any) => sum + Number(item.qtyReceived || 0), 0),
+      approvers: grns.filter((g: any) => g.status === "approved").map((g: any) => g.approvedByName).filter(Boolean).join(", ") || "—",
+      voiders: grns.filter((g: any) => g.status === "voided").map((g: any) => g.voidedByName).filter(Boolean).join(", ") || "—",
+    };
+  };
 
   return (
     <Layout>
@@ -302,24 +314,29 @@ export default function PurchaseOrdersPage() {
       </div>
       </div>
 
+      <div className="flex gap-2 mb-4"><Button variant={folder === "pending" ? "default" : "outline"} onClick={() => setFolder("pending")}>Pending ({(orders || []).filter(o => o.status === "pending").length})</Button><Button variant={folder === "approved" ? "default" : "outline"} onClick={() => setFolder("approved")}>Approved ({(orders || []).filter(o => o.status === "approved").length})</Button></div>
+
       <Card className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>PO No.</TableHead><TableHead>Date</TableHead><TableHead>Supplier</TableHead>
-              <TableHead>Ref</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total (incl. VAT)</TableHead>
+              <TableHead>Ref</TableHead><TableHead>Commodity / Item</TableHead><TableHead>Qty received</TableHead><TableHead>Approved / Voided by</TableHead><TableHead>Method</TableHead><TableHead className="text-right">Total (incl. VAT)</TableHead>
               <TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading && Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={8}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)}
-            {!isLoading && (orders ?? []).length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No purchase orders yet.</TableCell></TableRow>}
-            {(orders ?? []).map(o => (
+            {isLoading && Array.from({ length: 4 }).map((_, i) => <TableRow key={i}><TableCell colSpan={11}><Skeleton className="h-6 w-full" /></TableCell></TableRow>)}
+            {!isLoading && visibleOrders.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No {folder} purchase orders.</TableCell></TableRow>}
+            {visibleOrders.map(o => (
               <TableRow key={o.id}>
                 <TableCell className="font-medium">{o.poNo}</TableCell>
                 <TableCell className="whitespace-nowrap text-sm">{o.date}</TableCell>
                 <TableCell>{o.supplier?.name ?? "—"}</TableCell>
                 <TableCell className="text-xs font-mono">{o.orderRefType ? `${o.orderRefType}: ${o.orderRefNo || "—"}` : "—"}</TableCell>
+                <TableCell className="min-w-48">{receivedSummary(o).items}</TableCell>
+                <TableCell>{receivedSummary(o).quantity || "—"}</TableCell>
+                <TableCell className="whitespace-nowrap">{receivedSummary(o).approvers !== "—" ? `Approved: ${receivedSummary(o).approvers}` : receivedSummary(o).voiders !== "—" ? `Voided: ${receivedSummary(o).voiders}` : "—"}</TableCell>
                 <TableCell className="text-xs">{o.procurementMethod || "—"}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{fmt(o.totalInclusiveVat ?? o.totalAmount)}</TableCell>
                 <TableCell>{o.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : <Badge variant="secondary">Pending</Badge>}</TableCell>

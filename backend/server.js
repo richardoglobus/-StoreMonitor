@@ -2303,7 +2303,7 @@ app.get("/api/accounts/grns", requirePermission("viewAccounts"), (req, res) => {
     rows = rows.filter(r => [r.grnNo, r.date, r.lpoNo, r.invoiceNo, supplierMap.get(r.supplierId)?.name, ...(r.items || []).flatMap(i => [i.itemCode, i.description, i.batchNo, i.folioNo, i.chargeItemCode])].some(v => String(v || "").toLowerCase().includes(q)));
   }
   const items = new Map(db.get("items").value().map(i => [Number(i.id), i]));
-  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null, sourcePurchaseOrder: r.sourcePurchaseOrderId ? db.get("purchaseOrders").find({ id: Number(r.sourcePurchaseOrderId) }).value() || null : null, items: (r.items || []).map(i => ({ ...i, catalogItem: i.itemId != null ? items.get(Number(i.itemId)) || null : null })), voidRequestedByName: r.voidRequestedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null, voidReviewedByName: r.voidReviewedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null })));
+  res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null, approvedByName: r.approvedBy ? userMap.get(r.approvedBy) || `User ${r.approvedBy}` : null, voidedByName: r.voidedBy ? userMap.get(r.voidedBy) || `User ${r.voidedBy}` : null, sourcePurchaseOrder: r.sourcePurchaseOrderId ? db.get("purchaseOrders").find({ id: Number(r.sourcePurchaseOrderId) }).value() || null : null, items: (r.items || []).map(i => ({ ...i, catalogItem: i.itemId != null ? items.get(Number(i.itemId)) || null : null })), voidRequestedByName: r.voidRequestedBy ? userMap.get(r.voidRequestedBy) || `User ${r.voidRequestedBy}` : null, voidReviewedByName: r.voidReviewedBy ? userMap.get(r.voidReviewedBy) || `User ${r.voidReviewedBy}` : null })));
 });
 app.get("/api/accounts/grns/:id", requirePermission("viewAccounts"), (req, res) => {
   const row = db.get("grns").find({ id: Number(req.params.id) }).value();
@@ -2891,8 +2891,20 @@ app.get("/api/accounts/purchase-order-meta", requirePermission("viewAccounts"), 
 });
 app.get("/api/accounts/purchase-orders", requirePermission("viewAccounts"), (req, res) => {
   const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s]));
-  const grnByPoId = new Map(db.get("grns").value().filter(g => g.sourcePurchaseOrderId != null).map(g => [g.sourcePurchaseOrderId, g]));
-  res.json(db.get("purchaseOrders").value().sort((a, b) => b.id - a.id).map(o => ({ ...o, supplier: suppliers.get(o.supplierId) || null, grn: grnByPoId.get(o.id) || null })));
+  const users = new Map(db.get("users").value().map(u => [u.id, u.username || u.fullName || `User ${u.id}`]));
+  const grnsByPoId = new Map();
+  db.get("grns").value().filter(g => g.sourcePurchaseOrderId != null).forEach(g => {
+    const rows = grnsByPoId.get(Number(g.sourcePurchaseOrderId)) || [];
+    rows.push(g);
+    grnsByPoId.set(Number(g.sourcePurchaseOrderId), rows);
+  });
+  res.json(db.get("purchaseOrders").value().sort((a, b) => b.id - a.id).map(o => ({
+    ...o,
+    supplier: suppliers.get(o.supplierId) || null,
+    approvedByName: o.approvedBy ? users.get(o.approvedBy) || `User ${o.approvedBy}` : null,
+    grns: grnsByPoId.get(Number(o.id)) || [],
+    grn: (grnsByPoId.get(Number(o.id)) || [])[0] || null,
+  })));
 });
 app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (req, res) => {
   const { date, supplierId, orderRefType, orderRefNo, orderRefDate, requisitionNo, procurementRef, procurementMethod, paymentTerms, classification, chargeableVoteCode, taxPercent, taxEnabled, approvalStatus, note, lines } = req.body;
@@ -2913,6 +2925,8 @@ app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (
     taxEnabled: taxEnabled !== false && effectiveTax > 0, taxPercent: effectiveTax, lines: cleanLines,
     totalExclusiveVat, taxAmount, totalInclusiveVat, totalAmount: totalInclusiveVat,
     status: approvalStatus === "approved" ? "approved" : "pending",
+    approvedBy: approvalStatus === "approved" ? req.session.userId : null,
+    approvedAt: approvalStatus === "approved" ? new Date().toISOString() : null,
     note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString(),
   };
   db.get("purchaseOrders").push(row).write();
@@ -2951,6 +2965,8 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
     taxEnabled: taxEnabled !== undefined ? taxEnabled !== false && effectiveTax > 0 : (current.taxEnabled !== false && effectiveTax > 0), taxPercent: effectiveTax, lines: cleanLines,
     totalExclusiveVat, taxAmount, totalInclusiveVat, totalAmount: totalInclusiveVat,
     status: newStatus,
+    approvedBy: newStatus === "approved" ? (current.status === "approved" ? current.approvedBy || req.session.userId : req.session.userId) : null,
+    approvedAt: newStatus === "approved" ? (current.status === "approved" ? current.approvedAt || new Date().toISOString() : new Date().toISOString()) : null,
     note: note !== undefined ? (note || null) : current.note,
     updatedBy: req.session.userId, updatedAt: new Date().toISOString(),
   };
