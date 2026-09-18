@@ -2341,7 +2341,7 @@ function normalizeGrnItems(items) {
   const cleanItems = items.map(it => {
     const qtyReceived = Number(it.qtyReceived) || 0, unitCost = Number(it.unitCost) || 0;
     const totalCost = Number((qtyReceived * unitCost).toFixed(2)); totalAmount += totalCost;
-    return { itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || null, folioNo: it.folioNo || null };
+    return { itemId: it.itemId != null ? Number(it.itemId) : null, itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, orderedQuantity: it.orderedQuantity != null ? Number(it.orderedQuantity) : null, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || null, folioNo: it.folioNo || null };
   });
   return { cleanItems, totalAmount: Number(totalAmount.toFixed(2)) };
 }
@@ -2358,6 +2358,66 @@ function applyApprovedGrnAccounting(row) {
   postJournalEntry({ date: row.date, reference: `EDIT-${row.grnNo}`, description: `Goods received after edit — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + Number(row.totalAmount || 0)).toFixed(2)) }).write();
+}
+function createRemainingPurchaseOrderGrn(row, req) {
+  if (row.sourcePurchaseOrderId == null) return null;
+  const po = db.get("purchaseOrders").find({ id: Number(row.sourcePurchaseOrderId) }).value();
+  if (!po) return null;
+  const remainingItems = (row.items || []).map((item, index) => {
+    const poLine = row.sourcePurchaseOrderLineId != null
+      ? (po.lines || [])[Number(row.sourcePurchaseOrderLineId)]
+      : (po.lines || []).find(line => item.itemId != null && Number(line.itemId) === Number(item.itemId))
+        || (po.lines || []).find(line => String(line.description || "").trim().toUpperCase() === String(item.description || "").trim().toUpperCase())
+        || (po.lines || [])[index];
+    const orderedQuantity = Number(item.orderedQuantity ?? poLine?.quantity ?? 0);
+    const qtyReceived = Number(item.qtyReceived) || 0;
+    const remainingQuantity = Math.max(0, orderedQuantity - qtyReceived);
+    if (remainingQuantity <= 0) return null;
+    const unitCost = Number(item.unitCost) || Number(poLine?.unitPrice) || 0;
+    return {
+      itemId: item.itemId || poLine?.itemId || null,
+      itemCode: item.itemCode || (poLine?.itemId != null ? String(poLine.itemId) : null),
+      description: item.description,
+      unit: item.unit || poLine?.unit || null,
+      qtyReceived: remainingQuantity,
+      orderedQuantity: remainingQuantity,
+      unitCost,
+      totalCost: Number((remainingQuantity * unitCost).toFixed(2)),
+      batchNo: null,
+      expiryDate: null,
+      chargeItemCode: item.chargeItemCode || po.chargeableVoteCode || null,
+      folioNo: null,
+    };
+  }).filter(Boolean);
+  if (!remainingItems.length) return null;
+  const supplier = db.get("suppliers").find({ id: Number(row.supplierId) }).value();
+  if (!supplier) return null;
+  const remainder = {
+    id: nextId("grns"),
+    grnNo: genSequentialNo("GRN", "grns"),
+    date: row.date,
+    receivedDate: row.receivedDate || row.date,
+    lpoNo: row.lpoNo || po.orderRefNo || po.poNo,
+    deliveryNoteNo: null,
+    orderRefType: row.orderRefType || po.orderRefType || null,
+    orderRefNo: row.orderRefNo || po.orderRefNo || null,
+    supplierId: supplier.id,
+    invoiceNo: null,
+    items: remainingItems,
+    totalAmount: Number(remainingItems.reduce((sum, item) => sum + item.totalCost, 0).toFixed(2)),
+    status: "pending",
+    sourcePurchaseOrderId: po.id,
+    sourcePurchaseOrderLineId: row.sourcePurchaseOrderLineId ?? null,
+    orderedQuantity: Number(remainingItems.reduce((sum, item) => sum + item.orderedQuantity, 0)),
+    autoCreated: true,
+    createdBy: req.session.userId,
+    createdAt: new Date().toISOString(),
+    approvedBy: null,
+    approvedAt: null,
+  };
+  db.get("grns").push(remainder).write();
+  logActivity(req, "CREATE_REMAINING_GRN_FROM_PO", "GRN", remainder.id, { grnNo: remainder.grnNo, poNo: po.poNo });
+  return remainder;
 }
 app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, res) => {
   const id = Number(req.params.id);
@@ -2383,9 +2443,11 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
   const row = rowRef.value();
   if (!row) return res.status(404).json({ error: "GRN not found" });
   if (row.status === "approved") return res.status(400).json({ error: "GRN already approved" });
+  if (!(row.items || []).some(item => Number(item.qtyReceived) > 0)) return res.status(400).json({ error: "Enter a quantity received before approving this GRN" });
   // In independent mode, approval changes only the GRN record; historical records remain untouched.
   if (independentAccountingEnabled()) {
     rowRef.assign({ status: "approved", approvedBy: req.session.userId, approvedAt: new Date().toISOString() }).write();
+    createRemainingPurchaseOrderGrn(row, req);
     logActivity(req, "APPROVE_GRN_INDEPENDENT", "GRN", id, { grnNo: row.grnNo, totalAmount: row.totalAmount });
     return res.json(rowRef.value());
   }
@@ -2414,6 +2476,7 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + row.totalAmount).toFixed(2)) }).write();
   rowRef.assign({ status: "approved", approvedBy: req.session.userId, approvedAt: new Date().toISOString() }).write();
+  createRemainingPurchaseOrderGrn(row, req);
   logActivity(req, "APPROVE_GRN", "GRN", id, { grnNo: row.grnNo, totalAmount: row.totalAmount });
   res.json(rowRef.value());
 });

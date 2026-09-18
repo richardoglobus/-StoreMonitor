@@ -132,10 +132,10 @@ export default function GrnPage() {
 
   const handleSubmit = () => {
     if (!header.supplierId) { toast.error("Select a supplier"); return; }
-    const validLines = lines.filter(l => l.description.trim() && Number(l.qtyReceived) > 0);
+    const validLines = lines.filter(l => l.description.trim() && (header.purchaseOrderId ? Number(l.qtyReceived) >= 0 : Number(l.qtyReceived) > 0));
     if (validLines.length === 0) { toast.error("Add at least one valid item line"); return; }
     setSubmitting(true);
-    const data = { ...header, supplierId: Number(header.supplierId), purchaseOrderId: header.purchaseOrderId ? Number(header.purchaseOrderId) : null, purchaseOrderLineId: header.purchaseOrderLineId !== "" ? Number(header.purchaseOrderLineId) : null, items: validLines.map(l => ({ ...l, itemId: l.itemId ? Number(l.itemId) : null, qtyReceived: Number(l.qtyReceived), unitCost: Number(l.unitCost) })) };
+    const data = { ...header, supplierId: Number(header.supplierId), purchaseOrderId: header.purchaseOrderId ? Number(header.purchaseOrderId) : null, purchaseOrderLineId: header.purchaseOrderLineId !== "" ? Number(header.purchaseOrderLineId) : null, items: validLines.map(l => ({ ...l, itemId: l.itemId ? Number(l.itemId) : null, qtyReceived: Number(l.qtyReceived), orderedQuantity: l.orderedQuantity ? Number(l.orderedQuantity) : null, unitCost: Number(l.unitCost) })) };
     if (editingGrnId) updateGrn.mutate({ grnId: editingGrnId, data });
     else createGrn.mutate({ data });
   };
