@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { AccountRefreshButton } from "@/components/account-refresh-button";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -85,7 +86,7 @@ export default function SupplierInvoicesPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" />Purchase / Supplier Invoices</h1>
           <p className="text-sm text-muted-foreground">Step 3 of Accounts: Purchase Order → GRN (Goods Received) → Purchase/Supplier Invoice.</p>
         </div>
-        {manage && (
+        <div className="flex items-center gap-2"><AccountRefreshButton />{manage && (
           <Dialog open={invOpen} onOpenChange={setInvOpen}>
             <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" />New Invoice</Button></DialogTrigger>
             <DialogContent>
@@ -143,6 +144,7 @@ export default function SupplierInvoicesPage() {
             </DialogContent>
           </Dialog>
         )}
+      </div>
       </div>
 
       <Card className="overflow-x-auto">

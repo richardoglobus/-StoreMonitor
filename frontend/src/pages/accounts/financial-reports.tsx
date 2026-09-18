@@ -9,6 +9,7 @@ import { BarChart3, TrendingUp, Wallet, ReceiptText, Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { AccountRefreshButton } from "@/components/account-refresh-button";
 
 export default function FinancialReportsPage() {
   const { user } = useAuth();
@@ -36,7 +37,7 @@ export default function FinancialReportsPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2"><BarChart3 className="h-6 w-6"/>Financial Reports</h1>
           <p className="text-sm text-muted-foreground">Summary of goods received, payments, payables and inventory value.</p>
         </div>
-        <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo}/>
+        <div className="flex items-center gap-2"><DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo}/><AccountRefreshButton /></div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

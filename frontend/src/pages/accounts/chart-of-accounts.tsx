@@ -18,6 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { AccountRefreshButton } from "@/components/account-refresh-button";
 
 const emptyForm = { code: "", name: "", type: "Asset" };
 
@@ -60,7 +61,7 @@ export default function ChartOfAccountsPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2"><BookMarked className="h-6 w-6"/>Chart of Accounts</h1>
           <p className="text-sm text-muted-foreground">The ledger accounts used for double-entry postings from GRNs and payments.</p>
         </div>
-        {canManage && (
+        <div className="flex items-center gap-2"><AccountRefreshButton />{canManage && (
           <Dialog open={isDialogOpen} onOpenChange={(v) => { setIsDialogOpen(v); if (!v) setForm(emptyForm); }}>
             <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4"/>Add Account</Button></DialogTrigger>
             <DialogContent>
@@ -88,7 +89,7 @@ export default function ChartOfAccountsPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        )}
+        )}</div>
       </div>
 
       <Card className="overflow-x-auto">

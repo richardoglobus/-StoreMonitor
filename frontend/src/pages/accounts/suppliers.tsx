@@ -19,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { AccountRefreshButton } from "@/components/account-refresh-button";
 
 const emptyForm = { name: "", contactPerson: "", phone: "", email: "", address: "", pin: "", contractStatus: "", status: "" };
 
@@ -80,7 +81,7 @@ export default function SuppliersPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2"><Users className="h-6 w-6"/>Suppliers</h1>
           <p className="text-sm text-muted-foreground">Supplier records and the amount currently owed to each (accounts payable).</p>
         </div>
-        {canManage && (
+        <div className="flex items-center gap-2"><AccountRefreshButton />{canManage && (
           <Dialog open={isDialogOpen} onOpenChange={(v) => { setIsDialogOpen(v); if (!v) closeDialog(); }}>
             <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4"/>Add Supplier</Button></DialogTrigger>
             <DialogContent>
@@ -110,7 +111,7 @@ export default function SuppliersPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        )}
+        )}</div>
         {canManage && <Dialog open={mergeOpen} onOpenChange={setMergeOpen}><DialogTrigger asChild><Button variant="outline" className="gap-2"><GitMerge className="h-4 w-4"/>Merge Suppliers</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Merge Supplier Records</DialogTitle><p className="text-sm text-muted-foreground">Choose the duplicate supplier as Source and the record to keep as Target. All linked records will be reassigned.</p></DialogHeader><div className="space-y-3"><div className="space-y-1"><Label>Source supplier (will be removed)</Label><select className="w-full h-9 rounded-md border bg-background px-2" value={mergeSourceId} onChange={e => setMergeSourceId(e.target.value)}><option value="">Select source</option>{(suppliers ?? []).filter(s => s.id !== Number(mergeTargetId)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div><div className="space-y-1"><Label>Target supplier (will be kept)</Label><select className="w-full h-9 rounded-md border bg-background px-2" value={mergeTargetId} onChange={e => setMergeTargetId(e.target.value)}><option value="">Select target</option>{(suppliers ?? []).filter(s => s.id !== Number(mergeSourceId)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div><div className="space-y-1"><Label>Final supplier name (optional)</Label><Input value={mergeName} onChange={e => setMergeName(e.target.value)} placeholder="Leave blank to keep target name"/></div></div><DialogFooter><Button variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button><Button onClick={submitMerge} disabled={mergeSuppliers.isPending}>{mergeSuppliers.isPending ? "Merging..." : "Merge records"}</Button></DialogFooter></DialogContent></Dialog>}
       </div>
 

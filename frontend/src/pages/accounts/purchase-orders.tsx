@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { AccountRefreshButton } from "@/components/account-refresh-button";
 
 const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
@@ -174,6 +175,8 @@ export default function PurchaseOrdersPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2"><ClipboardList className="h-6 w-6" />Purchase Orders</h1>
           <p className="text-sm text-muted-foreground">Step 1 of Accounts: Purchase Order → GRN (Goods Received) → Purchase/Supplier Invoice.</p>
         </div>
+        <div className="flex items-center gap-2">
+        <AccountRefreshButton />
         {canManage && (
           <Dialog open={isDialogOpen} onOpenChange={(v) => { setIsDialogOpen(v); if (!v) resetForm(); }}>
             <DialogTrigger asChild>
@@ -244,10 +247,7 @@ export default function PurchaseOrdersPage() {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Items / Commodities</Label>
-                  <Button variant="outline" size="sm" className="gap-2" onClick={addLine}><Plus className="h-3.5 w-3.5" />Add Item</Button>
-                </div>
+                <Label className="text-sm">Items / Commodities</Label>
                 {lines.map((l, i) => (
                   <div key={i} className="border rounded-lg p-3 space-y-2 relative">
                     {lines.length > 1 && (
@@ -278,6 +278,9 @@ export default function PurchaseOrdersPage() {
                     <div className="text-right text-xs text-muted-foreground">Line total (excl. VAT): <span className="font-semibold text-foreground">{fmt(lineTotal(l))}</span></div>
                   </div>
                 ))}
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" className="gap-2" onClick={addLine}><Plus className="h-3.5 w-3.5" />Add Item</Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end border-t pt-3">
@@ -296,6 +299,7 @@ export default function PurchaseOrdersPage() {
             </DialogContent>
           </Dialog>
         )}
+      </div>
       </div>
 
       <Card className="overflow-x-auto">
@@ -321,6 +325,7 @@ export default function PurchaseOrdersPage() {
                 <TableCell>{o.status === "approved" ? <Badge className="bg-green-100 text-green-800 border-green-200">Approved</Badge> : <Badge variant="secondary">Pending</Badge>}</TableCell>
                 <TableCell className="text-right space-x-1">
                   {canManage && <Button size="sm" variant="outline" className="gap-1" onClick={() => openEdit(o)}><Pencil className="h-3.5 w-3.5" />Edit</Button>}
+                  {canManage && <Button size="sm" variant={o.status === "approved" ? "secondary" : "outline"} onClick={() => updatePo.mutate({ orderId: o.id, data: { approvalStatus: o.status === "approved" ? "pending" : "approved" } })}>{o.status === "approved" ? "Set Pending" : "Approve"}</Button>}
                   {canDelete && <Button size="icon" variant="ghost" className="text-destructive h-8 w-8" onClick={() => { if (confirm(`Delete purchase order ${o.poNo}?`)) deletePo.mutate({ orderId: o.id }); }}><Trash2 className="h-4 w-4" /></Button>}
                 </TableCell>
               </TableRow>

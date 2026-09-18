@@ -2727,7 +2727,13 @@ app.post("/api/accounts/journal-entries", requirePermission("manageAccounts"), (
 });
 
 const PO_ORDER_REF_TYPES = ["LPO NO", "LSO NO", "IMPREST NO"];
-const PO_CLASSIFICATIONS = ["Expense", "PPE", "F.C"];
+const DEFAULT_PO_CLASSIFICATIONS = ["Expense", "PPE", "F.C"];
+function getPurchaseOrderClassifications() {
+  const configured = getSettings().purchaseOrderClassifications;
+  return Array.isArray(configured) && configured.length
+    ? configured.map(value => String(value).trim()).filter(Boolean)
+    : DEFAULT_PO_CLASSIFICATIONS;
+}
 function buildPoLines(lines, itemsById) {
   if (!Array.isArray(lines)) return [];
   return lines.map(l => {
@@ -2780,15 +2786,32 @@ function createMatchingGrnForPurchaseOrder(po, supplier, req) {
 }
 function generateGrnsForApprovedPurchaseOrder(po, supplier, req) {
   const existing = db.get("grns").value().filter(g => Number(g.sourcePurchaseOrderId) === Number(po.id));
-  const created = [];
-  for (const [index, line] of (po.lines || []).entries()) {
-    const received = existing.filter(g => Number(g.sourcePurchaseOrderLineId) === index).reduce((s, g) => s + Number(g.items?.[0]?.qtyReceived || 0), 0);
-    const remaining = Math.max(0, Number(line.quantity || 0) - received);
-    if (remaining <= 0) continue;
-    const row = { id: nextId("grns"), grnNo: genSequentialNo("GRN", "grns"), date: po.date, lpoNo: po.orderRefNo || po.poNo, orderRefType: po.orderRefType || null, orderRefNo: po.orderRefNo || null, supplierId: supplier.id, invoiceNo: null, items: [{ itemId: line.itemId || null, itemCode: line.itemId != null ? String(line.itemId) : null, description: line.description, unit: line.unit || null, qtyReceived: remaining, unitCost: Number(line.unitPrice || 0), totalCost: Number((remaining * Number(line.unitPrice || 0)).toFixed(2)), batchNo: null, expiryDate: null, chargeItemCode: po.chargeableVoteCode || null, folioNo: null }], totalAmount: Number((remaining * Number(line.unitPrice || 0)).toFixed(2)), status: "pending", sourcePurchaseOrderId: po.id, sourcePurchaseOrderLineId: index, orderedQuantity: Number(line.quantity || 0), autoCreated: true, createdBy: req.session.userId, createdAt: new Date().toISOString(), approvedBy: null, approvedAt: null };
-    db.get("grns").push(row).write(); created.push(row);
-  }
-  return created;
+  if (existing.length) return existing;
+  const items = (po.lines || []).map(line => ({
+    itemId: line.itemId || null,
+    itemCode: line.itemId != null ? String(line.itemId) : null,
+    description: line.description,
+    unit: line.unit || null,
+    qtyReceived: Number(line.quantity || 0),
+    orderedQuantity: Number(line.quantity || 0),
+    unitCost: Number(line.unitPrice || 0),
+    totalCost: Number(line.totalPrice || 0),
+    batchNo: null, expiryDate: null,
+    chargeItemCode: po.chargeableVoteCode || null, folioNo: null,
+  }));
+  const row = {
+    id: nextId("grns"), grnNo: genSequentialNo("GRN", "grns"), date: po.date,
+    lpoNo: po.orderRefNo || po.poNo, orderRefType: po.orderRefType || null,
+    orderRefNo: po.orderRefNo || null, supplierId: supplier.id, invoiceNo: null,
+    items, totalAmount: Number(items.reduce((sum, item) => sum + item.totalCost, 0).toFixed(2)),
+    status: "pending", sourcePurchaseOrderId: po.id, sourcePurchaseOrderLineId: null,
+    orderedQuantity: Number((po.lines || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0)),
+    autoCreated: true, createdBy: req.session.userId, createdAt: new Date().toISOString(),
+    approvedBy: null, approvedAt: null,
+  };
+  db.get("grns").push(row).write();
+  logActivity(req, "AUTO_CREATE_GRN_FROM_PO", "GRN", row.id, { grnNo: row.grnNo, poNo: po.poNo });
+  return [row];
 }
 app.post("/api/accounts/purchase-orders/:id/generate-grns", requirePermission("manageAccounts"), (req, res) => {
   const po = db.get("purchaseOrders").find({ id: Number(req.params.id) }).value();
@@ -2801,7 +2824,7 @@ app.post("/api/accounts/purchase-orders/:id/generate-grns", requirePermission("m
   res.status(201).json(created);
 });
 app.get("/api/accounts/purchase-order-meta", requirePermission("viewAccounts"), (_req, res) => {
-  res.json({ orderRefTypes: PO_ORDER_REF_TYPES, classifications: PO_CLASSIFICATIONS, procurementMethods: getSettings().procurementMethods, chargeItemCodes: getSettings().chargeItemCodes });
+  res.json({ orderRefTypes: PO_ORDER_REF_TYPES, classifications: getPurchaseOrderClassifications(), procurementMethods: getSettings().procurementMethods, chargeItemCodes: getSettings().chargeItemCodes });
 });
 app.get("/api/accounts/purchase-orders", requirePermission("viewAccounts"), (req, res) => {
   const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s]));
@@ -2813,7 +2836,7 @@ app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!date || !supplier || !Array.isArray(lines) || !lines.length) return res.status(400).json({ error: "Date, supplier, and at least one order line are required" });
   if (orderRefType && !PO_ORDER_REF_TYPES.includes(orderRefType)) return res.status(400).json({ error: "Invalid order reference type" });
-  if (classification && !PO_CLASSIFICATIONS.includes(classification)) return res.status(400).json({ error: "Invalid classification" });
+  if (classification && !getPurchaseOrderClassifications().includes(classification)) return res.status(400).json({ error: "Invalid classification" });
   const itemsById = new Map(db.get("items").value().map(i => [i.id, i]));
   const cleanLines = buildPoLines(lines, itemsById);
   if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
@@ -2831,7 +2854,7 @@ app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (
   };
   db.get("purchaseOrders").push(row).write();
   let grn = null;
-  if (row.status === "approved") grn = generateGrnsForApprovedPurchaseOrder(row, supplier, req);
+  grn = generateGrnsForApprovedPurchaseOrder(row, supplier, req)[0] || null;
   logActivity(req, "CREATE_PURCHASE_ORDER", "PURCHASE_ORDER", row.id, { poNo: row.poNo, totalAmount: totalInclusiveVat });
   res.status(201).json({ ...row, supplier, grn });
 });
@@ -2844,7 +2867,7 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
   const supplier = supplierId ? db.get("suppliers").find({ id: Number(supplierId) }).value() : db.get("suppliers").find({ id: current.supplierId }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
   if (orderRefType && !PO_ORDER_REF_TYPES.includes(orderRefType)) return res.status(400).json({ error: "Invalid order reference type" });
-  if (classification && !PO_CLASSIFICATIONS.includes(classification)) return res.status(400).json({ error: "Invalid classification" });
+  if (classification && !getPurchaseOrderClassifications().includes(classification)) return res.status(400).json({ error: "Invalid classification" });
   const itemsById = new Map(db.get("items").value().map(i => [i.id, i]));
   const cleanLines = lines !== undefined ? buildPoLines(lines, itemsById) : current.lines;
   if (!cleanLines.length) return res.status(400).json({ error: "Add at least one valid order line" });
@@ -2871,7 +2894,7 @@ app.patch("/api/accounts/purchase-orders/:id", requirePermission("manageAccounts
   ref.assign(updates).write();
   const updated = ref.value();
   let grn = null;
-  if (newStatus === "approved" && current.status !== "approved") grn = generateGrnsForApprovedPurchaseOrder(updated, supplier, req);
+  if (!db.get("grns").find({ sourcePurchaseOrderId: id }).value()) grn = generateGrnsForApprovedPurchaseOrder(updated, supplier, req)[0] || null;
   logActivity(req, "UPDATE_PURCHASE_ORDER", "PURCHASE_ORDER", id, { poNo: current.poNo });
   res.json({ ...updated, supplier, grn });
 });
@@ -2959,6 +2982,7 @@ const DEFAULT_SETTINGS = {
   requireInvoiceNumber: true,
   requireSupplierName: true,
   independentAccountingMode: true,
+  purchaseOrderClassifications: [...DEFAULT_PO_CLASSIFICATIONS],
   // Reports & Exports
   reportChargeItem: "221102",
   chargeItemCodes: CHARGE_ITEM_CODES,
@@ -2995,6 +3019,7 @@ function getSettings(){
   if (!settings.chargeItemCodes.some(c => String(c.code) === "2211002")) settings.chargeItemCodes.push({ code: "2211002", name: "NON-PHARM" });
   if (!Array.isArray(settings.procurementMethods) || !settings.procurementMethods.length) settings.procurementMethods = [...DEFAULT_PROCUREMENT_METHODS];
   if (!Array.isArray(settings.supplierStatuses) || !settings.supplierStatuses.length) settings.supplierStatuses = [...DEFAULT_SUPPLIER_STATUSES];
+  if (!Array.isArray(settings.purchaseOrderClassifications) || !settings.purchaseOrderClassifications.length) settings.purchaseOrderClassifications = [...DEFAULT_PO_CLASSIFICATIONS];
   return settings;
 }
 function independentAccountingEnabled() { return getSettings().independentAccountingMode !== false; }

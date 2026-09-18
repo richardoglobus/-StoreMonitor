@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
+import { AccountRefreshButton } from "@/components/account-refresh-button";
 
 const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
@@ -77,7 +78,7 @@ export default function StockMovementPage() {
               {(balances ?? []).map(b => <SelectItem key={b.itemCode} value={b.itemCode}>{b.description}</SelectItem>)}
             </SelectContent>
           </Select>
-          {canManage && (
+          <div className="flex items-center gap-2"><AccountRefreshButton />{canManage && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4"/>Stock Adjustment</Button></DialogTrigger>
               <DialogContent>
@@ -98,7 +99,7 @@ export default function StockMovementPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          )}
+          )}</div>
         </div>
       </div>
 

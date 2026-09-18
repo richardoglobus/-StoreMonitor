@@ -42,6 +42,7 @@ interface AppSettings {
   requireInvoiceNumber: boolean;
   requireSupplierName: boolean;
   independentAccountingMode: boolean;
+  purchaseOrderClassifications: string[];
   // Reports & Exports
   reportChargeItem: string;
   chargeItemCodes: { code: string; name: string }[];
@@ -89,6 +90,7 @@ const DEFAULTS: AppSettings = {
   requireInvoiceNumber: true,
   requireSupplierName: true,
   independentAccountingMode: true,
+  purchaseOrderClassifications: ["Expense", "PPE", "F.C"],
   reportChargeItem: "221102",
   chargeItemCodes: [{ code: "221102", name: "General Medical Supplies" }, { code: "2211002", name: "NON-PHARM" }],
   procurementMethods: ["Request for Quotations", "Framework Agreement", "Direct Procurement", "Low Value Procurement", "Open Tender"],
@@ -162,6 +164,7 @@ export default function SettingsPage() {
   const [newChargeCodeName, setNewChargeCodeName] = useState("");
   const [newProcurementMethod, setNewProcurementMethod] = useState("");
   const [newSupplierStatus, setNewSupplierStatus] = useState("");
+  const [newPurchaseOrderClassification, setNewPurchaseOrderClassification] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
 
   const loadOfficers = async () => {
@@ -257,7 +260,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch(`${API_BASE}/api/settings`, { credentials: "include" })
       .then(r => r.json())
-      .then(data => { const merged = { ...DEFAULTS, ...data }; const codes = Array.isArray(merged.chargeItemCodes) ? merged.chargeItemCodes : []; if (!codes.some((c: any) => String(c.code) === "2211002")) codes.push({ code: "2211002", name: "NON-PHARM" }); const methods = Array.isArray(merged.procurementMethods) && merged.procurementMethods.length ? merged.procurementMethods : DEFAULTS.procurementMethods; const supStatuses = Array.isArray(merged.supplierStatuses) && merged.supplierStatuses.length ? merged.supplierStatuses : DEFAULTS.supplierStatuses; setSettings({ ...merged, chargeItemCodes: codes, procurementMethods: methods, supplierStatuses: supStatuses, customRoles: Array.isArray(merged.customRoles) ? merged.customRoles : [] }); setLoading(false); })
+      .then(data => { const merged = { ...DEFAULTS, ...data }; const codes = Array.isArray(merged.chargeItemCodes) ? merged.chargeItemCodes : []; if (!codes.some((c: any) => String(c.code) === "2211002")) codes.push({ code: "2211002", name: "NON-PHARM" }); const methods = Array.isArray(merged.procurementMethods) && merged.procurementMethods.length ? merged.procurementMethods : DEFAULTS.procurementMethods; const supStatuses = Array.isArray(merged.supplierStatuses) && merged.supplierStatuses.length ? merged.supplierStatuses : DEFAULTS.supplierStatuses; const classifications = Array.isArray(merged.purchaseOrderClassifications) && merged.purchaseOrderClassifications.length ? merged.purchaseOrderClassifications : DEFAULTS.purchaseOrderClassifications; setSettings({ ...merged, chargeItemCodes: codes, procurementMethods: methods, supplierStatuses: supStatuses, purchaseOrderClassifications: classifications, customRoles: Array.isArray(merged.customRoles) ? merged.customRoles : [] }); setLoading(false); })
       .catch(() => { toast.error("Failed to load settings"); setLoading(false); });
   }, []);
 
@@ -334,6 +337,24 @@ export default function SettingsPage() {
     if (settings.supplierStatuses.length <= 1) return toast.error("Keep at least one supplier status");
     if (!confirm(`Delete supplier status "${name}"?`)) return;
     update("supplierStatuses", settings.supplierStatuses.filter(m => m !== name));
+  };
+  const addPurchaseOrderClassification = () => {
+    const name = newPurchaseOrderClassification.trim();
+    if (!name) return toast.error("Enter a purchase order classification");
+    if (settings.purchaseOrderClassifications.some(item => item.toLowerCase() === name.toLowerCase())) return toast.error("That classification already exists");
+    update("purchaseOrderClassifications", [...settings.purchaseOrderClassifications, name]);
+    setNewPurchaseOrderClassification("");
+  };
+  const editPurchaseOrderClassification = (name: string) => {
+    const next = prompt("Purchase order classification:", name)?.trim();
+    if (!next) return;
+    if (next !== name && settings.purchaseOrderClassifications.some(item => item.toLowerCase() === next.toLowerCase())) return toast.error("That classification already exists");
+    update("purchaseOrderClassifications", settings.purchaseOrderClassifications.map(item => item === name ? next : item));
+  };
+  const deletePurchaseOrderClassification = (name: string) => {
+    if (settings.purchaseOrderClassifications.length <= 1) return toast.error("Keep at least one purchase order classification");
+    if (!confirm(`Delete purchase order classification "${name}"?`)) return;
+    update("purchaseOrderClassifications", settings.purchaseOrderClassifications.filter(item => item !== name));
   };
 
   const addRole = () => {
@@ -618,6 +639,20 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2">
               {settings.supplierStatuses.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editSupplierStatus(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteSupplierStatus(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* 6. Dropdown Lists */}
+        <SectionCard icon={Tag} title="Dropdown Lists" description="Manage purchase order classification options used across the Accounts workflow.">
+          <div className="space-y-3 border rounded-lg p-3">
+            <div><Label>Purchase Order Classifications</Label><p className="text-xs text-muted-foreground">Add, rename, or delete options shown on purchase orders.</p></div>
+            <div className="flex gap-2">
+              <Input value={newPurchaseOrderClassification} onChange={e => setNewPurchaseOrderClassification(e.target.value)} placeholder="e.g. Medical Equipment" />
+              <Button type="button" onClick={addPurchaseOrderClassification}><Plus className="h-4 w-4 mr-1" />Add</Button>
+            </div>
+            <div className="space-y-2">
+              {settings.purchaseOrderClassifications.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editPurchaseOrderClassification(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deletePurchaseOrderClassification(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
             </div>
           </div>
         </SectionCard>
