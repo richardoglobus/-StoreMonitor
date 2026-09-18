@@ -183,7 +183,7 @@ export function useCreateDepartment(options?: MutOpts<Department, { data: { name
 // ─── Items ─────────────────────────────────────────────────────────────────────
 
 export function useListItems(options?: QueryOpts<Item[]>) {
-  return useQuery({ queryKey: getListItemsQueryKey(), queryFn: () => apiFetch<Item[]>("/api/items"), ...options?.query });
+  return useQuery({ queryKey: getListItemsQueryKey(), queryFn: () => apiFetch<Item[]>("/api/items"), staleTime: 300_000, ...options?.query });
 }
 export function useListCategories(options?: QueryOpts<CatalogCategory[]>) {
   return useQuery({ queryKey: getListCategoriesQueryKey(), queryFn: () => apiFetch<CatalogCategory[]>("/api/catalog/categories"), ...options?.query });
@@ -202,7 +202,7 @@ export function useDeleteCategory(options?: MutOpts<void, { categoryId: number }
 }
 
 export function useListItemStock(options?: QueryOpts<ItemStock[]>) {
-  return useQuery({ queryKey: getListItemStockQueryKey(), queryFn: () => apiFetch<ItemStock[]>("/api/items/stock"), ...options?.query });
+  return useQuery({ queryKey: getListItemStockQueryKey(), queryFn: () => apiFetch<ItemStock[]>("/api/items/stock"), staleTime: 300_000, ...options?.query });
 }
 
 export function useCreateItem(options?: MutOpts<Item, { data: { description: string; unit: string; categoryId?: number | null; expiryDate?: string | null } }>) {

@@ -46,12 +46,13 @@ if (SUPABASE_URL && SUPABASE_KEY) {
 }
 
 const dataPath = process.env.DATA_PATH || path.join(__dirname, "store.json");
+const syncHashPath = `${dataPath}.sha256`;
 
 let syncTimer = null;
 let syncInFlight = false;
 let pendingSyncContent = null;
 let lastSyncStartedAt = 0;
-let lastUploadedHash = null;
+let lastUploadedHash = (() => { try { return fs.readFileSync(syncHashPath, "utf8").trim() || null; } catch { return null; } })();
 const SYNC_DEBOUNCE_MS = 5000;
 const SYNC_MIN_INTERVAL_MS = 30000;
 
@@ -136,7 +137,7 @@ async function flushSupabaseSync() {
       { contentType: "application/json", upsert: true }
     );
     if (error) console.error("Supabase sync failed:", error.message);
-    else lastUploadedHash = contentHash;
+    else { lastUploadedHash = contentHash; try { fs.writeFileSync(syncHashPath, contentHash, "utf8"); } catch (e) { console.error("Supabase hash save error:", e.message); } }
   } catch (e) { console.error("Supabase sync error:", e.message); }
   finally {
     syncInFlight = false;
@@ -1638,6 +1639,8 @@ function csvEscape(v) {
 
 const app = express();
 app.set("trust proxy", 1);
+// Let browsers and proxies receive 304 Not Modified instead of downloading unchanged responses.
+app.set("etag", "strong");
 const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173").split(",").map(s=>s.trim());
 app.use(cors({
   credentials: true,

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/lib/theme-context";
 import { useInactivityLogout } from "@/lib/use-inactivity-logout";
 import Dashboard from "@/pages/dashboard";
+import HomePage from "@/pages/home";
 import Departments from "@/pages/departments";
 import Assets from "@/pages/assets";
 import DepartmentDetail from "@/pages/department-detail";
@@ -119,7 +120,8 @@ function AppWithAuth() {
     <>
       {updateAvailable && <div className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 bg-blue-600 px-4 py-2 text-sm text-white shadow-lg"><span>A newer StoreMonitor version is available.</span><button className="rounded bg-white px-3 py-1 font-semibold text-blue-700" onClick={() => window.location.reload()}>Reload now</button><button className="text-white/80" onClick={() => setUpdateAvailable(false)}>Later</button></div>}
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={HomePage} />
+        <Route path="/dashboard" component={Dashboard} />
         <Route path="/departments" component={Departments} />
         <Route path="/departments/:id" component={DepartmentDetail} />
         <Route path="/items" component={Items} />

@@ -24,7 +24,8 @@ const LOGO_ICONS: Record<AppLogo, React.FC<any>> = {
 };
 
 const NAV_ITEMS = [
-  { href: "/",                label: "Dashboard",      icon: LayoutDashboard, permission: "viewDashboard" },
+  { href: "/",                label: "Home",           icon: LayoutDashboard, permission: "viewDashboard" },
+  { href: "/dashboard",       label: "Dashboard",      icon: BarChart3,       permission: "viewDashboard" },
   { href: "/departments",     label: "Departments",    icon: Building2,       permission: "viewDepartments" },
   { href: "/assets",          label: "Asset Register", icon: Package2,        permission: "viewDashboard" },
   { href: "/digital-forms",   label: "Digital Forms",  icon: ClipboardList,   permission: "manageDigitalForms" },
@@ -152,6 +153,7 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user?.id || location === "/" || location.startsWith("/login")) return;
     const labels: Record<string, string> = {
+      "/dashboard": "Dashboard",
       "/issues": "Issues Log", "/purchases": "Purchases", "/items": "Item Catalog",
       "/accounts/purchase-orders": "Purchase Orders", "/accounts/grn": "GRN / Delivery Notes",
       "/accounts/supplier-invoices": "Supplier Invoices", "/accounts/payments": "Payment Entries",
