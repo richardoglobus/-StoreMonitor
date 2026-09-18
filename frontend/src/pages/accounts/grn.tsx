@@ -37,7 +37,7 @@ export default function GrnPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), receivedDate: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" });
+  const [header, setHeader] = useState({ date: format(new Date(), "yyyy-MM-dd"), receivedDate: format(new Date(), "yyyy-MM-dd"), orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", deliveryNoteNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" });
   const [lines, setLines] = useState([emptyLine()]);
   const [editingGrnId, setEditingGrnId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -96,10 +96,10 @@ export default function GrnPage() {
   const unvoidGrn = useUnvoidGrn({ mutation: { onSuccess: () => { toast.success("GRN restored; stock and accounts reinstated"); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to unvoid GRN") } });
   const generatePoGrns = useGeneratePurchaseOrderGrns({ mutation: { onSuccess: (rows) => { toast.success(`${rows.length} pending GRN(s) created from the approved PO`); invalidate(); }, onError: (e: any) => toast.error(e?.error || "Failed to create GRNs from PO") } });
 
-  const resetForm = () => { const today = format(new Date(), "yyyy-MM-dd"); setEditingGrnId(null); setHeader({ date: today, receivedDate: today, orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" }); setLines([emptyLine()]); };
+  const resetForm = () => { const today = format(new Date(), "yyyy-MM-dd"); setEditingGrnId(null); setHeader({ date: today, receivedDate: today, orderRefType: "LPO NO", orderRefNo: "", lpoNo: "", deliveryNoteNo: "", supplierId: "", purchaseOrderId: "", purchaseOrderLineId: "" }); setLines([emptyLine()]); };
   const openEdit = (g: any) => {
     setEditingGrnId(g.id);
-    setHeader({ date: g.date, receivedDate: g.receivedDate || g.date, orderRefType: g.orderRefType || "LPO NO", orderRefNo: g.orderRefNo || g.lpoNo || "", lpoNo: g.lpoNo || "", supplierId: String(g.supplierId), purchaseOrderId: g.sourcePurchaseOrderId ? String(g.sourcePurchaseOrderId) : "", purchaseOrderLineId: g.sourcePurchaseOrderLineId != null ? String(g.sourcePurchaseOrderLineId) : "" });
+    setHeader({ date: g.date, receivedDate: g.receivedDate || g.date, orderRefType: g.orderRefType || "LPO NO", orderRefNo: g.orderRefNo || g.lpoNo || "", lpoNo: g.lpoNo || "", deliveryNoteNo: g.deliveryNoteNo || "", supplierId: String(g.supplierId), purchaseOrderId: g.sourcePurchaseOrderId ? String(g.sourcePurchaseOrderId) : "", purchaseOrderLineId: g.sourcePurchaseOrderLineId != null ? String(g.sourcePurchaseOrderLineId) : "" });
     setLines((g.items || []).map((l: any) => ({ ...l, itemId: l.itemId ? String(l.itemId) : "", itemCode: l.itemCode || "", description: l.description || "", unit: l.unit || "", qtyReceived: String(l.qtyReceived ?? ""), unitCost: String(l.unitCost ?? ""), batchNo: l.batchNo || "", expiryDate: l.expiryDate || "", chargeItemCode: l.chargeItemCode || l.chargedTo || "", folioNo: l.folioNo || "" })));
     setIsDialogOpen(true);
   };
@@ -138,6 +138,7 @@ export default function GrnPage() {
                 <div className="space-y-1"><Label>Date</Label><input type="date" className={dateCls} value={header.date} onChange={e => setHeader(h => ({ ...h, date: e.target.value }))}/></div>
                 <div className="space-y-1"><Label>Document format</Label><Select value={header.orderRefType} onValueChange={v => setHeader(h => ({ ...h, orderRefType: v }))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="LPO NO">LPO</SelectItem><SelectItem value="LSO NO">LSO</SelectItem><SelectItem value="IMPREST NO">Imprest</SelectItem></SelectContent></Select></div>
                 <div className="space-y-1"><Label>{header.orderRefType}</Label><Input value={header.orderRefNo} onChange={e => setHeader(h => ({ ...h, orderRefNo: e.target.value, lpoNo: e.target.value }))}/></div>
+                <div className="space-y-1"><Label>Delivery Note No.</Label><Input value={header.deliveryNoteNo} onChange={e => setHeader(h => ({ ...h, deliveryNoteNo: e.target.value }))}/></div>
                 <div className="space-y-1 col-span-2 md:col-span-1">
                   <Label>Supplier</Label>
                   <Select value={header.supplierId} onValueChange={v => setHeader(h => ({ ...h, supplierId: v }))}>

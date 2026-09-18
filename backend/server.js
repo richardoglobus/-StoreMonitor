@@ -2312,7 +2312,7 @@ app.get("/api/accounts/grns/:id", requirePermission("viewAccounts"), (req, res) 
   res.json({ ...row, supplier: supplier || null });
 });
 app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) => {
-  const { date, receivedDate, lpoNo, supplierId, invoiceNo, items } = req.body;
+  const { date, receivedDate, lpoNo, deliveryNoteNo, supplierId, invoiceNo, items } = req.body;
   if (!date) return res.status(400).json({ error: "Date is required" });
   if (!supplierId) return res.status(400).json({ error: "Supplier is required" });
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "At least one item line is required" });
@@ -2326,7 +2326,7 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
   const row = {
     id: nextId("grns"),
     grnNo: genSequentialNo("GRN", "grns"),
-    date, receivedDate: receivedDate || date, lpoNo: lpoNo || req.body.orderRefNo || po?.orderRefNo || null, orderRefType: req.body.orderRefType || po?.orderRefType || null, orderRefNo: req.body.orderRefNo || po?.orderRefNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null,
+    date, receivedDate: receivedDate || date, lpoNo: lpoNo || req.body.orderRefNo || po?.orderRefNo || null, deliveryNoteNo: deliveryNoteNo || null, orderRefType: req.body.orderRefType || po?.orderRefType || null, orderRefNo: req.body.orderRefNo || po?.orderRefNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null,
     items: cleanItems, totalAmount: Number(totalAmount.toFixed(2)),
     status: "pending", sourcePurchaseOrderId: po?.id || null, sourcePurchaseOrderLineId: req.body.purchaseOrderLineId != null ? Number(req.body.purchaseOrderLineId) : null, orderedQuantity: poLine ? Number(poLine.quantity) : null,
     createdBy: req.session.userId, createdAt: new Date().toISOString(),
@@ -2365,13 +2365,13 @@ app.patch("/api/accounts/grns/:id", requirePermission("manageAccounts"), (req, r
   const current = ref.value();
   if (!current) return res.status(404).json({ error: "GRN not found" });
   if (!current || !["pending", "approved"].includes(current.status)) return res.status(400).json({ error: "Only pending or approved GRNs can be edited" });
-  const { date, receivedDate, lpoNo, supplierId, invoiceNo, items } = req.body;
+  const { date, receivedDate, lpoNo, deliveryNoteNo, supplierId, invoiceNo, items } = req.body;
   if (!date || !supplierId || !Array.isArray(items) || !items.length) return res.status(400).json({ error: "Date, supplier and at least one item are required" });
   const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
   if (!supplier) return res.status(400).json({ error: "Supplier not found" });
   const { cleanItems, totalAmount } = normalizeGrnItems(items);
   if (current.status === "approved") reverseApprovedGrnAccounting(current, req);
-  const updated = { ...current, date, receivedDate: receivedDate || date, lpoNo: lpoNo || null, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount, updatedAt: new Date().toISOString() };
+  const updated = { ...current, date, receivedDate: receivedDate || date, lpoNo: lpoNo || null, deliveryNoteNo: deliveryNoteNo !== undefined ? (deliveryNoteNo || null) : current.deliveryNoteNo, supplierId: Number(supplierId), invoiceNo: invoiceNo || null, items: cleanItems, totalAmount, updatedAt: new Date().toISOString() };
   ref.assign(updated).write();
   if (current.status === "approved") applyApprovedGrnAccounting(updated);
   logActivity(req, "UPDATE_GRN", "GRN", id, { grnNo: current.grnNo, totalAmount });
