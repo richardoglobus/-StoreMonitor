@@ -24,7 +24,7 @@ import { useLocation } from "wouter";
 
 const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground [color-scheme:light] dark:[color-scheme:dark] focus:outline-none focus:ring-1 focus:ring-ring";
 
-const emptyLine = () => ({ itemId: "", description: "", unit: "", quantity: "", unitPrice: "", totalPrice: "", search: "" });
+const emptyLine = () => ({ itemId: "", description: "", unit: "", quantity: "", unitPrice: "", totalPrice: "", totalIncludesTax: false, search: "" });
 
 const emptyHeader = () => ({
   date: format(new Date(), "yyyy-MM-dd"),
@@ -87,19 +87,26 @@ export default function PurchaseOrdersPage() {
     },
   });
 
-  const updateLine = (idx: number, field: string, value: string) => {
+  const updateLine = (idx: number, field: string, value: any) => {
     setLines(ls => ls.map((l, i) => {
       if (i !== idx) return l;
       const next = { ...l, [field]: value } as any;
       if (field === "totalPrice") {
         const quantity = Number(next.quantity) || 0;
-        if (quantity > 0 && value !== "") next.unitPrice = (Number(value) / quantity).toFixed(2);
+        const taxMultiplier = header.taxEnabled && next.totalIncludesTax ? 1 + (Number(header.taxPercent) || 0) / 100 : 1;
+        if (quantity > 0 && value !== "") next.unitPrice = (Number(value) / quantity / taxMultiplier).toFixed(2);
       }
       if (field === "quantity" && next.totalPrice !== "" && Number(value) > 0) {
-        next.unitPrice = (Number(next.totalPrice) / Number(value)).toFixed(2);
+        const taxMultiplier = header.taxEnabled && next.totalIncludesTax ? 1 + (Number(header.taxPercent) || 0) / 100 : 1;
+        next.unitPrice = (Number(next.totalPrice) / Number(value) / taxMultiplier).toFixed(2);
       }
       if (field === "unitPrice" && next.quantity) {
-        next.totalPrice = (Number(value || 0) * Number(next.quantity || 0)).toFixed(2);
+        const taxMultiplier = header.taxEnabled && next.totalIncludesTax ? 1 + (Number(header.taxPercent) || 0) / 100 : 1;
+        next.totalPrice = (Number(value || 0) * Number(next.quantity || 0) * taxMultiplier).toFixed(2);
+      }
+      if (field === "totalIncludesTax" && next.totalPrice !== "" && next.quantity) {
+        const taxMultiplier = header.taxEnabled && next.totalIncludesTax ? 1 + (Number(header.taxPercent) || 0) / 100 : 1;
+        next.unitPrice = (Number(next.totalPrice) / Number(next.quantity) / taxMultiplier).toFixed(2);
       }
       if (field === "itemId") {
         const item = (items || []).find(it => String(it.id) === value);
@@ -127,7 +134,7 @@ export default function PurchaseOrdersPage() {
       paymentTerms: o.paymentTerms || "", classification: o.classification || "", chargeableVoteCode: o.chargeableVoteCode || "",
       taxPercent: String(o.taxPercent ?? 0), taxEnabled: o.taxEnabled !== false && Number(o.taxPercent || 0) > 0, approvalStatus: o.status || "pending", note: o.note || "",
     });
-    setLines((o.lines || []).map((l: any) => ({ itemId: l.itemId ? String(l.itemId) : "", description: l.description || "", unit: l.unit || "", quantity: String(l.quantity ?? ""), unitPrice: String(l.unitPrice ?? ""), totalPrice: String(l.totalPrice ?? ((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0))), search: l.description || "" })));
+    setLines((o.lines || []).map((l: any) => ({ itemId: l.itemId ? String(l.itemId) : "", description: l.description || "", unit: l.unit || "", quantity: String(l.quantity ?? ""), unitPrice: String(l.unitPrice ?? ""), totalPrice: String(l.totalPrice ?? ((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0))), totalIncludesTax: false, search: l.description || "" })));
     setIsDialogOpen(true);
   };
 
@@ -259,7 +266,7 @@ export default function PurchaseOrdersPage() {
                       <div className="space-y-1"><Label className="text-xs">Unit</Label><Input value={l.unit} onChange={e => updateLine(i, "unit", e.target.value)} /></div>
                       <div className="space-y-1"><Label className="text-xs">Quantity</Label><Input type="number" value={l.quantity} onChange={e => updateLine(i, "quantity", e.target.value)} /></div>
                       <div className="space-y-1"><Label className="text-xs">Unit Price (KES)</Label><Input type="number" step="0.01" value={l.unitPrice} onChange={e => updateLine(i, "unitPrice", e.target.value)} /></div>
-                      <div className="space-y-1"><Label className="text-xs">Total Price (KES)</Label><Input type="number" step="0.01" value={l.totalPrice} onChange={e => updateLine(i, "totalPrice", e.target.value)} placeholder="Enter total if unit price is unknown" /></div>
+                      <div className="space-y-1"><Label className="text-xs">Total Price (KES)</Label><Input type="number" step="0.01" value={l.totalPrice} onChange={e => updateLine(i, "totalPrice", e.target.value)} placeholder="Enter total if unit price is unknown" />{header.taxEnabled && <label className="flex items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" checked={l.totalIncludesTax} onChange={e => updateLine(i, "totalIncludesTax", e.target.checked)} /> Total includes tax</label>}</div>
                     </div>
                     <div className="text-right text-xs text-muted-foreground">Line total (excl. VAT): <span className="font-semibold text-foreground">{fmt(lineTotal(l))}</span></div>
                   </div>
