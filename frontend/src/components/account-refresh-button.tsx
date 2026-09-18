@@ -10,7 +10,12 @@ export function AccountRefreshButton() {
   const refresh = async () => {
     setRefreshing(true);
     try {
-      await queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+      await queryClient.invalidateQueries({
+        predicate: (query) => {
+          const queryKey = query.queryKey[0];
+          return typeof queryKey === "string" && queryKey.startsWith("/api/accounts/");
+        },
+      });
     } finally {
       setRefreshing(false);
     }
