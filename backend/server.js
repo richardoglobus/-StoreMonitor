@@ -2339,8 +2339,9 @@ app.post("/api/accounts/grns", requirePermission("manageAccounts"), (req, res) =
 function normalizeGrnItems(items) {
   let totalAmount = 0;
   const cleanItems = items.map(it => {
-    const qtyReceived = Number(it.qtyReceived) || 0, unitCost = Number(it.unitCost) || 0;
-    const totalCost = Number((qtyReceived * unitCost).toFixed(2)); totalAmount += totalCost;
+    const qtyReceived = it.qtyReceived === "" || it.qtyReceived == null ? null : Number(it.qtyReceived) || 0;
+    const unitCost = Number(it.unitCost) || 0;
+    const totalCost = Number(((qtyReceived || 0) * unitCost).toFixed(2)); totalAmount += totalCost;
     return { itemId: it.itemId != null ? Number(it.itemId) : null, itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, orderedQuantity: it.orderedQuantity != null ? Number(it.orderedQuantity) : null, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || null, folioNo: it.folioNo || null };
   });
   return { cleanItems, totalAmount: Number(totalAmount.toFixed(2)) };
@@ -2379,10 +2380,10 @@ function createRemainingPurchaseOrderGrn(row, req) {
       itemCode: item.itemCode || (poLine?.itemId != null ? String(poLine.itemId) : null),
       description: item.description,
       unit: item.unit || poLine?.unit || null,
-      qtyReceived: remainingQuantity,
-      orderedQuantity: remainingQuantity,
+      qtyReceived: null,
+      orderedQuantity,
       unitCost,
-      totalCost: Number((remainingQuantity * unitCost).toFixed(2)),
+      totalCost: 0,
       batchNo: null,
       expiryDate: null,
       chargeItemCode: item.chargeItemCode || po.chargeableVoteCode || null,
@@ -2404,7 +2405,7 @@ function createRemainingPurchaseOrderGrn(row, req) {
     supplierId: supplier.id,
     invoiceNo: null,
     items: remainingItems,
-    totalAmount: Number(remainingItems.reduce((sum, item) => sum + item.totalCost, 0).toFixed(2)),
+    totalAmount: 0,
     status: "pending",
     sourcePurchaseOrderId: po.id,
     sourcePurchaseOrderLineId: row.sourcePurchaseOrderLineId ?? null,
@@ -2872,31 +2873,33 @@ function createMatchingGrnForPurchaseOrder(po, supplier, req) {
 function generateGrnsForApprovedPurchaseOrder(po, supplier, req) {
   const existing = db.get("grns").value().filter(g => Number(g.sourcePurchaseOrderId) === Number(po.id));
   if (existing.length) return existing;
-  const items = (po.lines || []).map(line => ({
-    itemId: line.itemId || null,
-    itemCode: line.itemId != null ? String(line.itemId) : null,
-    description: line.description,
-    unit: line.unit || null,
-    qtyReceived: Number(line.quantity || 0),
-    orderedQuantity: Number(line.quantity || 0),
-    unitCost: Number(line.unitPrice || 0),
-    totalCost: Number(line.totalPrice || 0),
-    batchNo: null, expiryDate: null,
-    chargeItemCode: po.chargeableVoteCode || null, folioNo: null,
-  }));
-  const row = {
-    id: nextId("grns"), grnNo: getPurchaseOrderGrnNo(po.id), date: po.date,
-    lpoNo: po.orderRefNo || po.poNo, orderRefType: po.orderRefType || null,
-    orderRefNo: po.orderRefNo || null, supplierId: supplier.id, invoiceNo: null,
-    items, totalAmount: Number(items.reduce((sum, item) => sum + item.totalCost, 0).toFixed(2)),
-    status: "pending", sourcePurchaseOrderId: po.id, sourcePurchaseOrderLineId: null,
-    orderedQuantity: Number((po.lines || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0)),
-    autoCreated: true, createdBy: req.session.userId, createdAt: new Date().toISOString(),
-    approvedBy: null, approvedAt: null,
-  };
-  db.get("grns").push(row).write();
-  logActivity(req, "AUTO_CREATE_GRN_FROM_PO", "GRN", row.id, { grnNo: row.grnNo, poNo: po.poNo });
-  return [row];
+  return (po.lines || []).map((line, lineIndex) => {
+    const orderedQuantity = Number(line.quantity || 0);
+    const item = {
+      itemId: line.itemId || null,
+      itemCode: line.itemId != null ? String(line.itemId) : null,
+      description: line.description,
+      unit: line.unit || null,
+      qtyReceived: null,
+      orderedQuantity,
+      unitCost: Number(line.unitPrice || 0),
+      totalCost: 0,
+      batchNo: null, expiryDate: null,
+      chargeItemCode: po.chargeableVoteCode || null, folioNo: null,
+    };
+    const row = {
+      id: nextId("grns"), grnNo: getPurchaseOrderGrnNo(po.id), date: po.date,
+      lpoNo: po.orderRefNo || po.poNo, orderRefType: po.orderRefType || null,
+      orderRefNo: po.orderRefNo || null, supplierId: supplier.id, invoiceNo: null,
+      items: [item], totalAmount: 0,
+      status: "pending", sourcePurchaseOrderId: po.id, sourcePurchaseOrderLineId: lineIndex,
+      orderedQuantity, autoCreated: true, createdBy: req.session.userId, createdAt: new Date().toISOString(),
+      approvedBy: null, approvedAt: null,
+    };
+    db.get("grns").push(row).write();
+    logActivity(req, "AUTO_CREATE_GRN_FROM_PO", "GRN", row.id, { grnNo: row.grnNo, poNo: po.poNo });
+    return row;
+  });
 }
 app.post("/api/accounts/purchase-orders/:id/generate-grns", requirePermission("manageAccounts"), (req, res) => {
   const po = db.get("purchaseOrders").find({ id: Number(req.params.id) }).value();
@@ -2953,7 +2956,7 @@ app.post("/api/accounts/purchase-orders", requirePermission("manageAccounts"), (
   };
   db.get("purchaseOrders").push(row).write();
   let grn = null;
-  grn = generateGrnsForApprovedPurchaseOrder(row, supplier, req)[0] || null;
+  if (row.status === "approved") grn = generateGrnsForApprovedPurchaseOrder(row, supplier, req)[0] || null;
   logActivity(req, "CREATE_PURCHASE_ORDER", "PURCHASE_ORDER", row.id, { poNo: row.poNo, totalAmount: totalInclusiveVat });
   res.status(201).json({ ...row, supplier, grn });
 });
