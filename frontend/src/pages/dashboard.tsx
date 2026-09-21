@@ -367,7 +367,7 @@ export default function Dashboard() {
                       <TableRow key={issue.id}>
                         <TableCell className="text-xs">{format(new Date(issue.issuedAt),"MMM d")}</TableCell>
                         <TableCell className="text-sm">{issue.department?.name}</TableCell>
-                        <TableCell className="text-sm truncate max-w-[140px]" title={issue.item?.description}>{issue.item?.description}</TableCell>
+                        <TableCell className="text-sm truncate max-w-[140px]" title={issue.item?.description}><span className="font-mono text-xs text-primary">{issue.item?.itemCode || "—"}</span> — {issue.item?.description}</TableCell>
                         <TableCell className="text-right font-mono text-sm">{issue.quantity}</TableCell>
                       </TableRow>
                     ))}

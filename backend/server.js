@@ -1520,9 +1520,43 @@ function ensureKnownPackConversions() {
     if (rule) db.get("items").find({ id: item.id }).assign({ ...rule, openingUnit: item.openingUnit || item.unit }).write();
   }
 }
+function itemCodePrefix(category) {
+  const source = String(category?.name || "ITEM").toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return (source || "ITEM").slice(0, 12);
+}
+function generateItemCode(categoryId) {
+  const category = db.get("categories").find({ id: Number(categoryId) }).value();
+  const prefix = itemCodePrefix(category);
+  const charge = String(category?.chargeItemCode || "").trim().toUpperCase();
+  const scope = `${Number(categoryId) || 0}|${charge}`;
+  const used = new Set(db.get("items").value().filter(item => String(item.codeScope || "") === scope).map(item => String(item.itemCode || "")));
+  let sequence = 1;
+  let code = `${prefix}-${String(sequence).padStart(3, "0")}`;
+  while (used.has(code)) {
+    sequence += 1;
+    code = `${prefix}-${String(sequence).padStart(3, "0")}`;
+  }
+  return { itemCode: code, codeScope: scope };
+}
+function ensureItemCodes() {
+  const used = new Set();
+  for (const item of db.get("items").value()) {
+    if (item.itemCode && !used.has(item.itemCode)) {
+      used.add(item.itemCode);
+      continue;
+    }
+    const generated = generateItemCode(item.categoryId);
+    let code = generated.itemCode;
+    let n = 1;
+    while (used.has(code)) code = `${generated.itemCode}-${++n}`;
+    used.add(code);
+    db.get("items").find({ id: item.id }).assign({ ...generated, itemCode: code }).write();
+  }
+}
 function runMigrations() {
   ensureCatalogCategories();
   ensureKnownPackConversions();
+  ensureItemCodes();
   migratePurchasesToSuppliers();
   migratePurchasesToGrns();
   for (const user of db.get("users").value()) {
@@ -1876,7 +1910,7 @@ app.delete("/api/catalog/categories/:id", requirePermission("manageCatalog"), (r
 });
 
 // ITEMS
-app.get("/api/items",requireAnyPermission("viewCatalog", "manageCatalog"),(req,res)=>res.json(db.get("items").orderBy("description","asc").value().filter(item => { const c = db.get("categories").find({ id: Number(item.categoryId) }).value(); return !c || categoryAllows(req, c, "view"); })));
+app.get("/api/items",requireAnyPermission("viewCatalog", "manageCatalog"),(req,res)=>res.json(db.get("items").orderBy("description","asc").value().filter(item => { const c = db.get("categories").find({ id: Number(item.categoryId) }).value(); return !c || categoryAllows(req, c, "view"); }).map(item => ({ ...item, itemCode: item.itemCode || null, categoryName: db.get("categories").find({ id: Number(item.categoryId) }).value()?.name || null }))));
 app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),(req,res)=>{
   const items=db.get("items").orderBy("description","asc").value();
   const movementRows=db.get("stockMovements").value();
@@ -1899,13 +1933,17 @@ app.get("/api/items/stock",requireAnyPermission("viewCatalog", "manageCatalog"),
     const category = categories.get(Number(it.categoryId));
     const rawBalance=opening+purchased+adjustments-issued, expired=!!it.expiryDate && it.expiryDate < new Date().toISOString().slice(0,10);
     const conversion = itemConversion(it);
-    return { id:it.id, description:it.description, unit:conversion.baseUnit, packUnit:conversion.packUnit || null, packSize:conversion.packSize, quantityUnit:conversion.openingUnit, quantityLabel:quantityLabel(it), categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:expired ? 0 : rawBalance, rawStockBalance:rawBalance, expiryDate:it.expiryDate || null, expired };
+    return { id:it.id, itemCode:it.itemCode || null, description:it.description, unit:conversion.baseUnit, packUnit:conversion.packUnit || null, packSize:conversion.packSize, quantityUnit:conversion.openingUnit, quantityLabel:quantityLabel(it), categoryId:it.categoryId ?? null, categoryName:category?.name || null, quantity:opening, purchasedTotal:purchased, issuedTotal:issued, adjustmentTotal:adjustments, stockBalance:expired ? 0 : rawBalance, rawStockBalance:rawBalance, expiryDate:it.expiryDate || null, expired };
   }));
 });
 app.post("/api/items",requirePermission("manageCatalog"),(req,res)=>{
   const {description,unit,quantity}=req.body; if(!description||!unit) return res.status(400).json({error:"Missing fields"});
   if(db.get("items").find({description}).value()) return res.status(400).json({error:"Already exists"});
-  const row={id:nextId("items"),description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),baseUnit:String(req.body.baseUnit||unit).trim().toUpperCase(),packUnit:String(req.body.packUnit||"").trim().toUpperCase()||null,packSize:Number(req.body.packSize)>0?Number(req.body.packSize):1,openingUnit:String(req.body.openingUnit||unit).trim().toUpperCase(),categoryId:req.body.categoryId!=null?Number(req.body.categoryId):null,quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null,expiryDate:req.body.expiryDate||null};
+  const categoryId = req.body.categoryId != null ? Number(req.body.categoryId) : null;
+  const category = categoryId == null ? null : db.get("categories").find({ id: categoryId }).value();
+  if (req.body.categoryId != null && !category) return res.status(400).json({ error: "Category not found" });
+  const generated = generateItemCode(categoryId);
+  const row={id:nextId("items"),...generated,description:String(description).trim().toUpperCase(),unit:String(unit).trim().toUpperCase(),baseUnit:String(req.body.baseUnit||unit).trim().toUpperCase(),packUnit:String(req.body.packUnit||"").trim().toUpperCase()||null,packSize:Number(req.body.packSize)>0?Number(req.body.packSize):1,openingUnit:String(req.body.openingUnit||unit).trim().toUpperCase(),categoryId,quantity:Number(quantity)||0,lowStockThreshold:req.body.lowStockThreshold!=null&&req.body.lowStockThreshold!=""?Number(req.body.lowStockThreshold):null,expiryDate:req.body.expiryDate||null};
   db.get("items").push(row).write();
   logActivity(req, "CREATE_ITEM", "ITEM", row.id, { description: row.description });
   res.status(201).json(row);
@@ -1929,7 +1967,8 @@ app.post("/api/items/bulk", requirePermission("manageCatalog"), (req, res) => {
     const packUnit = String(input.packUnit || "").trim().toUpperCase() || null;
     const packSize = Number(input.packSize) > 0 ? Number(input.packSize) : 1;
     const openingUnit = String(input.openingUnit || baseUnit).trim().toUpperCase();
-    const row = { id: nextId("items"), description, unit, baseUnit, packUnit, packSize, openingUnit, categoryId, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null, createdByUserId: req.session.userId, createdAt: new Date().toISOString() };
+    const generated = generateItemCode(categoryId);
+    const row = { id: nextId("items"), ...generated, description, unit, baseUnit, packUnit, packSize, openingUnit, categoryId, quantity: Number(input.quantity) || 0, lowStockThreshold: input.lowStockThreshold !== undefined && input.lowStockThreshold !== "" ? Number(input.lowStockThreshold) : null, expiryDate: input.expiryDate || null, createdByUserId: req.session.userId, createdAt: new Date().toISOString() };
     db.get("items").push(row);
     seen.add(description); created.push(row);
   }
@@ -2137,6 +2176,7 @@ function supplierNameForPurchase(purchase) {
 
 function createMatchingGrnForPurchase(purchase, supplier, item, req) {
   const totalAmount = Number((Number(purchase.quantity) * Number(purchase.unitPrice)).toFixed(2));
+  const category = item.categoryId != null ? db.get("categories").find({ id: Number(item.categoryId) }).value() : null;
   const grn = {
     id: nextId("grns"),
     grnNo: genSequentialNo("GRN", "grns"),
@@ -2145,11 +2185,11 @@ function createMatchingGrnForPurchase(purchase, supplier, item, req) {
     supplierId: supplier.id,
     invoiceNo: purchase.invoiceNo || null,
     items: [{
-      itemCode: String(item.id), description: item.description,
+      itemId: item.id, itemCode: item.itemCode || String(item.id), description: item.description,
       unit: item.unit || null, qtyReceived: Number(purchase.quantity),
       unitCost: Number(purchase.unitPrice), totalCost: totalAmount,
       batchNo: purchase.batchNo || null, expiryDate: purchase.expiryDate || null,
-      chargeItemCode: null, folioNo: purchase.folioNo || null,
+      chargeItemCode: category?.chargeItemCode || null, folioNo: purchase.folioNo || null,
     }],
     totalAmount,
     status: "pending",
@@ -2237,7 +2277,7 @@ app.patch("/api/purchases/:id", requirePermission("editPurchases"), (req, res) =
       const totalAmount = Number((Number(updated.quantity) * Number(updated.unitPrice)).toFixed(2));
       linkedGrn.assign({
         date: updated.purchasedAt, lpoNo: updated.lpoNo || null, supplierId: supplier.id, invoiceNo: updated.invoiceNo || null,
-        items: [{ itemCode: String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargeItemCode: null, folioNo: updated.folioNo || null }],
+        items: [{ itemId: item.id, itemCode: item.itemCode || String(item.id), description: item.description, unit: item.unit || null, qtyReceived: Number(updated.quantity), unitCost: Number(updated.unitPrice), totalCost: totalAmount, batchNo: updated.batchNo || null, expiryDate: updated.expiryDate || null, chargeItemCode: db.get("categories").find({ id: Number(item.categoryId) }).value()?.chargeItemCode || null, folioNo: updated.folioNo || null }],
         totalAmount,
       }).write();
     }
@@ -2342,20 +2382,22 @@ function normalizeGrnItems(items) {
     const qtyReceived = it.qtyReceived === "" || it.qtyReceived == null ? null : Number(it.qtyReceived) || 0;
     const unitCost = Number(it.unitCost) || 0;
     const totalCost = Number(((qtyReceived || 0) * unitCost).toFixed(2)); totalAmount += totalCost;
-    return { itemId: it.itemId != null ? Number(it.itemId) : null, itemCode: it.itemCode || null, description: String(it.description || "").trim().toUpperCase(), unit: it.unit || null, qtyReceived, orderedQuantity: it.orderedQuantity != null ? Number(it.orderedQuantity) : null, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || null, folioNo: it.folioNo || null };
+    const catalogItem = it.itemId != null ? db.get("items").find({ id: Number(it.itemId) }).value() : null;
+    const category = catalogItem?.categoryId != null ? db.get("categories").find({ id: Number(catalogItem.categoryId) }).value() : null;
+    return { itemId: catalogItem?.id || (it.itemId != null ? Number(it.itemId) : null), itemCode: catalogItem?.itemCode || it.itemCode || null, description: String(catalogItem?.description || it.description || "").trim().toUpperCase(), unit: catalogItem?.unit || it.unit || null, qtyReceived, orderedQuantity: it.orderedQuantity != null ? Number(it.orderedQuantity) : null, unitCost, totalCost, batchNo: it.batchNo || null, expiryDate: it.expiryDate || null, chargeItemCode: it.chargeItemCode || it.chargedTo || category?.chargeItemCode || null, folioNo: it.folioNo || null };
   });
   return { cleanItems, totalAmount: Number(totalAmount.toFixed(2)) };
 }
 function reverseApprovedGrnAccounting(row, req) {
   if (independentAccountingEnabled()) return;
-  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: `EDIT-${row.grnNo}`, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal before editing ${row.grnNo}` });
+  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: `EDIT-${row.grnNo}`, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal before editing ${row.grnNo}` });
   postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `EDIT-REV-${row.grnNo}`, description: `Reverse goods received before editing — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - Number(row.totalAmount || 0)).toFixed(2)) }).write();
 }
 function applyApprovedGrnAccounting(row) {
   if (independentAccountingEnabled()) return;
-  for (const it of row.items || []) pushStockMovement({ date: row.date, itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Received from ${row.grnNo}` });
+  for (const it of row.items || []) pushStockMovement({ date: row.date, itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Received from ${row.grnNo}` });
   postJournalEntry({ date: row.date, reference: `EDIT-${row.grnNo}`, description: `Goods received after edit — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + Number(row.totalAmount || 0)).toFixed(2)) }).write();
@@ -2479,7 +2521,7 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
     if (!it.itemCode && !it.description) continue;
     pushStockMovement({
       date: row.date,
-      itemCode: it.itemCode || it.description,
+      itemCode: it.itemId || it.itemCode || it.description,
       description: it.description,
       unit: it.unit,
       reference: row.grnNo,
@@ -2512,7 +2554,7 @@ function applyGrnVoid(req, rowRef, row, reason, action = "VOID_GRN") {
   }
   for (const it of row.items || []) {
     if (!it.itemCode && !it.description) continue;
-    pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal of ${row.grnNo}: ${reason}` });
+    pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal of ${row.grnNo}: ${reason}` });
   }
   postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `VOID-${row.grnNo}`, description: `Void goods received — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
@@ -2562,7 +2604,7 @@ app.patch("/api/accounts/grns/:id/unvoid", requirePermission("manageAccounts"), 
     logActivity(req, "UNVOID_GRN_INDEPENDENT", "GRN", id, { grnNo: row.grnNo, reason });
     return res.json(ref.value());
   }
-  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Restored ${row.grnNo}: ${reason}` });
+  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Restored ${row.grnNo}: ${reason}` });
   postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `UNVOID-${row.grnNo}`, description: `Restore voided goods received — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + row.totalAmount).toFixed(2)) }).write();
@@ -3311,7 +3353,7 @@ function buildReport(startMonth,endMonth,itemId){
   const settings=getSettings();
   const OFFICER=settings.responsibleOfficer||"";
   const commodityMap=new Map();
-  for(const item of items) commodityMap.set(item.id,{itemId:item.id,itemDescription:item.description,unit:item.unit,rows:[],hasActivity:false});
+  for(const item of items) commodityMap.set(item.id,{itemId:item.id,itemCode:item.itemCode || null,itemDescription:item.description,unit:item.unit,rows:[],hasActivity:false});
   for(const month of months){
     const {start,end}=monthRange(month);
     const [y,m]=month.split("-").map(Number);
@@ -3352,6 +3394,43 @@ app.get("/api/reports/monthly",requirePermission("viewReports"),(req,res)=>{
 });
 
 // EXPORTS
+// Exports are delivered as ZIP archives so large downloads do not need to be
+// rendered or transferred as an uncompressed workbook/CSV.
+app.use("/api/export", (req, res, next) => {
+  if (req.method !== "GET") return next();
+  const originalWrite = res.write.bind(res);
+  const originalEnd = res.end.bind(res);
+  const chunks = [];
+  res.write = (chunk, encoding) => { if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding)); return true; };
+  res.end = async (chunk) => {
+    if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    if (res.statusCode >= 400) return originalEnd(Buffer.concat(chunks));
+    try {
+      const archiver = require("archiver");
+      const archive = archiver("zip", { zlib: { level: 9 } });
+      const zipChunks = [];
+      archive.on("data", data => zipChunks.push(data));
+      archive.on("error", error => { console.error("Export archive error:", error); originalEnd(Buffer.concat(chunks)); });
+      const disposition = res.getHeader("Content-Disposition");
+      const match = String(disposition || "").match(/filename="?([^"]+)"?/i);
+      const entryName = match?.[1] || "export.csv";
+      archive.append(Buffer.concat(chunks), { name: entryName });
+      await archive.finalize();
+      const zip = Buffer.concat(zipChunks);
+      res.removeHeader("Content-Type");
+      res.removeHeader("Content-Length");
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${entryName.replace(/\.(csv|xlsx)$/i, "")}.zip"`);
+      res.setHeader("Content-Length", zip.length);
+      originalEnd(zip);
+    } catch (error) {
+      console.error("Export archive error:", error);
+      originalEnd(Buffer.concat(chunks));
+    }
+  };
+  next();
+});
+
 app.get("/api/export/issues.csv",requirePermission("exportData"),(req,res)=>{
   const month=req.query.month,departmentId=req.query.departmentId?Number(req.query.departmentId):null;
   const itemId=req.query.itemId?Number(req.query.itemId):null,s11No=req.query.s11No?String(req.query.s11No).toLowerCase():null;

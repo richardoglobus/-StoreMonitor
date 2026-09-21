@@ -22,7 +22,7 @@ async function dl(url: string, filename: string, setLoading: (v: boolean) => voi
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = filename;
+    a.download = res.headers.get("content-disposition")?.match(/filename="?([^"]+)"?/i)?.[1] || filename.replace(/\.(csv|xlsx)$/i, ".zip");
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);

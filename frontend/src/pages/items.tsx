@@ -168,7 +168,7 @@ export default function Items() {
     updateItem.mutate({ itemId: editItemId, data: { description: editItem.description.trim().toUpperCase(), unit: editItem.unit.trim().toUpperCase(), baseUnit: editItem.baseUnit || editItem.unit, packUnit: editItem.packUnit, packSize: Number(editItem.packSize)||1, openingUnit: editItem.openingUnit || editItem.unit, categoryId: editItem.categoryId ? Number(editItem.categoryId) : null, quantity: Number(editItem.quantity)||0, lowStockThreshold: editItem.lowStockThreshold!==''?Number(editItem.lowStockThreshold):null, expiryDate: editItem.expiryDate || null } as any });
   };
 
-  const filteredItems = items?.filter(item => (!selectedCategoryId || item.categoryId === selectedCategoryId) && item.description.toLowerCase().includes(search.toLowerCase()));
+  const filteredItems = items?.filter(item => (!selectedCategoryId || item.categoryId === selectedCategoryId) && (item.description.toLowerCase().includes(search.toLowerCase()) || String(item.itemCode || "").toLowerCase().includes(search.toLowerCase())));
 
   // Items where issued > physical + purchased (impossible/data integrity issue)
   const negativeStockItems = (items ?? []).filter(i => i.stockBalance < 0);
@@ -279,7 +279,8 @@ export default function Items() {
         {expiredItems.length > 0 && (
           <div className="border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between"><div><h2 className="font-bold text-amber-800 dark:text-amber-300">Expired Items ({expiredItems.length})</h2><p className="text-xs text-amber-700 dark:text-amber-400">These items are excluded from available stock and cannot be issued.</p></div><Badge variant="destructive">EXPIRED</Badge></div>
-            <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Expiry Date</TableHead><TableHead className="text-right">Recorded Stock</TableHead><TableHead className="text-right">Available</TableHead></TableRow></TableHeader><TableBody>{expiredItems.map(item=><TableRow key={item.id}><TableCell className="font-medium">{item.description}</TableCell><TableCell>{item.categoryName || "—"}</TableCell><TableCell className="font-mono text-destructive font-semibold">{item.expiryDate || "—"}</TableCell><TableCell className="text-right font-mono">{(item.quantity || 0) + (item.purchasedTotal || 0)}</TableCell><TableCell className="text-right font-bold text-destructive">0</TableCell></TableRow>)}</TableBody></Table></div>
+            <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Item Code</TableHead><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>Expiry Date</TableHead><TableHead className="text-right">Recorded Stock</TableHead><TableHead className="text-right">Available</TableHead></TableRow></TableHeader><TableBody>{expiredItems.map(item=><TableRow key={item.id}>            <TableCell className="font-mono font-semibold text-primary">{item.itemCode || "—"}</TableCell>
+            <TableCell className="font-medium">{item.description}</TableCell><TableCell>{item.categoryName || "—"}</TableCell><TableCell className="font-mono text-destructive font-semibold">{item.expiryDate || "—"}</TableCell><TableCell className="text-right font-mono">{(item.quantity || 0) + (item.purchasedTotal || 0)}</TableCell><TableCell className="text-right font-bold text-destructive">0</TableCell></TableRow>)}</TableBody></Table></div>
           </div>
         )}
         {/* Emergency: negative stock banner */}
@@ -317,6 +318,7 @@ export default function Items() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Item Code</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="w-24 text-center">Unit</TableHead>
                   <TableHead className="w-28 text-right">Opening Stock</TableHead>
@@ -332,6 +334,7 @@ export default function Items() {
               <TableBody>
                 {isLoading ? Array(5).fill(0).map((_,i)=>(
                   <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-24"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-48"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-12 mx-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-16 ml-auto"/></TableCell>

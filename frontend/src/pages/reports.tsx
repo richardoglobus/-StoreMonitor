@@ -21,7 +21,7 @@ async function downloadCsv(url: string, filename: string, setLoading: (v: boolea
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = filename;
+    a.download = res.headers.get("content-disposition")?.match(/filename="?([^"]+)"?/i)?.[1] || filename.replace(/\.(csv|xlsx)$/i, ".zip");
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
@@ -144,7 +144,7 @@ export default function MonthlyReportPage() {
                 <Card key={commodity.itemId} className="overflow-hidden border shadow-sm">
                   {/* Commodity header */}
                   <CardHeader className="py-3 px-5 bg-muted/30 border-b">
-                    <CardTitle className="text-base">{commodity.itemDescription}</CardTitle>
+                    <CardTitle className="text-base">{commodity.itemCode ? `${commodity.itemCode} — ` : ""}{commodity.itemDescription}</CardTitle>
                     <CardDescription>Unit: {commodity.unit}</CardDescription>
                   </CardHeader>
 

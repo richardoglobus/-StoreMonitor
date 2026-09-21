@@ -18,7 +18,8 @@ async function downloadCsv(url: string, filename: string, setLoading: (v: boolea
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = filename;
+    const suggested = res.headers.get("content-disposition")?.match(/filename="?([^"]+)"?/i)?.[1];
+    a.download = suggested || filename.replace(/\.(csv|xlsx)$/i, ".zip");
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);

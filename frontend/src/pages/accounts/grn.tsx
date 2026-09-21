@@ -193,7 +193,7 @@ export default function GrnPage() {
                       <button onClick={() => removeLine(i)} className="absolute top-2 right-2 text-muted-foreground hover:text-destructive"><X className="h-4 w-4"/></button>
                     )}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <div className="space-y-1 col-span-2"><Label className="text-xs">Catalog item master</Label><Select value={l.itemId} onValueChange={v => { const item = (catalogItems || []).find((x: any) => String(x.id) === v); updateLine(i, "itemId", v); updateLine(i, "itemCode", v); updateLine(i, "description", item?.description || ""); updateLine(i, "unit", item?.unit || ""); }}><SelectTrigger><SelectValue placeholder="Select item from Catalog"/></SelectTrigger><SelectContent>{(catalogItems || []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.description} ({item.unit})</SelectItem>)}</SelectContent></Select></div>
+                      <div className="space-y-1 col-span-2"><Label className="text-xs">Catalog item master</Label><Select value={l.itemId} onValueChange={v => { const item = (catalogItems || []).find((x: any) => String(x.id) === v); updateLine(i, "itemId", v); updateLine(i, "itemCode", item?.itemCode || ""); updateLine(i, "description", item?.description || ""); updateLine(i, "unit", item?.unit || ""); }}><SelectTrigger><SelectValue placeholder="Select item from Catalog"/></SelectTrigger><SelectContent>{(catalogItems || []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.itemCode || "—"} — {item.description} ({item.unit})</SelectItem>)}</SelectContent></Select></div>
                       <div className="space-y-1 col-span-2 md:col-span-1"><Label className="text-xs">Item Code</Label><Input value={l.itemCode} readOnly/></div>
                       <div className="space-y-1 col-span-2 md:col-span-1"><Label className="text-xs">Description</Label><Input value={l.description} readOnly/></div>
                       <div className="space-y-1"><Label className="text-xs">Unit</Label><Input value={l.unit} onChange={e => updateLine(i, "unit", e.target.value)}/></div>
@@ -246,7 +246,7 @@ export default function GrnPage() {
                 <TableCell className="font-medium">{g.grnNo}</TableCell>
                 <TableCell>{g.date}</TableCell>
                 <TableCell>{g.supplier?.name ?? "—"}</TableCell>
-                <TableCell className="min-w-48">{(g.items || []).map((item: any) => item.description || item.itemCode || "—").join(", ") || "—"}</TableCell>
+                <TableCell className="min-w-48">{(g.items || []).map((item: any) => `${item.itemCode || "—"} — ${item.description || "—"}`).join(", ") || "—"}</TableCell>
                 <TableCell>{g.orderedQuantity ?? ((g.items || []).reduce((sum: number, item: any) => sum + Number(item.orderedQuantity || 0), 0) || "—")}</TableCell>
                 <TableCell>{(g.items || []).reduce((sum: number, item: any) => sum + Number(item.qtyReceived || 0), 0) || "—"}</TableCell>
                 {folder === "pending" && <TableCell>{Math.max(0, Number(g.orderedQuantity || 0) - (g.items || []).reduce((sum: number, item: any) => sum + Number(item.qtyReceived || 0), 0)) || "—"}</TableCell>}

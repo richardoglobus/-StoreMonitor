@@ -33,7 +33,7 @@ async function dl(url: string, filename: string, setLoading: (v: boolean) => voi
     if (!res.ok) { toast.error("Export failed"); return; }
     const blob = await res.blob();
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = filename;
+    a.href = URL.createObjectURL(blob); a.download = res.headers.get("content-disposition")?.match(/filename="?([^"]+)"?/i)?.[1] || filename.replace(/\.(csv|xlsx)$/i, ".zip");
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
   } catch { toast.error("Download error"); }
@@ -122,7 +122,7 @@ export default function Purchases() {
   };
 
   const filteredItems = (lineSearch: string) =>
-    lineSearch.trim() ? (items || []).filter(i => i.description.toLowerCase().includes(lineSearch.toLowerCase())) : (items || []);
+    lineSearch.trim() ? (items || []).filter(i => i.description.toLowerCase().includes(lineSearch.toLowerCase()) || String(i.itemCode || "").toLowerCase().includes(lineSearch.toLowerCase())) : (items || []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -311,7 +311,7 @@ export default function Purchases() {
                             </SelectTrigger>
                             <SelectContent>
                               {filteredItems(line.search).map(i => (
-                                <SelectItem key={i.id} value={i.id.toString()}>{i.description} ({i.unit})</SelectItem>
+                                <SelectItem key={i.id} value={i.id.toString()}>{i.itemCode || "—"} — {i.description} ({i.unit})</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -401,6 +401,7 @@ export default function Purchases() {
                   <TableHead>Supplier</TableHead>
                   <TableHead>Invoice</TableHead>
                   <TableHead>Folio</TableHead>
+                  <TableHead>Item Code</TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Unit Price</TableHead>
@@ -420,6 +421,7 @@ export default function Purchases() {
                     <TableCell className="text-sm font-medium">{p.supplier}</TableCell>
                     <TableCell className="text-xs text-muted-foreground font-mono">{p.invoiceNo||"—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground font-mono">{p.folioNo||"—"}</TableCell>
+                    <TableCell className="font-mono text-xs font-semibold text-primary">{p.item?.itemCode || "—"}</TableCell>
                     <TableCell><div className="font-medium text-sm">{p.item?.description}</div><div className="text-xs text-muted-foreground">{p.item?.unit}</div></TableCell>
                     <TableCell className="text-right font-mono text-sm">{p.quantity}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{fmt(p.unitPrice)}</TableCell>

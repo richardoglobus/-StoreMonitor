@@ -44,7 +44,7 @@ export type Permissions = {
 };
 export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
 export type Department = { id: number; name: string; slug: string };
-export type Item = { id: number; description: string; unit: string; quantity: number; categoryId?: number | null; categoryName?: string | null; expiryDate?: string | null; expired?: boolean };
+export type Item = { id: number; itemCode?: string | null; description: string; unit: string; quantity: number; categoryId?: number | null; categoryName?: string | null; expiryDate?: string | null; expired?: boolean };
 export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; adjustmentTotal: number; stockBalance: number; rawStockBalance?: number; packUnit?: string | null; packSize?: number; quantityUnit?: string; quantityLabel?: string };
 export type CatalogCategory = { id: number; name: string; chargeItemCode: string | null; viewRoles?: string[]; editRoles?: string[]; itemCount?: number; createdAt?: string };
 export type InventoryRow = { id: number; departmentId: number; itemId: number; month: string; physicalCount: number; receivedKemsa: number; receivedMeds: number; totalUsed: number; balance: number; item: Item };

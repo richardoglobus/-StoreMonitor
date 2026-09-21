@@ -41,7 +41,7 @@ async function downloadFile(url: string, filename: string, setLoading: (v: boole
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = filename;
+    a.download = res.headers.get("content-disposition")?.match(/filename="?([^"]+)"?/i)?.[1] || filename.replace(/\.(csv|xlsx)$/i, ".zip");
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
@@ -191,7 +191,7 @@ export default function DepartmentDetail() {
                   <div className="space-y-2"><Label>Item</Label>
                     <Select value={selectedItemId} onValueChange={setSelectedItemId}>
                       <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
-                      <SelectContent>{items?.map(i => <SelectItem key={i.id} value={i.id.toString()}>{i.description}</SelectItem>)}</SelectContent>
+                      <SelectContent>{items?.map(i => <SelectItem key={i.id} value={i.id.toString()}>{i.itemCode || "—"} — {i.description}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -219,7 +219,7 @@ export default function DepartmentDetail() {
                   <div className="space-y-2"><Label>Item</Label>
                     <Select value={selectedItemId} onValueChange={setSelectedItemId}>
                       <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
-                      <SelectContent>{items?.map(i => <SelectItem key={i.id} value={i.id.toString()}>{i.description}</SelectItem>)}</SelectContent>
+                      <SelectContent>{items?.map(i => <SelectItem key={i.id} value={i.id.toString()}>{i.itemCode || "—"} — {i.description}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2"><Label>Source</Label>

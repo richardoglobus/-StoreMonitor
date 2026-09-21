@@ -64,7 +64,7 @@ function VoucherItemRow({
   canRemove: boolean;
 }) {
   const filtered = vItem.search
-    ? itemStock.filter(i => i.description.toLowerCase().includes(vItem.search.toLowerCase()))
+    ? itemStock.filter(i => i.description.toLowerCase().includes(vItem.search.toLowerCase()) || String(i.itemCode || "").toLowerCase().includes(vItem.search.toLowerCase()))
     : itemStock;
 
   const selectedItem = vItem.itemId ? itemStock.find(i => i.id === Number(vItem.itemId)) : null;
@@ -99,7 +99,7 @@ function VoucherItemRow({
                 <div className="px-3 py-2 text-sm text-muted-foreground">No items match</div>
               ) : filtered.map(item => (
                 <SelectItem key={item.id} value={item.id.toString()} disabled={item.stockBalance <= 0 || item.expired}>
-                  {item.description} ({item.expired ? "EXPIRED" : `${item.stockBalance} ${item.unit}`})
+                  {item.itemCode || "—"} — {item.description} ({item.expired ? "EXPIRED" : `${item.stockBalance} ${item.unit}`})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -617,6 +617,7 @@ export default function Issues() {
                       </TableCell>
                       <TableCell className="text-sm">{issue.department?.name}</TableCell>
                       <TableCell>
+                        <div className="font-mono text-xs font-semibold text-primary">{issue.item?.itemCode || "—"}</div>
                         <div className="font-medium text-sm">{issue.item?.description}</div>
                         <div className="text-xs text-muted-foreground">{issue.item?.unit}</div>
                       </TableCell>
