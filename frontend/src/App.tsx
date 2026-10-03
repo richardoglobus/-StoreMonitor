@@ -31,6 +31,8 @@ import PaymentsPage from "@/pages/accounts/payments";
 import FinancialReportsPage from "@/pages/accounts/financial-reports";
 import ChartOfAccountsPage from "@/pages/accounts/chart-of-accounts";
 import JournalEntriesPage from "@/pages/accounts/journal-entries";
+import PaymentEntryFormPage from "@/pages/accounts/payment-entry-form";
+import ModesOfPaymentPage from "@/pages/accounts/modes-of-payment";
 
 import CatalogCategoriesPage from "@/pages/catalog-categories";
 import { AlertTriangle } from "lucide-react";
@@ -140,7 +142,9 @@ function AppWithAuth() {
         <Route path="/accounts/supplier-invoices" component={SupplierInvoicesPage} />
         <Route path="/accounts/stock-movement" component={StockMovementPage} />
         <Route path="/accounts/suppliers" component={SuppliersPage} />
+        <Route path="/accounts/payments/new" component={PaymentEntryFormPage} />
         <Route path="/accounts/payments" component={PaymentsPage} />
+        <Route path="/accounts/modes-of-payment" component={ModesOfPaymentPage} />
         <Route path="/accounts/financial-reports" component={FinancialReportsPage} />
         <Route path="/accounts/chart-of-accounts" component={ChartOfAccountsPage} />
         <Route path="/accounts/journal-entries" component={JournalEntriesPage} />

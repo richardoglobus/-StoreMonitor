@@ -6,7 +6,7 @@ import {
   Download, Menu, ShoppingCart, BarChart3, Users,
   LogOut, User as UserIcon, Sun, Moon, Settings2, TrendingUp,
   Heart, Shield, Star, Cross, Stethoscope, Pill, Activity, Leaf,
-  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked, BookOpen, Tag,
+  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked, BookOpen, Tag, CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -49,6 +49,7 @@ const NAV_ITEMS = [
       { href: "/accounts/stock-movement",    label: "Stock Movement",       icon: PackageSearch, permission: "viewAccounts" },
       { href: "/accounts/suppliers",         label: "Suppliers",            icon: Users,         permission: "viewAccounts" },
       { href: "/accounts/payments",          label: "Payment Entries",      icon: Wallet,        permission: "viewAccounts" },
+      { href: "/accounts/modes-of-payment",  label: "Modes of Payment",     icon: CreditCard,    permission: "viewAccounts" },
       { href: "/accounts/journal-entries",   label: "Journal Entries",       icon: BookOpen,     permission: "viewAccounts" },
       { href: "/accounts/financial-reports", label: "Financial Reports",    icon: BarChart3,     permission: "viewAccounts" },
       { href: "/accounts/chart-of-accounts", label: "Chart of Accounts",    icon: BookMarked,    permission: "viewAccounts" },
@@ -156,7 +157,7 @@ export function Layout({ children }: { children: ReactNode }) {
       "/dashboard": "Dashboard",
       "/issues": "Issues Log", "/purchases": "Purchases", "/items": "Item Catalog",
       "/accounts/purchase-orders": "Purchase Orders", "/accounts/grn": "GRN / Delivery Notes",
-      "/accounts/supplier-invoices": "Supplier Invoices", "/accounts/payments": "Payment Entries",
+      "/accounts/supplier-invoices": "Supplier Invoices", "/accounts/payments": "Payment Entries", "/accounts/payments/new": "New Payment Entry", "/accounts/modes-of-payment": "Modes of Payment",
       "/accounts/journal-entries": "Journal Entries", "/reports": "Reports",
     };
     const key = `storemonitor.recentVisits.${user.id}`;

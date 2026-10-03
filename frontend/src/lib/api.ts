@@ -315,7 +315,9 @@ export type Supplier = { id: number; name: string; contactPerson: string | null;
 export type GrnItem = { itemId?: number | null; itemCode: string | null; description: string; unit: string | null; qtyReceived: number; orderedQuantity?: number | null; unitCost: number; totalCost: number; batchNo: string | null; expiryDate: string | null; chargeItemCode: string | null; folioNo: string | null };
 export type Grn = { id: number; grnNo: string; date: string; receivedDate?: string | null; lpoNo: string | null; orderRefType?: string | null; orderRefNo?: string | null; deliveryNoteNo?: string | null; supplierId: number; invoiceNo: string | null; items: GrnItem[]; totalAmount: number; status: "pending" | "approved" | "voided"; createdBy: number | null; createdAt: string; approvedBy: number | null; approvedAt: string | null; approvedByName?: string | null; sourcePurchaseId?: number | null; sourcePurchaseOrderId?: number | null; sourcePurchaseOrderLineId?: number | null; orderedQuantity?: number | null; voidedBy?: number | null; voidedAt?: string | null; voidedByName?: string | null; voidReason?: string | null; voidRequestStatus?: "pending" | "approved" | "rejected" | null; voidRequestedBy?: number | null; voidRequestedAt?: string | null; voidRequestedByName?: string | null; voidRequestReason?: string | null; voidReviewedBy?: number | null; voidReviewedByName?: string | null; voidReviewedAt?: string | null; voidReviewNote?: string | null; supplier?: Supplier | null };
 export type StockMovement = { id: number | string; date: string; itemCode: string; description: string; unit: string | null; reference: string; transactionType: "OPENING" | "GRN" | "GRN_REVERSAL" | "ADJUSTMENT" | "ISSUE"; qtyIn: number; qtyOut: number; balance: number; note: string | null };
-export type PaymentEntry = { id: number; date: string; supplierId: number; supplierInvoiceId?: number | null; amount: number; method: string; reference: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };
+export type PaymentAllocation = { invoiceId: number; amount: number };
+export type PaymentEntry = { id: number; date: string; supplierId: number; supplierInvoiceId?: number | null; allocations?: PaymentAllocation[]; amount: number; method: string; modeOfPayment?: string; paymentType?: "pay" | "receive"; status?: "draft" | "submitted"; bankAccount?: string; payableAccount?: string; reference: string | null; referenceDate?: string | null; note: string | null; createdBy: number; createdAt: string; supplier?: Supplier | null };
+export type ModeOfPayment = { id: number; name: string; type: string; accountCode: string; enabled: boolean; isDefault: boolean };
 export type ChartAccount = { id: number; code: string; name: string; type: string; balance: number; isDefault: boolean };
 export type JournalEntry = { id: number; date: string; reference: string; description: string; debitAccount: string; creditAccount: string; amount: number; note?: string | null; source?: string };
 export type PurchaseOrderLine = { itemId: number | null; description: string; unit: string | null; quantity: number; unitPrice: number; totalPrice: number };
@@ -399,6 +401,22 @@ export function useListPayments(params?: any, options?: QueryOpts<PaymentEntry[]
 }
 export function useCreatePayment(options?: MutOpts<PaymentEntry, { data: any }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<PaymentEntry>("/api/accounts/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useSubmitPayment(options?: MutOpts<PaymentEntry, { paymentId: number }>) {
+  return useMutation({ mutationFn: ({ paymentId }) => apiFetch<PaymentEntry>(`/api/accounts/payments/${paymentId}/submit`, { method: "PATCH" }), ...options?.mutation });
+}
+export const getListModesOfPaymentQueryKey = () => ["/api/accounts/modes-of-payment"] as const;
+export function useListModesOfPayment(options?: QueryOpts<ModeOfPayment[]>) {
+  return useQuery({ queryKey: getListModesOfPaymentQueryKey(), queryFn: () => apiFetch<ModeOfPayment[]>("/api/accounts/modes-of-payment"), ...options?.query });
+}
+export function useCreateModeOfPayment(options?: MutOpts<ModeOfPayment, { data: any }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<ModeOfPayment>("/api/accounts/modes-of-payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useUpdateModeOfPayment(options?: MutOpts<ModeOfPayment, { id: number; data: any }>) {
+  return useMutation({ mutationFn: ({ id, data }) => apiFetch<ModeOfPayment>(`/api/accounts/modes-of-payment/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export function useDeleteModeOfPayment(options?: MutOpts<void, { id: number }>) {
+  return useMutation({ mutationFn: ({ id }) => apiFetch<void>(`/api/accounts/modes-of-payment/${id}`, { method: "DELETE" }), ...options?.mutation });
 }
 export function useDeletePayment(options?: MutOpts<void, { paymentId: number }>) {
   return useMutation({ mutationFn: ({ paymentId }) => apiFetch<void>(`/api/accounts/payments/${paymentId}`, { method: "DELETE" }), ...options?.mutation });

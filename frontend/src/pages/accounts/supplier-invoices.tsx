@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { format } from "date-fns";
+import { useMemo, useState } from "react";
+import { format, startOfMonth } from "date-fns";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
@@ -24,6 +24,14 @@ const dateCls = "w-full h-9 rounded-md border border-input bg-background px-3 te
 
 const emptyInv = { date: format(new Date(), "yyyy-MM-dd"), supplierId: "", invoiceNo: "", purchaseOrderId: "", grnId: "", amount: "", dueDate: "", debitAccount: "5000", note: "" };
 
+const STATUS_STYLE: Record<string, { dot: string; label: string; legend: string }> = {
+  paid: { dot: "bg-green-500", label: "Paid", legend: "Paid" },
+  "part-paid": { dot: "bg-yellow-400", label: "Partly Paid", legend: "Partly Paid" },
+  overdue: { dot: "bg-red-500", label: "Overdue", legend: "Overdue" },
+  unpaid: { dot: "bg-blue-500", label: "Unpaid", legend: "Unpaid / Submitted" },
+  draft: { dot: "bg-gray-400", label: "Draft", legend: "Draft / Cancelled" },
+};
+
 function addDaysToDate(dateStr: string, days: number) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + days);
@@ -44,6 +52,9 @@ export default function SupplierInvoicesPage() {
   const qc = useQueryClient();
   const [invOpen, setInvOpen] = useState(false);
   const [inv, setInv] = useState(emptyInv);
+  const today = format(new Date(), "yyyy-MM-dd");
+  const [fDraft, setFDraft] = useState({ from: format(startOfMonth(new Date()), "yyyy-MM-dd"), to: today, q: "", status: "all" });
+  const [f, setF] = useState(fDraft);
 
   const { data: suppliers } = useListSuppliers();
   const { data: orders } = useListPurchaseOrders();
@@ -56,6 +67,20 @@ export default function SupplierInvoicesPage() {
       onError: (e: any) => toast.error(e?.error || "Could not record invoice"),
     },
   });
+
+  const statusOf = (i: any): string => {
+    if (i.status === "draft" || i.status === "cancelled") return "draft";
+    if (i.status === "paid") return "paid";
+    if (i.dueDate && i.dueDate < today) return "overdue";
+    return i.status === "part-paid" ? "part-paid" : "unpaid";
+  };
+  const rows = useMemo(() => (invoices ?? []).filter((i: any) => {
+    if (f.from && i.date < f.from) return false;
+    if (f.to && i.date > f.to) return false;
+    if (f.q && !(i.supplier?.name ?? "").toLowerCase().includes(f.q.toLowerCase())) return false;
+    if (f.status !== "all" && statusOf(i) !== f.status) return false;
+    return true;
+  }), [invoices, f]);
 
   const is = (k: string, v: string) => setInv(x => ({ ...x, [k]: v }));
   const fmt = (n: number) => `KES ${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
@@ -83,12 +108,12 @@ export default function SupplierInvoicesPage() {
     <Layout>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" />Purchase / Supplier Invoices</h1>
-          <p className="text-sm text-muted-foreground">Step 3 of Accounts: Purchase Order → GRN (Goods Received) → Purchase/Supplier Invoice.</p>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" />Purchase Invoices</h1>
+          <p className="text-sm text-muted-foreground">Supplier bills and purchase records</p>
         </div>
         <div className="flex items-center gap-2"><AccountRefreshButton />{manage && (
           <Dialog open={invOpen} onOpenChange={setInvOpen}>
-            <DialogTrigger asChild><Button className="gap-2"><Plus className="h-4 w-4" />New Invoice</Button></DialogTrigger>
+            <DialogTrigger asChild><Button className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"><Plus className="h-4 w-4" />New Invoice</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Record Supplier Invoice</DialogTitle></DialogHeader>
               <div className="space-y-3">
@@ -147,30 +172,48 @@ export default function SupplierInvoicesPage() {
       </div>
       </div>
 
+      <Card className="mb-3 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div><div className="mb-1 text-xs text-muted-foreground">From Date</div><input type="date" className={dateCls} value={fDraft.from} onChange={e => setFDraft(x => ({ ...x, from: e.target.value }))} /></div>
+          <div><div className="mb-1 text-xs text-muted-foreground">To Date</div><input type="date" className={dateCls} value={fDraft.to} onChange={e => setFDraft(x => ({ ...x, to: e.target.value }))} /></div>
+          <div className="min-w-[180px] flex-1"><div className="mb-1 text-xs text-muted-foreground">Supplier</div><Input placeholder="Search supplier..." value={fDraft.q} onChange={e => setFDraft(x => ({ ...x, q: e.target.value }))} /></div>
+          <div><div className="mb-1 text-xs text-muted-foreground">Status</div>
+            <select className={dateCls} value={fDraft.status} onChange={e => setFDraft(x => ({ ...x, status: e.target.value }))}>
+              <option value="all">All Statuses</option><option value="paid">Paid</option><option value="part-paid">Partly Paid</option><option value="overdue">Overdue</option><option value="unpaid">Unpaid / Submitted</option><option value="draft">Draft / Cancelled</option>
+            </select></div>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setF(fDraft)}>Apply</Button>
+          <Button variant="outline" onClick={() => { const r = { from: "", to: "", q: "", status: "all" }; setFDraft(r); setF(r); }}>Reset</Button>
+        </div>
+      </Card>
+      <div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
+        {Object.entries(STATUS_STYLE).map(([k, v]) => <span key={k} className="flex items-center gap-1.5"><i className={`h-2 w-2 rounded-full ${v.dot}`} />{v.legend}</span>)}
+      </div>
+
       <Card className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Invoice</TableHead><TableHead>Date</TableHead><TableHead>Supplier</TableHead>
-              <TableHead className="text-right">Amount</TableHead><TableHead className="text-right">Paid</TableHead><TableHead>Status</TableHead>
+              <TableHead>Invoice</TableHead><TableHead>Date</TableHead><TableHead>Due Date</TableHead><TableHead>Supplier</TableHead>
+              <TableHead className="text-right">Amount</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Outstanding</TableHead><TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!isLoading && (invoices ?? []).length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No supplier invoices recorded yet.</TableCell></TableRow>}
-            {(invoices || []).map(i => (
+            {!isLoading && rows.length === 0 && <TableRow><TableCell colSpan={8} className="py-14 text-center text-muted-foreground"><FileText className="mx-auto mb-2 h-8 w-8 opacity-40" /><div className="font-medium text-foreground">No purchase invoices found</div><div className="text-xs">Try adjusting your date range, supplier, or status filter.</div></TableCell></TableRow>}
+            {rows.map((i: any) => { const st = STATUS_STYLE[statusOf(i)]; return (
               <TableRow key={i.id}>
                 <TableCell className="font-medium">{i.invoiceNo}</TableCell>
                 <TableCell className="text-sm">{i.date}</TableCell>
+                <TableCell className="text-sm">{i.dueDate || "—"}</TableCell>
                 <TableCell>{i.supplier?.name || "—"}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{fmt(i.amount)}</TableCell>
                 <TableCell className="text-right font-mono text-sm">{fmt(i.paidAmount || 0)}</TableCell>
-                <TableCell><Badge variant="outline">{i.status}</Badge></TableCell>
-              </TableRow>
-            ))}
+                <TableCell className="text-right font-mono text-sm">{fmt(Number(i.amount) - Number(i.paidAmount || 0))}</TableCell>
+                <TableCell><span className="flex items-center gap-1.5 text-sm whitespace-nowrap"><i className={`h-2 w-2 rounded-full ${st.dot}`} />{st.label}</span></TableCell>
+              </TableRow>); })}
           </TableBody>
         </Table>
       </Card>
-      <p className="text-xs text-muted-foreground mt-4"><FileText className="inline h-3 w-3 mr-1" />Payments are recorded from the Payment Entries screen and can be assigned to an invoice.</p>
+      <p className="text-xs text-muted-foreground mt-4"><FileText className="inline h-3 w-3 mr-1" />Payments are recorded from the Payment Entries screen; use "Get Outstanding Invoices" there to settle these invoices.</p>
     </Layout>
   );
 }

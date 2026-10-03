@@ -1122,11 +1122,11 @@ function seedAssets() {
 db.defaults({
   _seq: { users: 0, departments: 0, items: 0, inventory: 0, receipts: 0, issues: 0, purchases: 0, activities: 0,
           grns: 0, suppliers: 0, paymentEntries: 0, chartOfAccounts: 0, journalEntries: 0, stockMovements: 0,
-          purchaseOrders: 0, supplierInvoices: 0 },
+          purchaseOrders: 0, supplierInvoices: 0, modesOfPayment: 0 },
   users: [], departments: [], items: [], inventory: [],
   receipts: [], issues: [], purchases: [], activities: [], assets: [], assetCategories: [],
   grns: [], suppliers: [], paymentEntries: [], chartOfAccounts: [], journalEntries: [], stockMovements: [],
-  purchaseOrders: [], supplierInvoices: []
+  purchaseOrders: [], supplierInvoices: [], modesOfPayment: []
 }).write();
 
 // Seed default Chart of Accounts if empty
@@ -1140,6 +1140,19 @@ if (db.get("chartOfAccounts").value().length === 0) {
   ];
   for (const a of defaultAccounts) {
     db.get("chartOfAccounts").push({ id: nextId("chartOfAccounts"), ...a, balance: 0, isDefault: true }).write();
+  }
+}
+
+// Seed default Modes of Payment if empty
+if (db.get("modesOfPayment").value().length === 0) {
+  const defaultModes = [
+    { name: "Cash",          type: "Cash",         accountCode: "1200" },
+    { name: "Bank Transfer", type: "Bank",         accountCode: "1100" },
+    { name: "Cheque",        type: "Bank",         accountCode: "1100" },
+    { name: "M-Pesa",        type: "Mobile Money", accountCode: "1100" },
+  ];
+  for (const m of defaultModes) {
+    db.get("modesOfPayment").push({ id: nextId("modesOfPayment"), ...m, enabled: true, isDefault: true }).write();
   }
 }
 
@@ -2771,46 +2784,138 @@ app.get("/api/accounts/payments", requirePermission("viewAccounts"), (req, res) 
   if (req.query.supplierId) rows = rows.filter(r => r.supplierId === Number(req.query.supplierId));
   res.json(rows.map(r => ({ ...r, supplier: supplierMap.get(r.supplierId) || null })));
 });
-app.post("/api/accounts/payments", requirePermission("manageAccounts"), (req, res) => {
-  const { date, supplierId, amount, method, reference, note, supplierInvoiceId } = req.body;
-  if (!date || !supplierId || !amount) return res.status(400).json({ error: "Date, supplier and amount are required" });
-  const supplier = db.get("suppliers").find({ id: Number(supplierId) }).value();
-  if (!supplier) return res.status(400).json({ error: "Supplier not found" });
-  const amt = Number(amount);
-  const invoice = supplierInvoiceId ? db.get("supplierInvoices").find({ id: Number(supplierInvoiceId) }).value() : null;
-  if (supplierInvoiceId && (!invoice || Number(invoice.supplierId) !== supplier.id)) return res.status(400).json({ error: "Supplier invoice not found for this supplier" });
-  if (invoice && amt > Number(invoice.amount) - Number(invoice.paidAmount || 0)) return res.status(400).json({ error: "Payment exceeds the supplier invoice balance" });
-  const row = { id: nextId("paymentEntries"), date, supplierId: Number(supplierId), supplierInvoiceId: invoice?.id || null, amount: amt, method: method || "Bank", reference: reference || null, note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
-  db.get("paymentEntries").push(row).write();
-  // Accounting: Debit Accounts Payable, Credit Bank
+function legacyPaymentAccounts(row) {
+  return {
+    bank: row.bankAccount || (row.method === "Cash" ? "1200" : "1100"),
+    payable: row.payableAccount || "2000",
+  };
+}
+function paymentAllocations(row) {
+  if (Array.isArray(row.allocations) && row.allocations.length) return row.allocations;
+  return row.supplierInvoiceId ? [{ invoiceId: Number(row.supplierInvoiceId), amount: row.amount }] : [];
+}
+function applyPaymentEffects(row, supplier, reverse = false) {
+  const sign = reverse ? -1 : 1;
+  const isReceive = row.paymentType === "receive";
+  const { bank, payable } = legacyPaymentAccounts(row);
+  // Pay: Dr Payable / Cr Bank.  Receive (supplier refund): Dr Bank / Cr Payable.  Reverse swaps the sides.
+  let debit = isReceive ? bank : payable, credit = isReceive ? payable : bank;
+  if (reverse) [debit, credit] = [credit, debit];
   postJournalEntry({
-    date, reference: reference || `PMT-${row.id}`,
-    description: `Payment to ${supplier.name}`,
-    debitAccount: "2000", creditAccount: method === "Cash" ? "1200" : "1100", amount: amt,
+    date: reverse ? new Date().toISOString().slice(0, 10) : row.date,
+    reference: reverse ? `REV-${row.reference || `PMT-${row.id}`}` : (row.reference || `PMT-${row.id}`),
+    description: `${reverse ? "Reverse payment" : isReceive ? "Refund received from" : "Payment to"} ${supplier?.name || "supplier"}`,
+    debitAccount: debit, creditAccount: credit, amount: row.amount,
   });
-  db.get("suppliers").find({ id: supplier.id }).assign({ balance: Number((supplier.balance - amt).toFixed(2)) }).write();
-  if (invoice) {
-    const paidAmount = Number((Number(invoice.paidAmount || 0) + amt).toFixed(2));
-    db.get("supplierInvoices").find({ id: invoice.id }).assign({ paidAmount, status: paidAmount >= Number(invoice.amount) ? "paid" : "part-paid" }).write();
+  if (supplier) {
+    const delta = (isReceive ? row.amount : -row.amount) * sign;
+    db.get("suppliers").find({ id: supplier.id }).assign({ balance: Number((Number(supplier.balance || 0) + delta).toFixed(2)) }).write();
   }
-  logActivity(req, "CREATE_PAYMENT", "PAYMENT", row.id, { supplierId: row.supplierId, amount: amt });
+  for (const a of paymentAllocations(row)) {
+    const inv = db.get("supplierInvoices").find({ id: Number(a.invoiceId) });
+    if (!inv.value()) continue;
+    const paidAmount = Math.max(0, Number((Number(inv.value().paidAmount || 0) + Number(a.amount) * sign).toFixed(2)));
+    inv.assign({ paidAmount, status: paidAmount >= Number(inv.value().amount) ? "paid" : paidAmount > 0 ? "part-paid" : "unpaid" }).write();
+  }
+}
+app.post("/api/accounts/payments", requirePermission("manageAccounts"), (req, res) => {
+  const b = req.body;
+  const paymentType = b.paymentType === "receive" ? "receive" : "pay";
+  const status = b.status === "draft" ? "draft" : "submitted";
+  if (!b.date || !b.supplierId || !b.amount) return res.status(400).json({ error: "Date, supplier and amount are required" });
+  const supplier = db.get("suppliers").find({ id: Number(b.supplierId) }).value();
+  if (!supplier) return res.status(400).json({ error: "Supplier not found" });
+  const amt = Number(b.amount);
+  if (!(amt > 0)) return res.status(400).json({ error: "Amount must be greater than zero" });
+  const mode = b.modeOfPayment ? db.get("modesOfPayment").find({ name: String(b.modeOfPayment) }).value() : null;
+  if (!mode && !b.method) return res.status(400).json({ error: "Mode of payment is required" });
+  const bankAccount = String(b.bankAccount || mode?.accountCode || (b.method === "Cash" ? "1200" : "1100"));
+  const payableAccount = String(b.payableAccount || "2000");
+  for (const code of [bankAccount, payableAccount]) if (!db.get("chartOfAccounts").find({ code }).value()) return res.status(400).json({ error: `Account ${code} does not exist in the Chart of Accounts` });
+  // Allocations to outstanding invoices (pay only). Accepts legacy single supplierInvoiceId too.
+  let allocations = Array.isArray(b.allocations) ? b.allocations : (b.supplierInvoiceId ? [{ invoiceId: b.supplierInvoiceId, amount: amt }] : []);
+  allocations = paymentType === "pay" ? allocations.map(a => ({ invoiceId: Number(a.invoiceId), amount: Number(a.amount) })).filter(a => a.amount > 0) : [];
+  let allocated = 0;
+  for (const a of allocations) {
+    const inv = db.get("supplierInvoices").find({ id: a.invoiceId }).value();
+    if (!inv || Number(inv.supplierId) !== supplier.id) return res.status(400).json({ error: "Supplier invoice not found for this supplier" });
+    if (a.amount > Number(inv.amount) - Number(inv.paidAmount || 0) + 0.005) return res.status(400).json({ error: `Allocation exceeds the balance of invoice ${inv.invoiceNo}` });
+    allocated += a.amount;
+  }
+  if (allocated > amt + 0.005) return res.status(400).json({ error: "Allocated amount is more than the paid amount" });
+  const row = {
+    id: nextId("paymentEntries"), paymentType, status, date: b.date, supplierId: supplier.id,
+    supplierInvoiceId: allocations[0]?.invoiceId || null, allocations, amount: amt,
+    modeOfPayment: mode?.name || b.method, method: mode ? (mode.type === "Cash" ? "Cash" : mode.name) : b.method,
+    bankAccount, payableAccount, reference: b.reference || null, referenceDate: b.referenceDate || null,
+    note: b.note || b.remarks || null, createdBy: req.session.userId, createdAt: new Date().toISOString(),
+  };
+  db.get("paymentEntries").push(row).write();
+  if (status === "submitted") applyPaymentEffects(row, supplier);
+  logActivity(req, status === "draft" ? "DRAFT_PAYMENT" : "CREATE_PAYMENT", "PAYMENT", row.id, { supplierId: row.supplierId, amount: amt });
   res.status(201).json(row);
+});
+app.patch("/api/accounts/payments/:id/submit", requirePermission("manageAccounts"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("paymentEntries").find({ id }).value();
+  if (!row) return res.status(404).json({ error: "Payment not found" });
+  if (row.status !== "draft") return res.status(400).json({ error: "Only draft payments can be submitted" });
+  const supplier = db.get("suppliers").find({ id: row.supplierId }).value();
+  for (const a of paymentAllocations(row)) {
+    const inv = db.get("supplierInvoices").find({ id: Number(a.invoiceId) }).value();
+    if (!inv || a.amount > Number(inv.amount) - Number(inv.paidAmount || 0) + 0.005) return res.status(400).json({ error: "An allocated invoice no longer has enough outstanding balance" });
+  }
+  applyPaymentEffects(row, supplier);
+  db.get("paymentEntries").find({ id }).assign({ status: "submitted", submittedAt: new Date().toISOString() }).write();
+  logActivity(req, "SUBMIT_PAYMENT", "PAYMENT", id, null);
+  res.json(db.get("paymentEntries").find({ id }).value());
 });
 app.delete("/api/accounts/payments/:id", requirePermission("deleteTransactions"), (req, res) => {
   const id = Number(req.params.id);
   const row = db.get("paymentEntries").find({ id }).value();
   if (!row) return res.status(404).json({ error: "Payment not found" });
-  const supplier = db.get("suppliers").find({ id: row.supplierId });
-  if (supplier.value()) supplier.assign({ balance: Number((supplier.value().balance + row.amount).toFixed(2)) }).write();
-  if (row.supplierInvoiceId) {
-    const invoice = db.get("supplierInvoices").find({ id: Number(row.supplierInvoiceId) });
-    if (invoice.value()) {
-      const paidAmount = Math.max(0, Number((Number(invoice.value().paidAmount || 0) - Number(row.amount || 0)).toFixed(2)));
-      invoice.assign({ paidAmount, status: paidAmount > 0 ? "part-paid" : "unpaid" }).write();
-    }
-  }
+  if (row.status !== "draft") applyPaymentEffects(row, db.get("suppliers").find({ id: row.supplierId }).value(), true);
   db.get("paymentEntries").remove({ id }).write();
   logActivity(req, "DELETE_PAYMENT", "PAYMENT", id, null);
+  res.status(204).send();
+});
+
+// ── Modes of Payment ─────────────────────────────────────────────────────
+app.get("/api/accounts/modes-of-payment", requireAnyPermission("viewAccounts", "manageAccounts"), (_req, res) => {
+  res.json(db.get("modesOfPayment").sortBy("name").value());
+});
+app.post("/api/accounts/modes-of-payment", requirePermission("manageAccounts"), (req, res) => {
+  const { name, type, accountCode } = req.body;
+  if (!name || !String(name).trim() || !type || !accountCode) return res.status(400).json({ error: "Name, type and default account are required" });
+  if (db.get("modesOfPayment").find(m => m.name.toLowerCase() === String(name).trim().toLowerCase()).value()) return res.status(400).json({ error: "A mode of payment with this name already exists" });
+  if (!db.get("chartOfAccounts").find({ code: String(accountCode) }).value()) return res.status(400).json({ error: "Default account must exist in the Chart of Accounts" });
+  const row = { id: nextId("modesOfPayment"), name: String(name).trim(), type, accountCode: String(accountCode), enabled: true, isDefault: false };
+  db.get("modesOfPayment").push(row).write();
+  logActivity(req, "CREATE_MODE_OF_PAYMENT", "MODE_OF_PAYMENT", row.id, { name: row.name });
+  res.status(201).json(row);
+});
+app.patch("/api/accounts/modes-of-payment/:id", requirePermission("manageAccounts"), (req, res) => {
+  const id = Number(req.params.id);
+  const cur = db.get("modesOfPayment").find({ id }).value();
+  if (!cur) return res.status(404).json({ error: "Mode of payment not found" });
+  const patch = {};
+  if (req.body.type) patch.type = req.body.type;
+  if (req.body.accountCode) {
+    if (!db.get("chartOfAccounts").find({ code: String(req.body.accountCode) }).value()) return res.status(400).json({ error: "Default account must exist in the Chart of Accounts" });
+    patch.accountCode = String(req.body.accountCode);
+  }
+  if (typeof req.body.enabled === "boolean") patch.enabled = req.body.enabled;
+  if (req.body.name && !cur.isDefault) patch.name = String(req.body.name).trim();
+  db.get("modesOfPayment").find({ id }).assign(patch).write();
+  res.json(db.get("modesOfPayment").find({ id }).value());
+});
+app.delete("/api/accounts/modes-of-payment/:id", requirePermission("deleteTransactions"), (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.get("modesOfPayment").find({ id }).value();
+  if (!row) return res.status(404).json({ error: "Mode of payment not found" });
+  if (row.isDefault) return res.status(400).json({ error: "Default modes can be disabled but not deleted" });
+  if (db.get("paymentEntries").find({ modeOfPayment: row.name }).value()) return res.status(400).json({ error: "This mode is used by existing payments — disable it instead" });
+  db.get("modesOfPayment").remove({ id }).write();
   res.status(204).send();
 });
 
@@ -3999,7 +4104,7 @@ app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
         if (alias) data[canonical] = data[alias];
       }
     }
-    const collections = ["users","departments","items","inventory","receipts","issues","purchases","purchaseOrders","supplierInvoices","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements"];
+    const collections = ["users","departments","items","inventory","receipts","issues","purchases","purchaseOrders","supplierInvoices","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements","modesOfPayment"];
     for (const key of collections) if (!Array.isArray(data[key])) data[key] = [];
     if (!data.users.length || !data.items.length) return res.status(400).json({error:"Invalid backup file — users and catalog items are missing or empty"});
     data._seq = { ...(data._seq || {}) };
@@ -4133,7 +4238,7 @@ downloadFromSupabase().finally(() => {
   const restoredCollections = [
     'users', 'departments', 'items', 'inventory', 'receipts', 'issues', 'purchases',
     'purchaseOrders', 'supplierInvoices', 'activities', 'assets', 'assetCategories', 'categories', 'grns', 'suppliers',
-    'paymentEntries', 'chartOfAccounts', 'journalEntries', 'stockMovements',
+    'paymentEntries', 'chartOfAccounts', 'journalEntries', 'stockMovements', 'modesOfPayment',
   ];
   for (const collection of restoredCollections) {
     if (!Array.isArray(db.get(collection).value())) db.set(collection, []).write();
