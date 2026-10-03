@@ -6,7 +6,7 @@ import {
   Download, Menu, ShoppingCart, BarChart3, Users,
   LogOut, User as UserIcon, Sun, Moon, Settings2, TrendingUp,
   Heart, Shield, Star, Cross, Stethoscope, Pill, Activity, Leaf,
-  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked, BookOpen, Tag, CreditCard,
+  ChevronLeft, ChevronRight, ChevronDown, Landmark, ReceiptText, Wallet, BookMarked, BookOpen, Tag, CreditCard, BookText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -50,6 +50,8 @@ const NAV_ITEMS = [
       { href: "/accounts/suppliers",         label: "Suppliers",            icon: Users,         permission: "viewAccounts" },
       { href: "/accounts/payments",          label: "Payment Entries",      icon: Wallet,        permission: "viewAccounts" },
       { href: "/accounts/modes-of-payment",  label: "Modes of Payment",     icon: CreditCard,    permission: "viewAccounts" },
+      { href: "/accounts/general-ledger",    label: "General Ledger",       icon: BookText,      permission: "viewAccounts" },
+      { href: "/accounts/payment-ledger",    label: "Payment Ledger",       icon: BookText,      permission: "viewAccounts" },
       { href: "/accounts/journal-entries",   label: "Journal Entries",       icon: BookOpen,     permission: "viewAccounts" },
       { href: "/accounts/financial-reports", label: "Financial Reports",    icon: BarChart3,     permission: "viewAccounts" },
       { href: "/accounts/chart-of-accounts", label: "Chart of Accounts",    icon: BookMarked,    permission: "viewAccounts" },

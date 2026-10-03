@@ -2319,8 +2319,8 @@ function adjustAccountBalance(code, delta) {
   const acc = accountByCode(code);
   if (acc.value()) acc.assign({ balance: Number((acc.value().balance + delta).toFixed(2)) }).write();
 }
-function postJournalEntry({ date, reference, description, debitAccount, creditAccount, amount }) {
-  const row = { id: nextId("journalEntries"), date, reference, description, debitAccount, creditAccount, amount: Number(amount) };
+function postJournalEntry({ date, reference, description, debitAccount, creditAccount, amount, voucherType = null, supplierId = null, againstVoucher = null }) {
+  const row = { id: nextId("journalEntries"), date, reference, description, debitAccount, creditAccount, amount: Number(amount), voucherType, supplierId: supplierId ? Number(supplierId) : null, againstVoucher };
   db.get("journalEntries").push(row).write();
   adjustAccountBalance(debitAccount, Number(amount));
   adjustAccountBalance(creditAccount, -Number(amount));
@@ -2403,8 +2403,8 @@ function normalizeGrnItems(items) {
 }
 function reverseApprovedGrnAccounting(row, req) {
   if (independentAccountingEnabled()) return;
-  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: `EDIT-${row.grnNo}`, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal before editing ${row.grnNo}` });
-  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `EDIT-REV-${row.grnNo}`, description: `Reverse goods received before editing — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount });
+  for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: `EDIT-${row.grnNo}`, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal before editing ${row.grnNo}`, voucherType: "Goods Received Note", supplierId: row.supplierId });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `EDIT-REV-${row.grnNo}`, description: `Reverse goods received before editing — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - Number(row.totalAmount || 0)).toFixed(2)) }).write();
 }
@@ -2548,7 +2548,7 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
   postJournalEntry({
     date: row.date, reference: row.grnNo,
     description: `Goods received — ${row.grnNo}`,
-    debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount,
+    debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId,
   });
   // Supplier now owes this amount (accounts payable)
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
@@ -2569,7 +2569,7 @@ function applyGrnVoid(req, rowRef, row, reason, action = "VOID_GRN") {
     if (!it.itemCode && !it.description) continue;
     pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal of ${row.grnNo}: ${reason}` });
   }
-  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `VOID-${row.grnNo}`, description: `Void goods received — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `VOID-${row.grnNo}`, description: `Void goods received — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - row.totalAmount).toFixed(2)) }).write();
   rowRef.assign({ status: "voided", voidedBy: req.session.userId, voidedAt: new Date().toISOString(), voidReason: reason, voidRequestStatus: "approved", voidReviewedBy: req.session.userId, voidReviewedAt: new Date().toISOString() }).write();
@@ -2618,7 +2618,7 @@ app.patch("/api/accounts/grns/:id/unvoid", requirePermission("manageAccounts"), 
     return res.json(ref.value());
   }
   for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Restored ${row.grnNo}: ${reason}` });
-  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `UNVOID-${row.grnNo}`, description: `Restore voided goods received — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `UNVOID-${row.grnNo}`, description: `Restore voided goods received — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + row.totalAmount).toFixed(2)) }).write();
   ref.assign({ status: "approved", approvedBy: row.approvedBy || req.session.userId, approvedAt: row.approvedAt || new Date().toISOString(), unvoidedBy: req.session.userId, unvoidedAt: new Date().toISOString(), unvoidReason: reason }).write();
@@ -2806,6 +2806,8 @@ function applyPaymentEffects(row, supplier, reverse = false) {
     reference: reverse ? `REV-${row.reference || `PMT-${row.id}`}` : (row.reference || `PMT-${row.id}`),
     description: `${reverse ? "Reverse payment" : isReceive ? "Refund received from" : "Payment to"} ${supplier?.name || "supplier"}`,
     debitAccount: debit, creditAccount: credit, amount: row.amount,
+    voucherType: "Payment Entry", supplierId: supplier?.id || row.supplierId,
+    againstVoucher: paymentAllocations(row).map(a => (db.get("supplierInvoices").find({ id: Number(a.invoiceId) }).value() || {}).invoiceNo).filter(Boolean).join(", ") || null,
   });
   if (supplier) {
     const delta = (isReceive ? row.amount : -row.amount) * sign;
@@ -2886,10 +2888,11 @@ app.get("/api/accounts/modes-of-payment", requireAnyPermission("viewAccounts", "
 });
 app.post("/api/accounts/modes-of-payment", requirePermission("manageAccounts"), (req, res) => {
   const { name, type, accountCode } = req.body;
-  if (!name || !String(name).trim() || !type || !accountCode) return res.status(400).json({ error: "Name, type and default account are required" });
+  if (!name || !String(name).trim() || !type) return res.status(400).json({ error: "Name and type are required" });
+  const acctCode = String(accountCode || (type === "Cash" ? "1200" : "1100"));
   if (db.get("modesOfPayment").find(m => m.name.toLowerCase() === String(name).trim().toLowerCase()).value()) return res.status(400).json({ error: "A mode of payment with this name already exists" });
-  if (!db.get("chartOfAccounts").find({ code: String(accountCode) }).value()) return res.status(400).json({ error: "Default account must exist in the Chart of Accounts" });
-  const row = { id: nextId("modesOfPayment"), name: String(name).trim(), type, accountCode: String(accountCode), enabled: true, isDefault: false };
+  if (!db.get("chartOfAccounts").find({ code: acctCode }).value()) return res.status(400).json({ error: `Default account ${acctCode} does not exist in the Chart of Accounts` });
+  const row = { id: nextId("modesOfPayment"), name: String(name).trim(), type, accountCode: acctCode, enabled: req.body.enabled !== false, isDefault: false };
   db.get("modesOfPayment").push(row).write();
   logActivity(req, "CREATE_MODE_OF_PAYMENT", "MODE_OF_PAYMENT", row.id, { name: row.name });
   res.status(201).json(row);
@@ -2905,7 +2908,6 @@ app.patch("/api/accounts/modes-of-payment/:id", requirePermission("manageAccount
     patch.accountCode = String(req.body.accountCode);
   }
   if (typeof req.body.enabled === "boolean") patch.enabled = req.body.enabled;
-  if (req.body.name && !cur.isDefault) patch.name = String(req.body.name).trim();
   db.get("modesOfPayment").find({ id }).assign(patch).write();
   res.json(db.get("modesOfPayment").find({ id }).value());
 });
@@ -2953,7 +2955,7 @@ app.post("/api/accounts/journal-entries", requirePermission("manageAccounts"), (
   if (!date || !description || !debitAccount || !creditAccount || !(value > 0)) return res.status(400).json({ error: "Date, description, debit account, credit account, and a positive amount are required" });
   if (String(debitAccount) === String(creditAccount)) return res.status(400).json({ error: "Debit and credit accounts must be different" });
   if (!db.get("chartOfAccounts").find({ code: String(debitAccount) }).value() || !db.get("chartOfAccounts").find({ code: String(creditAccount) }).value()) return res.status(400).json({ error: "Both accounts must exist in the Chart of Accounts" });
-  const row = postJournalEntry({ date, reference: reference || `JE-${nextId("journalEntries")}`, description: String(description).trim(), debitAccount: String(debitAccount), creditAccount: String(creditAccount), amount: value });
+  const row = postJournalEntry({ date, reference: reference || `JE-${nextId("journalEntries")}`, description: String(description).trim(), debitAccount: String(debitAccount), creditAccount: String(creditAccount), amount: value, voucherType: "Journal Entry" });
   db.get("journalEntries").find({ id: row.id }).assign({ note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString(), source: "standalone" }).write();
   logActivity(req, "CREATE_JOURNAL_ENTRY", "JOURNAL", row.id, { reference: row.reference, amount: value });
   res.status(201).json(db.get("journalEntries").find({ id: row.id }).value());
@@ -3175,7 +3177,7 @@ app.post("/api/accounts/supplier-invoices", requirePermission("manageAccounts"),
   if (grnId && !db.get("grns").find({ id: Number(grnId) }).value()) return res.status(400).json({ error: "GRN not found" });
   const row = { id: nextId("supplierInvoices"), invoiceNo: String(invoiceNo).trim(), date, supplierId: supplier.id, purchaseOrderId: purchaseOrderId ? Number(purchaseOrderId) : null, grnId: grnId ? Number(grnId) : null, amount: value, paidAmount: 0, dueDate: dueDate || null, status: "unpaid", note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
   db.get("supplierInvoices").push(row).write();
-  postJournalEntry({ date, reference: row.invoiceNo, description: `Supplier invoice — ${row.invoiceNo}`, debitAccount: debitAccount || "5000", creditAccount: "2000", amount: value });
+  postJournalEntry({ date, reference: row.invoiceNo, description: `Supplier invoice — ${row.invoiceNo}`, debitAccount: debitAccount || "5000", creditAccount: "2000", amount: value, voucherType: "Purchase Invoice", supplierId: supplier.id });
   db.get("suppliers").find({ id: supplier.id }).assign({ balance: Number((Number(supplier.balance || 0) + value).toFixed(2)) }).write();
   logActivity(req, "CREATE_SUPPLIER_INVOICE", "SUPPLIER_INVOICE", row.id, { invoiceNo: row.invoiceNo, amount: value });
   res.status(201).json({ ...row, supplier });
