@@ -173,6 +173,8 @@ export default function UserManagement() {
     fullName: "",
     email: "",
     phone: "",
+    adminEmailVerified: false,
+    allowPasswordOnlyLogin: false,
     role: "staff",
     permissions: defaultPermissionsByRole("staff")
   });
@@ -191,6 +193,8 @@ export default function UserManagement() {
           fullName: "",
           email: "",
           phone: "",
+          adminEmailVerified: false,
+          allowPasswordOnlyLogin: false,
           role: "staff",
           permissions: defaultPermissionsByRole("staff")
         });
@@ -253,6 +257,8 @@ export default function UserManagement() {
       fullName: user.fullName,
       email: user.email || "",
       phone: user.phone || "",
+      adminEmailVerified: !!user.emailVerifiedAt,
+      allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true,
       role: user.role
       ,
       permissions: { ...defaultPermissionsByRole(user.role, customRoles), ...user.permissions }
@@ -268,6 +274,23 @@ export default function UserManagement() {
       default: return <Badge variant="secondary">Staff</Badge>;
     }
   };
+
+  const adminOnly = currentUser?.role === "admin";
+  const loginSecurityControls = <div className="space-y-3 rounded-md border p-3">
+    <p className="text-sm font-semibold">Sign-in security</p>
+    <label className="flex items-start gap-2 text-sm">
+      <input type="checkbox" disabled={!adminOnly || !formData.email.trim()} checked={formData.adminEmailVerified}
+        onChange={e=>setFormData({...formData,adminEmailVerified:e.target.checked,allowPasswordOnlyLogin:e.target.checked && formData.allowPasswordOnlyLogin})}/>
+      <span>I have verified this email belongs to this user.</span>
+    </label>
+    <p className="text-xs text-muted-foreground">Administrators must confirm ownership through a trusted process. Changing the email clears its verification. Without a verified email, sign-in is blocked.</p>
+    <label className="flex items-start gap-2 text-sm">
+      <input type="checkbox" disabled={!adminOnly || !formData.email.trim() || !formData.adminEmailVerified} checked={formData.allowPasswordOnlyLogin}
+        onChange={e=>setFormData({...formData,allowPasswordOnlyLogin:e.target.checked})}/>
+      <span>Allow password-only sign-in (skip Email OTP)</span>
+    </label>
+    <p className="text-xs text-muted-foreground">Off by default. Only administrators can approve this exemption. A verified email is still required. Exempt accounts have less sign-in protection.</p>
+  </div>;
 
   return (
     <Layout>
@@ -299,12 +322,13 @@ export default function UserManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                  <Input id="email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value, adminEmailVerified:false, allowPasswordOnlyLogin:false})} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
                   <Input id="phone" type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
+                {loginSecurityControls}
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <Input id="password" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
@@ -382,7 +406,7 @@ export default function UserManagement() {
                     <TableCell className="text-sm font-mono">{u.username}</TableCell>
                     <TableCell className="text-sm">{u.email || <span className="text-muted-foreground">Not set</span>}{u.emailVerifiedAt && <span className="ml-1 text-xs text-emerald-600">Verified</span>}</TableCell>
                     <TableCell className="text-sm">{u.phone || <span className="text-muted-foreground">Not set</span>}</TableCell>
-                    <TableCell>{getRoleBadge(u.role)}</TableCell>
+                    <TableCell>{getRoleBadge(u.role)}<div className="mt-1 text-xs text-muted-foreground">{!u.email || !u.emailVerifiedAt ? "Sign-in blocked: verify email" : u.allowPasswordOnlyLogin ? "Password only (admin approved)" : "Email OTP required"}</div></TableCell>
                     <TableCell className="text-right flex items-center justify-end gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                         <Edit className="h-4 w-4" />
@@ -421,12 +445,13 @@ export default function UserManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-email">Email</Label>
-                  <Input id="edit-email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                  <Input id="edit-email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value, adminEmailVerified:false, allowPasswordOnlyLogin:false})} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-phone">Phone Number</Label>
                   <Input id="edit-phone" type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
+                {loginSecurityControls}
                 <div className="space-y-2">
                 <Label htmlFor="edit-password">New Password (Optional)</Label>
                 <Input id="edit-password" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Leave blank to keep current" />

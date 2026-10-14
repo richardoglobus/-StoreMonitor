@@ -3,6 +3,7 @@
 const express = require("express");
 const compression = require("compression");
 const cors = require("cors");
+const { registerLoginOtp, adminContactUpdates } = require("./login-otp");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const low = require("lowdb");
@@ -1725,7 +1726,7 @@ app.use(session({
 }));
 
 function requireAuth(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); next(); }
-function requireAdmin(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); if(req.session.role!=="admin") return res.status(403).json({error:"Forbidden"}); next(); }
+function requireAdmin(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); const user=db.get("users").find({id:req.session.userId}).value(); if(!user || user.role!=="admin" || user.accountStatus==="disabled" || user.accountStatus==="pending_verification" || user.isActive===false) return res.status(403).json({error:"Forbidden"}); next(); }
 function requirePermission(perm){
   return (req,res,next)=>{
     if(!req.session.userId) return res.status(401).json({error:"Unauthorized"});
@@ -1754,19 +1755,21 @@ function otpAllowed(key) {
   if (recent.length >= 5) { otpAttempts.set(key, recent); return false; }
   recent.push(now); otpAttempts.set(key, recent); return true;
 }
-async function deliverEmailOtp({ email, code, purpose }) {
+async function deliverEmailOtp({ email, code, purpose, expiresInSeconds }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
   if (apiKey) {
-    const label = purpose === "signup" ? "Verify your StoreMonitor account" : "Reset your StoreMonitor password";
+    const label = purpose === "login" ? "Your StoreMonitor sign-in code" : purpose === "signup" ? "Verify your StoreMonitor account" : "Reset your StoreMonitor password";
+    const expiryMinutes = Math.ceil((expiresInSeconds || Math.max(1, Number(getSettings().otpExpiryMinutes) || 10) * 60) / 60);
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      signal: AbortSignal.timeout(15000),
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from,
         to: [email],
         subject: label,
-        html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto"><h2>${label}</h2><p>Your verification code is:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${code}</p><p>This code expires in 10 minutes and can only be used once.</p><p>If you did not request this, you can ignore this email.</p></div>`
+        html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto"><h2>${label}</h2><p>Your verification code is:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${code}</p><p>This code expires in ${expiryMinutes} minutes and can only be used once.</p><p>If you did not request this, you can ignore this email.</p></div>`
       })
     });
     if (!response.ok) {
@@ -1775,33 +1778,18 @@ async function deliverEmailOtp({ email, code, purpose }) {
     }
     return;
   }
-  if (process.env.OTP_DEV_MODE === "true") { console.warn(`[OTP_DEV_MODE] ${purpose} OTP for ${email}: ${code}`); return; }
+  if (process.env.OTP_DEV_MODE === "true" && !isProd) { console.warn(`[OTP_DEV_MODE] ${purpose} OTP for ${email}: ${code}`); return; }
   throw new Error("Resend email delivery is not configured");
 }
 function safeUser(user) {
-  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, accountStatus: user.accountStatus || "active", role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
+  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, accountStatus: user.accountStatus || "active", allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
 }
 function maskEmail(value) { const email = normalizeEmail(value); const [name, domain] = email.split("@"); return name && domain ? `${name.slice(0, 2)}***@${domain}` : "unknown"; }
 
 // AUTH
-app.post("/api/auth/login",(req,res)=>{
-  const {identifier,password}=req.body;
-  const loginIdentifier = String(identifier ?? req.body?.username ?? "").trim();
-  if (!loginIdentifier || !password) return res.status(401).json({error:"Invalid credentials"});
-  const normalizedEmail = normalizeEmail(loginIdentifier);
-  const normalizedPhone = normalizePhone(loginIdentifier);
-  const user=db.get("users").find(u => String(u.username || "").toLowerCase() === loginIdentifier.toLowerCase() || normalizeEmail(u.email) === normalizedEmail || normalizePhone(u.phone) === normalizedPhone).value();
-  if(!user||!bcrypt.compareSync(password,user.passwordHash)) { logSecurityEvent(req, "LOGIN_FAILED", { identifierType: loginIdentifier.includes("@") ? "email" : (/^\+?[0-9\s()-]+$/.test(loginIdentifier) ? "phone" : "username") }); return res.status(401).json({error:"Invalid credentials"}); }
-  if (user.accountStatus === "pending_verification") return res.status(403).json({error:"Please verify your email before logging in"});
-  if (user.accountStatus === "disabled" || user.isActive === false) return res.status(403).json({error:"This account is inactive"});
-  const settings = getSettings();
-  const maintenanceActive = !!settings.maintenanceMode && settings.maintenanceEndsAt && new Date(settings.maintenanceEndsAt).getTime() > Date.now();
-  if(maintenanceActive && user.role !== "admin") return res.status(423).json({error:"System maintenance is in progress", maintenanceEndsAt: settings.maintenanceEndsAt});
-  req.session.userId=user.id; req.session.username=user.username; req.session.role=user.role;
-  const permissions = normalizePermissions(user.role, user.permissions);
-  req.session.permissions = permissions;
-  logActivity(req, "LOGIN", "AUTH", user.id, null);
-  res.json(safeUser(user));
+registerLoginOtp(app, {
+  db, getSettings, deliverEmailOtp, safeUser, maskEmail,
+  normalizePermissions, logActivity, logSecurityEvent
 });
 app.post("/api/auth/logout",(req,res)=>{
   logActivity(req, "LOGOUT", "AUTH", req.session.userId, null);
@@ -1853,7 +1841,9 @@ app.patch("/api/auth/change-username",requireAuth,(req,res)=>{
 });
 app.get("/api/auth/users",requirePermission("manageUsers"),(_,res)=>{ res.json(db.get("users").orderBy("username","asc").value().map(safeUser)); });
 app.post("/api/auth/users",requireAdmin,(req,res)=>{
-  const {username,password,fullName,role,permissions,email,phone}=req.body;
+  const {username,password,fullName,role,permissions,email,phone,adminEmailVerified,allowPasswordOnlyLogin}=req.body;
+  if (allowPasswordOnlyLogin !== undefined && typeof allowPasswordOnlyLogin !== "boolean") return res.status(400).json({error:"Invalid password-only setting"});
+  if (adminEmailVerified !== undefined && typeof adminEmailVerified !== "boolean") return res.status(400).json({error:"Invalid email verification setting"});
   if(!username||!password) return res.status(400).json({error:"Missing fields"});
   if(db.get("users").find({username}).value()) return res.status(400).json({error:"Username already exists"});
   const normalizedEmail = normalizeEmail(email);
@@ -1864,23 +1854,34 @@ app.post("/api/auth/users",requireAdmin,(req,res)=>{
   if (normalizedPhone && db.get("users").find(u => normalizePhone(u.phone) === normalizedPhone).value()) return res.status(409).json({error:"Phone number already exists"});
   const id=nextId("users");
   const resolvedRole = role || "staff";
-  const user={id,username:username.trim(),passwordHash:bcrypt.hashSync(password,10),fullName:fullName||null,email:normalizedEmail||null,phone:normalizedPhone||null,emailVerifiedAt:normalizedEmail?new Date().toISOString():null,phoneVerifiedAt:normalizedPhone?new Date().toISOString():null,accountStatus:"active",role:resolvedRole,permissions:normalizePermissions(resolvedRole, permissions),createdAt:new Date().toISOString()};
+  const contact = adminContactUpdates({}, {email:normalizedEmail,phone:normalizedPhone,adminEmailVerified});
+  if (allowPasswordOnlyLogin === true && !contact.emailVerifiedAt) return res.status(400).json({error:"Password-only sign-in requires an administrator-verified email"});
+  const user={id,username:username.trim(),passwordHash:bcrypt.hashSync(password,10),fullName:fullName||null,...contact,emailVerifiedAt:contact.emailVerifiedAt||null,phoneVerifiedAt:null,allowPasswordOnlyLogin:allowPasswordOnlyLogin===true,accountStatus:"active",role:resolvedRole,permissions:normalizePermissions(resolvedRole, permissions),createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
-  logActivity(req, "CREATE_USER", "USER", id, { username, role: user.role });
+  logActivity(req, "CREATE_USER", "USER", id, { username, role: user.role, allowPasswordOnlyLogin:user.allowPasswordOnlyLogin, adminEmailVerified:!!user.emailVerifiedAt });
   res.status(201).json(safeUser(user));
 });
 app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   const userId=Number(req.params.userId);
-  const {fullName,role,password,permissions,email,phone,accountStatus}=req.body;
+  const {fullName,role,password,permissions,email,phone,accountStatus,adminEmailVerified,allowPasswordOnlyLogin}=req.body;
+  if (allowPasswordOnlyLogin !== undefined && typeof allowPasswordOnlyLogin !== "boolean") return res.status(400).json({error:"Invalid password-only setting"});
+  if (adminEmailVerified !== undefined && typeof adminEmailVerified !== "boolean") return res.status(400).json({error:"Invalid email verification setting"});
   const user=db.get("users").find({id:userId});
   if(!user.value()) return res.status(404).json({error:"Not found"});
   const current = user.value();
-  const updates={};
+  const oldPasswordOnly = current.allowPasswordOnlyLogin === true;
+  const oldEmail = current.email;
+  const oldVerifiedAt = current.emailVerifiedAt;
+  const updates=adminContactUpdates(current, {email,phone,adminEmailVerified});
   if(fullName!==undefined) updates.fullName=fullName;
-  if(email!==undefined) updates.email=normalizeEmail(email)||null;
-  if(phone!==undefined) updates.phone=normalizePhone(phone)||null;
   if (email !== undefined && !validEmail(updates.email)) return res.status(400).json({error:"Enter a valid email address"});
   if (phone !== undefined && !validPhone(updates.phone)) return res.status(400).json({error:"Enter a valid phone number"});
+  if (updates.email && db.get("users").find(u=>u.id!==userId && normalizeEmail(u.email)===updates.email).value()) return res.status(409).json({error:"Email already exists"});
+  if (updates.phone && db.get("users").find(u=>u.id!==userId && normalizePhone(u.phone)===updates.phone).value()) return res.status(409).json({error:"Phone number already exists"});
+  const resulting = {...current,...updates};
+  if (allowPasswordOnlyLogin === true && (!resulting.email || !resulting.emailVerifiedAt)) return res.status(400).json({error:"Password-only sign-in requires an administrator-verified email"});
+  if (allowPasswordOnlyLogin !== undefined) { updates.allowPasswordOnlyLogin=allowPasswordOnlyLogin; updates.loginOtp=null; }
+  if (!resulting.email || !resulting.emailVerifiedAt) updates.allowPasswordOnlyLogin=false;
   if(accountStatus!==undefined && ["active","disabled","pending_verification"].includes(accountStatus)) updates.accountStatus=accountStatus;
   if(role!==undefined) updates.role=role;
   if(password) updates.passwordHash=bcrypt.hashSync(password,10);
@@ -1889,6 +1890,8 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   user.assign(updates).write();
   const u=user.value();
   logActivity(req, "UPDATE_USER", "USER", u.id, { role: u.role });
+  if (oldPasswordOnly !== (u.allowPasswordOnlyLogin === true)) logActivity(req, "LOGIN_OTP_EXEMPTION_CHANGED", "USER", u.id, {previous:oldPasswordOnly,allowPasswordOnlyLogin:u.allowPasswordOnlyLogin===true});
+  if (oldEmail !== u.email || oldVerifiedAt !== u.emailVerifiedAt) logActivity(req, "USER_CONTACT_VERIFICATION_CHANGED", "USER", u.id, {emailVerified:!!u.emailVerifiedAt});
   res.json(safeUser(u));
 });
 app.delete("/api/auth/users/:userId",requireAdmin,(req,res)=>{
@@ -4273,7 +4276,7 @@ app.post("/api/auth/register",async (req,res)=>{
   try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
   catch (error) { db.get("users").remove({id:user.id}).write(); return res.status(503).json({error:"We could not send the verification email. Please try again later."}); }
   const response={success:true,message:"Account created. Check your email for the verification code."};
-  if (process.env.OTP_DEV_MODE === "true") response.devOtp=code;
+  if (process.env.OTP_DEV_MODE === "true" && !isProd) response.devOtp=code;
   res.status(201).json(response);
 });
 
@@ -4283,13 +4286,13 @@ app.post("/api/auth/forgot-password",async (req,res)=>{
   const email=normalizeEmail(identifier);
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === identifier.toLowerCase() || normalizeEmail(u.email) === email || normalizePhone(u.phone) === normalizePhone(identifier)).value();
   const generic={success:true,message:"If an account matches those details, we will send a verification code."};
-  if(!user || !user.email || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
+  if(!identifier || !user || !user.email || !user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
   const code=makeOtp();
   db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:"reset",emailOtpAttempts:0}).write();
   console.log(`[OTP] password-reset requested for ${maskEmail(user.email)}`);
   try { await deliverEmailOtp({email:user.email,code,purpose:"password-reset"}); }
   catch (error) { console.error(`[OTP] password-reset delivery failed: ${error.message}`); return res.json(generic); }
-  if (process.env.OTP_DEV_MODE === "true") generic.devOtp=code;
+  if (process.env.OTP_DEV_MODE === "true" && !isProd) generic.devOtp=code;
   res.json(generic);
 });
 
@@ -4299,6 +4302,7 @@ app.post("/api/auth/resend-otp",async (req,res)=>{
   if (!key || !["signup","reset"].includes(purpose)) return res.status(400).json({error:"Invalid OTP request"});
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === key.toLowerCase() || normalizeEmail(u.email) === normalizeEmail(key) || normalizePhone(u.phone) === normalizePhone(key)).value();
   if (!user || !user.email || (purpose === "signup" && user.accountStatus !== "pending_verification")) return res.json({success:true,message:"If the account matches, a new code has been sent."});
+  if (purpose === "reset" && (!user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false)) return res.json({success:true,message:"If the account matches, a new code has been sent."});
   if (!otpAllowed(`resend:${purpose}:${user.id}`)) return res.status(429).json({error:"Please wait before requesting another code"});
   const code=makeOtp();
   db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:purpose,emailOtpAttempts:0}).write();
@@ -4311,8 +4315,10 @@ app.post("/api/auth/resend-otp",async (req,res)=>{
 app.post("/api/auth/verify-otp",(req,res)=>{
   const {identifier,otp,purpose}=req.body || {};
   const key=String(identifier || "").trim();
+  if (!key || !["signup","reset"].includes(purpose)) return res.status(400).json({error:"Invalid OTP request"});
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === key.toLowerCase() || normalizeEmail(u.email) === normalizeEmail(key)).value();
   if(!user || !otp || !user.emailOtpHash || user.emailOtpPurpose !== purpose || !user.emailOtpExpires || new Date(user.emailOtpExpires) < new Date()) return res.status(400).json({error:"Invalid or expired verification code"});
+  if ((purpose === "signup" && user.accountStatus !== "pending_verification") || (purpose === "reset" && (!user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false))) return res.status(400).json({error:"Invalid or expired verification code"});
   if ((user.emailOtpAttempts || 0) >= 5) return res.status(429).json({error:"Too many verification attempts. Request a new code."});
   if (hashOtp(otp) !== user.emailOtpHash) { db.get("users").find({id:user.id}).assign({emailOtpAttempts:(user.emailOtpAttempts || 0)+1}).write(); return res.status(400).json({error:"Invalid or expired verification code"}); }
   if (purpose === "signup") {
@@ -4330,8 +4336,9 @@ app.patch("/api/auth/reset-password",(req,res)=>{
   if(newPassword.length<12) return res.status(400).json({error:"New password must be at least 12 characters"});
   const user=db.get("users").find(u => u.resetSessionHash === hashOtp(resetSession)).value();
   if(!user||!user.resetSessionExpires||new Date(user.resetSessionExpires)<new Date()) return res.status(400).json({error:"Invalid or expired reset session"});
+  if (!user.email || !user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false) return res.status(400).json({error:"Invalid or expired reset session"});
   const hash=bcrypt.hashSync(newPassword,10);
-  db.get("users").find({id:user.id}).assign({passwordHash:hash,resetSessionHash:null,resetSessionExpires:null}).write();
+  db.get("users").find({id:user.id}).assign({passwordHash:hash,resetSessionHash:null,resetSessionExpires:null,loginOtp:null}).write();
   res.json({success:true,message:"Password reset successfully. You can now log in."});
 });
 

@@ -1,5 +1,5 @@
 import { createContext, useContext, ReactNode, useEffect } from "react";
-import { useGetCurrentUser, useLogin, useLogout, getGetCurrentUserQueryKey } from "@/lib/api";
+import { useGetCurrentUser, useLogin, useLogout, getGetCurrentUserQueryKey, verifyLoginOtp } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface User {
@@ -38,6 +38,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: ReturnType<typeof useLogin>["mutateAsync"];
+  completeLoginOtp: (otp: string) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
 }
@@ -60,8 +61,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (input: any) => {
     // login page calls login({ data: {...} }) so input is already { data: {...} }
     const result = await loginMutation.mutateAsync(input);
-    await queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
+    if ("id" in result) {
+      queryClient.setQueryData(getGetCurrentUserQueryKey(), result);
+      await queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
+    } else {
+      queryClient.setQueryData(getGetCurrentUserQueryKey(), null);
+    }
     return result;
+  };
+
+  const completeLoginOtp = async (otp: string) => {
+    const result = await verifyLoginOtp(otp);
+    queryClient.setQueryData(getGetCurrentUserQueryKey(), result);
+    await queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
   };
 
   const logout = async () => {
@@ -74,11 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ 
-      user: user as User | null, 
-      isLoading, 
-      login, 
-      logout, 
-      isAuthenticated 
+      user: user as User | null,
+      isLoading,
+      login,
+      completeLoginOtp,
+      logout,
+      isAuthenticated
     }}>
       {children}
     </AuthContext.Provider>

@@ -42,7 +42,9 @@ export type Permissions = {
   manageAssets: boolean;
   manageDigitalForms: boolean;
 };
-export type AuthUser = { id: number; username: string; fullName: string | null; email?: string | null; phone?: string | null; emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null; accountStatus?: string; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
+export type AuthUser = { id: number; username: string; fullName: string | null; email?: string | null; phone?: string | null; emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null; accountStatus?: string; allowPasswordOnlyLogin?: boolean; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
+export type LoginOtpChallenge = { status: "otp_required"; maskedEmail: string; expiresInSeconds: number; resendAfterSeconds: number };
+export type LoginResult = AuthUser | LoginOtpChallenge;
 export type Department = { id: number; name: string; slug: string };
 export type Item = { id: number; itemCode?: string | null; description: string; unit: string; quantity: number; categoryId?: number | null; categoryName?: string | null; expiryDate?: string | null; expired?: boolean };
 export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; adjustmentTotal: number; stockBalance: number; rawStockBalance?: number; packUnit?: string | null; packSize?: number; quantityUnit?: string; quantityLabel?: string };
@@ -128,8 +130,14 @@ export function useGetCurrentUser(options?: QueryOpts<AuthUser>) {
   return useQuery({ queryKey: getGetCurrentUserQueryKey(), queryFn: () => apiFetch<AuthUser>("/api/auth/me"), ...options?.query });
 }
 
-export function useLogin(options?: MutOpts<AuthUser, { data: { identifier: string; password: string } }>) {
-  return useMutation({ mutationFn: ({ data }) => apiFetch<AuthUser>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+export function useLogin(options?: MutOpts<LoginResult, { data: { identifier: string; password: string } }>) {
+  return useMutation({ mutationFn: ({ data }) => apiFetch<LoginResult>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+export async function verifyLoginOtp(otp: string) {
+  return apiFetch<AuthUser>("/api/auth/login/verify-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ otp }) });
+}
+export async function resendLoginOtp() {
+  return apiFetch<LoginOtpChallenge>("/api/auth/login/resend-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
 }
 
 export async function requestPasswordOtp(identifier: string) {

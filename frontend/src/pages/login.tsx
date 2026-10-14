@@ -1,12 +1,12 @@
-import { API_BASE, requestPasswordOtp, resendOtp, resetPassword, verifyOtp } from "@/lib/api";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { API_BASE, requestPasswordOtp, resendOtp, resendLoginOtp, resetPassword, verifyOtp, type LoginOtpChallenge } from "@/lib/api";
+import { useState, useEffect, useRef, useCallback, useId } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Download, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme, LOGOS } from "@/lib/theme-context";
 import { useLocation } from "wouter";
 
-type Panel = "login" | "signup" | "forgot" | "verify_signup" | "verify_reset" | "reset_password";
+type Panel = "login" | "signup" | "forgot" | "verify_signup" | "verify_reset" | "reset_password" | "verify_login" | "contact_admin";
 type Effect = "split" | "particles" | "glass" | "wave" | "gradient";
 
 // ── Particle canvas ───────────────────────────────────────────────────────
@@ -175,16 +175,18 @@ const BASE_CSS = `
   .login-btn:active:not(:disabled){transform:translateY(0);}
 `;
 
-function Field({ label, type="text", value, onChange, placeholder, icon:Icon, focused, onFocus, onBlur, accentColor, inputBg, inputBorder, textColor }: any) {
+function Field({ label, type="text", value, onChange, placeholder, icon:Icon, focused, onFocus, onBlur, accentColor, inputBg, inputBorder, textColor, inputMode, autoComplete, maxLength, pattern, required=true }: any) {
   const [show, setShow] = useState(false);
+  const id = useId();
   const isPassword = type === "password";
   return (
     <div>
-      <label style={{fontSize:11,fontWeight:700,color:textColor,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1.2}}>{label}</label>
+      <label htmlFor={id} style={{fontSize:11,fontWeight:700,color:textColor,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1.2}}>{label}</label>
       <div style={{position:"relative"}}>
         {Icon && <Icon size={14} style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:focused?accentColor:"rgba(150,150,180,0.8)",transition:"color 0.2s"}}/>}
-        <input className="login-input" type={isPassword?(show?"text":"password"):type} value={value} onChange={e=>onChange(e.target.value)}
-          onFocus={onFocus} onBlur={onBlur} placeholder={placeholder} required
+        <input id={id} className="login-input" type={isPassword?(show?"text":"password"):type} value={value} onChange={e=>onChange(e.target.value)}
+          onFocus={onFocus} onBlur={onBlur} placeholder={placeholder} required={required}
+          inputMode={inputMode} autoComplete={autoComplete} maxLength={maxLength} pattern={pattern}
           style={{width:"100%",padding:`11px ${isPassword?"40px":"14px"} 11px ${Icon?"34px":"14px"}`,background:inputBg,border:`1.5px solid ${focused?accentColor:inputBorder}`,borderRadius:10,color:"#fff",fontSize:14,boxSizing:"border-box" as const,transition:"border-color 0.2s, box-shadow 0.2s",boxShadow:focused?`0 0 0 3px ${accentColor}28`:"none"}}
         />
         {isPassword && (
@@ -198,19 +200,74 @@ function Field({ label, type="text", value, onChange, placeholder, icon:Icon, fo
 }
 
 // ── Form panels ───────────────────────────────────────────────────────────
-function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, otpExpirySeconds = 600, otpResendCooldownSeconds = 60 }: any) {
+function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, otpExpirySeconds = 600, otpResendCooldownSeconds = 60 }: any) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [p2,setP2]=useState(""); const [email,setEmail]=useState(""); const [phone,setPhone]=useState(""); const [otp,setOtp]=useState(""); const [resetSession,setResetSession]=useState("");
   const [name,setName]=useState(""); const [loading,setLoading]=useState(false); const [focused,setFocused]=useState<string|null>(null); const [otpCooldown,setOtpCooldown]=useState(0);
+  const [loginChallenge,setLoginChallenge]=useState<LoginOtpChallenge|null>(null);
+  const [loginExpiresAt,setLoginExpiresAt]=useState(0);
+  const [loginResendAt,setLoginResendAt]=useState(0);
+  const [loginNow,setLoginNow]=useState(Date.now());
+  useEffect(()=>{ if(panel!=="verify_login") return; const timer=setInterval(()=>setLoginNow(Date.now()),1000); return ()=>clearInterval(timer); },[panel]);
   useEffect(()=>{ if (otpCooldown <= 0) return; const timer=setInterval(()=>setOtpCooldown(value=>Math.max(0,value-1)),1000); return ()=>clearInterval(timer); },[otpCooldown]);
   const f=(id:string)=>({focused:focused===id,onFocus:()=>setFocused(id),onBlur:()=>setFocused(null)}); const shared={accentColor,inputBg,inputBorder,textColor:textMuted};
   const btnStyle:any={width:"100%",padding:"13px",border:"none",borderRadius:10,background:`linear-gradient(135deg,${accentColor},${accentColor}cc)`,color:"white",fontWeight:700,fontSize:15,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 20px ${accentColor}44`,transition:"all 0.2s",marginTop:6,opacity:loading?0.7:1};
   const linkStyle:any={color:accentColor,background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,textDecoration:"underline",padding:0};
-  const handleLogin=async(e:React.FormEvent)=>{e.preventDefault();if(!u||!p)return;setLoading(true);try{await onLogin(u,p);}catch{toast.error("Invalid username, email, phone, or password");}finally{setLoading(false);}};
+  const startLoginChallenge=(result:LoginOtpChallenge)=>{
+    const timestamp=Date.now();
+    setLoginChallenge(result); setOtp(""); setP(""); setLoginNow(timestamp);
+    setLoginExpiresAt(timestamp+result.expiresInSeconds*1000);
+    setLoginResendAt(timestamp+result.resendAfterSeconds*1000);
+    setPanel("verify_login");
+  };
+  const loginError=(err:any)=>{
+    if(err?.code==="CONTACT_ADMIN_REQUIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("contact_admin"); }
+    else { if(err?.code==="LOGIN_CHALLENGE_EXPIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("login"); } toast.error(err?.error||err?.message||"Unable to sign in. Please try again."); }
+  };
+  const handleLogin=async(e:React.FormEvent)=>{
+    e.preventDefault(); if(!u||!p||loading)return; setLoading(true);
+    try { const result=await onLogin(u,p); if(result?.status==="otp_required") startLoginChallenge(result); }
+    catch(err:any) { loginError(err); }
+    finally { setLoading(false); }
+  };
+  const handleLoginVerify=async(e:React.FormEvent)=>{
+    e.preventDefault(); if(!/^\d{6}$/.test(otp)||loading)return; setLoading(true);
+    try { await onVerifyLogin(otp); }
+    catch(err:any) { loginError(err); }
+    finally { setLoading(false); }
+  };
+  const handleLoginResend=async()=>{
+    if(loading||Date.now()<loginResendAt)return; setLoading(true);
+    try { startLoginChallenge(await resendLoginOtp()); toast.success("A new sign-in code has been sent."); }
+    catch(err:any) { if(err?.retryAfterSeconds) setLoginResendAt(Date.now()+err.retryAfterSeconds*1000); loginError(err); }
+    finally { setLoading(false); }
+  };
   const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{await onSignup(name,u,email,phone,p);setOtpCooldown(otpExpirySeconds);setPanel("verify_signup");}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
   const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{await requestPasswordOtp(u);setOtpCooldown(otpExpirySeconds);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
   const handleResend=async()=>{const purpose: "signup" | "reset" = panel==="verify_signup" ? "signup" : "reset";const identifier=purpose==="signup"?email:u;if(!identifier||otpCooldown>0)return;setLoading(true);try{await resendOtp(identifier,purpose);setOtp("");setOtpCooldown(otpExpirySeconds);toast.success("A new verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to resend code");}finally{setLoading(false);}};
   const handleVerify=async(e:React.FormEvent,purpose:"signup"|"reset")=>{e.preventDefault();setLoading(true);try{const result=await verifyOtp(purpose==="signup"?email:u,otp,purpose);if(purpose==="reset"){setResetSession(result.resetSession||"");setPanel("reset_password");}else{toast.success("Email verified. You can now sign in.");setPanel("login");}}catch(err:any){toast.error(err?.error||"Invalid or expired code");}finally{setLoading(false);}};
   const handleReset=async(e:React.FormEvent)=>{e.preventDefault();if(p!==p2){toast.error("Passwords do not match");return;}setLoading(true);try{await resetPassword(resetSession,p,p2);toast.success("Password changed. You can now sign in.");setPanel("login");setP("");setP2("");}catch(err:any){toast.error(err?.error||"Unable to reset password");}finally{setLoading(false);}};
+
+  if(panel==="contact_admin") return <section role="alert" style={{display:"flex",flexDirection:"column",gap:16,animation:"fadeUp 0.4s ease"}}>
+    <Lock size={32} color={accentColor}/>
+    <p style={{color:"#fff",fontSize:15,lineHeight:1.6,margin:0}}>Your account needs a verified email before you can sign in.</p>
+    <p style={{color:textMuted,fontSize:13,lineHeight:1.6,margin:0}}>Please contact your administrator to configure and verify your account's email. Contact details cannot be added or changed during sign-in.</p>
+    <p style={{color:textMuted,fontSize:12,lineHeight:1.5,margin:0}}>A phone number or password-only approval does not remove this requirement.</p>
+    <button type="button" onClick={()=>{setP("");setPanel("login");}} style={{...linkStyle,textAlign:"left"}}>← Back to sign in</button>
+  </section>;
+
+  if(panel==="verify_login") {
+    const expires=Math.max(0,Math.ceil((loginExpiresAt-loginNow)/1000));
+    const resendWait=Math.max(0,Math.ceil((loginResendAt-loginNow)/1000));
+    return <form onSubmit={handleLoginVerify} style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
+      <p style={{color:textMuted,fontSize:13,lineHeight:1.6}}>Enter the six-digit sign-in code sent to <strong style={{color:"#fff"}}>{loginChallenge?.maskedEmail}</strong>. Your account is not signed in until the code is verified.</p>
+      <Field label="Email sign-in code" value={otp} onChange={(value:string)=>setOtp(value.replace(/\D/g,"").slice(0,6))} placeholder="123456" icon={Lock} inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" {...f("login_otp")} {...shared}/>
+      <button type="submit" className="login-btn" disabled={loading||!/^\d{6}$/.test(otp)||expires===0} style={btnStyle}>{loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Please wait…</>:"Verify and Sign In"}</button>
+      <p style={{color:textMuted,fontSize:12,textAlign:"center",margin:0}}>{expires>0?`Code expires in ${Math.floor(expires/60)}m ${String(expires%60).padStart(2,"0")}s`:"Your code has expired. Request a new code."}</p>
+      <button type="button" onClick={handleLoginResend} disabled={loading||resendWait>0} style={{...linkStyle,textAlign:"center",opacity:loading||resendWait>0?0.5:1}}>{resendWait>0?`Resend code in ${resendWait}s`:"Resend sign-in code"}</button>
+      <p style={{color:textMuted,fontSize:12,lineHeight:1.5,margin:0}}>Can't access this email? Contact your administrator. You cannot change the email here.</p>
+      <button type="button" disabled={loading} onClick={()=>{setOtp("");setP("");setLoginChallenge(null);setPanel("login");}} style={{...linkStyle,textAlign:"center"}}>← Back to sign in</button>
+    </form>;
+  }
 
   if(panel==="verify_signup"||panel==="verify_reset") return <form onSubmit={e=>handleVerify(e,panel==="verify_signup"?"signup":"reset")} style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
     <p style={{color:textMuted,fontSize:13,lineHeight:1.5}}>Enter the six-digit code sent to your email. The code expires in {Math.floor(otpExpirySeconds / 60)} minutes.</p>
@@ -236,10 +293,10 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
       <button type="submit" className="login-btn" disabled={loading||!u||!p} style={btnStyle}>
         {loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Signing in…</>:"Sign In →"}
       </button>
-      <p style={{textAlign:"center",color:textMuted,fontSize:13,marginTop:4}}>
+      {allowSignup && <p style={{textAlign:"center",color:textMuted,fontSize:13,marginTop:4}}>
         Don't have an account?{" "}
         <button type="button" onClick={()=>setPanel("signup")} style={linkStyle}>Sign up</button>
-      </p>
+      </p>}
     </form>
   );
 
@@ -249,7 +306,7 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
       <Field label="Full Name" value={name} onChange={setName} placeholder="e.g. John Kamau" icon={User} {...f("n")} {...shared}/>
       <Field label="Username" value={u} onChange={setU} placeholder="Choose a username" icon={User} {...f("u")} {...shared}/>
       <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="name@example.com" icon={User} {...f("email")} {...shared}/>
-      <Field label="Phone (optional)" value={phone} onChange={setPhone} placeholder="+254..." icon={User} {...f("phone")} {...shared}/>
+      <Field label="Phone (optional)" required={false} value={phone} onChange={setPhone} placeholder="+254..." icon={User} {...f("phone")} {...shared}/>
       <Field label="Password" type="password" value={p} onChange={setP} placeholder="At least 12 characters" icon={Lock} {...f("p")} {...shared}/>
       <Field label="Confirm Password" type="password" value={p2} onChange={setP2} placeholder="Repeat password" icon={Lock} {...f("p2")} {...shared}/>
       <button type="submit" className="login-btn" disabled={loading||!name||!u||!p||!p2} style={btnStyle}>
@@ -286,6 +343,8 @@ const PANEL_META:Record<string,any>={
   verify_signup:{title:"Verify Email",sub:"Confirm your email address"},
   verify_reset:{title:"Verify Identity",sub:"Enter the code from your email"},
   reset_password:{title:"New Password",sub:"Create a new password"},
+  verify_login:{title:"Verify Sign-In",sub:"One more step to protect your account"},
+  contact_admin:{title:"Contact Your Administrator",sub:"A verified email is required to sign in"},
 };
 const WELCOME_META:Record<string,any>={
   login:{title:"WELCOME\nBACK!",body:"Access your hospital stores system securely and efficiently."},
@@ -294,6 +353,8 @@ const WELCOME_META:Record<string,any>={
   verify_signup:{title:"ALMOST\nTHERE!",body:"Check your email and enter the verification code."},
   verify_reset:{title:"ALMOST\nTHERE!",body:"Check your email to continue securely."},
   reset_password:{title:"WELCOME\nBACK!",body:"Create a new password and return to your account."},
+  verify_login:{title:"SECURE\nSIGN-IN",body:"Use the one-time code sent to your verified email. Never share your code with anyone."},
+  contact_admin:{title:"ACCOUNT\nPROTECTION",body:"Only an administrator can configure your account's contact details. This helps prevent account takeover."},
 };
 
 // ── Effect themes ─────────────────────────────────────────────────────────
@@ -315,7 +376,7 @@ function EffectBg({effect}:{effect:Effect}){
 
 // ── Main layout ───────────────────────────────────────────────────────────
 export default function LoginPage(){
-  const {login}=useAuth();
+  const {login,completeLoginOtp}=useAuth();
   const [, setLocation] = useLocation();
   const {appLogo}=useTheme();
   const [panel,setPanel]=useState<Panel>("login");
@@ -376,8 +437,11 @@ export default function LoginPage(){
   const reshuffleEffect=()=>{ const next=(effectIdx+1)%effects.length; setEffectIdx(next); setEffect(effects[next]); };
 
   const onLogin=async(u:string,p:string)=>{
-    try{ await login({data:{identifier:u,password:p}}); setLocation("/"); toast.success("Welcome back!"); }
-    catch{ setShake(true); setTimeout(()=>setShake(false),600); throw new Error(""); }
+    try { const result=await login({data:{identifier:u,password:p}}); if("id" in result) { setLocation("/"); toast.success("Welcome back!"); } return result; }
+    catch(err) { setShake(true); setTimeout(()=>setShake(false),600); throw err; }
+  };
+  const onVerifyLogin=async(otp:string)=>{
+    await completeLoginOtp(otp); setLocation("/"); toast.success("Welcome back!");
   };
 
   const onSignup=async(fullName:string,username:string,email:string,phone:string,password:string)=>{
@@ -429,7 +493,7 @@ export default function LoginPage(){
               <h2 style={{color:"#fff",fontSize:24,fontWeight:800,margin:0}}>{meta.title}</h2>
               <p style={{color:t.textMuted,fontSize:13,marginTop:4}}>{meta.sub}</p>
             </div>
-            <FormContent panel={panel} setPanel={setPanel} onLogin={onLogin} onSignup={onSignup}
+            <FormContent panel={panel} setPanel={setPanel} onLogin={onLogin} onVerifyLogin={onVerifyLogin} onSignup={onSignup}
               accentColor={t.accentColor} inputBg={t.inputBg} inputBorder={t.inputBorder}
               textMuted={t.textMuted} allowSignup={allowSignup} otpExpirySeconds={otpExpirySeconds} otpResendCooldownSeconds={otpResendCooldownSeconds}/>
           </div>
