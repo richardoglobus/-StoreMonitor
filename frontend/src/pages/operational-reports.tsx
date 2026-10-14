@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Download } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
@@ -82,7 +82,7 @@ export default function OperationalReportsPage() {
         <div><h1 className="text-3xl font-bold tracking-tight">Operational Reports</h1><p className="text-muted-foreground">Expiry, movement, supplier, and purchase-order monitoring.</p></div>
         <div className="flex flex-wrap gap-2">{reports.map(([key, label]) => <Button key={key} variant={kind === key ? "default" : "outline"} onClick={() => setKind(key)}>{label}</Button>)}</div>
         <Card>
-          <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>{title}</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={() => downloadReport("csv")} disabled={!!downloadLoading}><Download className="h-4 w-4 mr-1" />{downloadLoading === "csv" ? "Preparing…" : "CSV"}</Button><Button variant="outline" onClick={() => downloadReport("xlsx")} disabled={!!downloadLoading}><Download className="h-4 w-4 mr-1" />{downloadLoading === "xlsx" ? "Preparing…" : "Excel"}</Button></div></div></CardHeader>
+          <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>{title}</CardTitle><div className="flex gap-2"><Button variant="ghost" size="icon" onClick={() => load(false)} disabled={loading || !!downloadLoading} title="Refresh"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /></Button><Button variant="outline" onClick={() => downloadReport("csv")} disabled={!!downloadLoading}><Download className="h-4 w-4 mr-1" />{downloadLoading === "csv" ? "Preparing…" : "CSV"}</Button><Button variant="outline" onClick={() => downloadReport("xlsx")} disabled={!!downloadLoading}><Download className="h-4 w-4 mr-1" />{downloadLoading === "xlsx" ? "Preparing…" : "Excel"}</Button></div></div></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1"><Label>Search {kind === "supplier-performance" ? "supplier" : "item"}</Label><Input value={search} onChange={e => setSearch(e.target.value)} placeholder={kind === "supplier-performance" ? "Search supplier…" : "Search item…"} /></div>

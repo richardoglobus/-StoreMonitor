@@ -89,7 +89,6 @@ export default function MonthlyReportPage() {
             <p className="text-muted-foreground">Comprehensive summary of stock movements over a date range.</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setLocation("/reports/operational")}>Operational Reports</Button>
             <Button variant="ghost" size="icon" onClick={() => refetchReport()} disabled={isFetching} title="Refresh">
               <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}/>
             </Button>
