@@ -1750,22 +1750,33 @@ function otpAllowed(key) {
   recent.push(now); otpAttempts.set(key, recent); return true;
 }
 async function deliverEmailOtp({ email, code, purpose }) {
-  const webhook = process.env.OTP_EMAIL_WEBHOOK_URL;
-  if (webhook) {
-    const response = await fetch(webhook, {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  if (apiKey) {
+    const label = purpose === "signup" ? "Verify your StoreMonitor account" : "Reset your StoreMonitor password";
+    const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(process.env.OTP_EMAIL_WEBHOOK_SECRET ? { "x-otp-webhook-secret": process.env.OTP_EMAIL_WEBHOOK_SECRET } : {}) },
-      body: JSON.stringify({ to: email, code, purpose, expiresInMinutes: 10 })
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: label,
+        html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto"><h2>${label}</h2><p>Your verification code is:</p><p style="font-size:32px;font-weight:700;letter-spacing:8px">${code}</p><p>This code expires in 10 minutes and can only be used once.</p><p>If you did not request this, you can ignore this email.</p></div>`
+      })
     });
-    if (!response.ok) throw new Error(`Email delivery failed (${response.status})`);
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Resend delivery failed (${response.status}): ${detail.slice(0, 300)}`);
+    }
     return;
   }
   if (process.env.OTP_DEV_MODE === "true") { console.warn(`[OTP_DEV_MODE] ${purpose} OTP for ${email}: ${code}`); return; }
-  throw new Error("Email delivery is not configured");
+  throw new Error("Resend email delivery is not configured");
 }
 function safeUser(user) {
   return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, accountStatus: user.accountStatus || "active", role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
 }
+function maskEmail(value) { const email = normalizeEmail(value); const [name, domain] = email.split("@"); return name && domain ? `${name.slice(0, 2)}***@${domain}` : "unknown"; }
 
 // AUTH
 app.post("/api/auth/login",(req,res)=>{
@@ -4206,10 +4217,26 @@ app.post("/api/auth/forgot-password",async (req,res)=>{
   if(!user || !user.email || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
   const code=makeOtp();
   db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpPurpose:"reset",emailOtpAttempts:0}).write();
+  console.log(`[OTP] password-reset requested for ${maskEmail(user.email)}`);
   try { await deliverEmailOtp({email:user.email,code,purpose:"password-reset"}); }
-  catch { return res.json(generic); }
+  catch (error) { console.error(`[OTP] password-reset delivery failed: ${error.message}`); return res.json(generic); }
   if (process.env.OTP_DEV_MODE === "true") generic.devOtp=code;
   res.json(generic);
+});
+
+app.post("/api/auth/resend-otp",async (req,res)=>{
+  const {identifier,purpose}=req.body || {};
+  const key=String(identifier || "").trim();
+  if (!key || !["signup","reset"].includes(purpose)) return res.status(400).json({error:"Invalid OTP request"});
+  const user=db.get("users").find(u => String(u.username || "").toLowerCase() === key.toLowerCase() || normalizeEmail(u.email) === normalizeEmail(key) || normalizePhone(u.phone) === normalizePhone(key)).value();
+  if (!user || !user.email || (purpose === "signup" && user.accountStatus !== "pending_verification")) return res.json({success:true,message:"If the account matches, a new code has been sent."});
+  if (!otpAllowed(`resend:${purpose}:${user.id}`)) return res.status(429).json({error:"Please wait before requesting another code"});
+  const code=makeOtp();
+  db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpPurpose:purpose,emailOtpAttempts:0}).write();
+  console.log(`[OTP] ${purpose} resend requested for ${maskEmail(user.email)}`);
+  try { await deliverEmailOtp({email:user.email,code,purpose:purpose === "signup" ? "signup" : "password-reset"}); }
+  catch (error) { console.error(`[OTP] resend delivery failed: ${error.message}`); return res.status(503).json({error:"Unable to send a new verification code"}); }
+  res.json({success:true,message:"A new verification code has been sent."});
 });
 
 app.post("/api/auth/verify-otp",(req,res)=>{

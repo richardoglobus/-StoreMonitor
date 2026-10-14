@@ -135,6 +135,9 @@ export function useLogin(options?: MutOpts<AuthUser, { data: { identifier: strin
 export async function requestPasswordOtp(identifier: string) {
   return apiFetch<{ success: boolean; message: string; devOtp?: string }>("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
 }
+export async function resendOtp(identifier: string, purpose: "signup" | "reset") {
+  return apiFetch<{ success: boolean; message: string }>("/api/auth/resend-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, purpose }) });
+}
 export async function verifyOtp(identifier: string, otp: string, purpose: "signup" | "reset") {
   return apiFetch<{ success: boolean; message?: string; resetSession?: string }>("/api/auth/verify-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, otp, purpose }) });
 }
