@@ -38,7 +38,13 @@ const NAV_ITEMS = [
   },
   { href: "/purchases",       label: "Purchases",      icon: ShoppingCart,    permission: "viewPurchases" },
   { href: "/issues",          label: "Issues Log",     icon: FileText,        permission: "viewIssues" },
-  { href: "/reports",         label: "Monthly Report", icon: BarChart3,       permission: "viewReports" },
+  {
+    label: "Reports", icon: BarChart3, permission: "viewReports",
+    children: [
+      { href: "/reports",            label: "Monthly Report",     icon: BarChart3, permission: "viewReports" },
+      { href: "/reports/operational", label: "Operational Reports", icon: FileText,  permission: "viewReports" },
+    ],
+  },
   { href: "/stock-valuation", label: "Stock Valuation",icon: TrendingUp,      permission: "viewReports" },
   {
     label: "Accounts", icon: Landmark, permission: "viewAccounts",

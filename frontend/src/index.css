@@ -86,4 +86,12 @@
   body {
     @apply bg-background text-foreground;
   }
+  input[type="date"], input[type="datetime-local"] {
+    color-scheme: light;
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--background));
+  }
+  .dark input[type="date"], .dark input[type="datetime-local"] {
+    color-scheme: dark;
+  }
 }
