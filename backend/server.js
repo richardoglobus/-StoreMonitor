@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const low = require("lowdb");
 const FileSync = require("lowdb/adapters/FileSync");
 const { v4: uuidv4 } = require("uuid");
+const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const { execFileSync } = require("child_process");
@@ -1573,6 +1574,13 @@ function runMigrations() {
   migratePurchasesToSuppliers();
   migratePurchasesToGrns();
   for (const user of db.get("users").value()) {
+    const contactUpdates = {};
+    if (user.email === undefined) contactUpdates.email = null;
+    if (user.phone === undefined) contactUpdates.phone = null;
+    if (user.emailVerifiedAt === undefined) contactUpdates.emailVerifiedAt = null;
+    if (user.phoneVerifiedAt === undefined) contactUpdates.phoneVerifiedAt = null;
+    if (user.accountStatus === undefined) contactUpdates.accountStatus = "active";
+    if (Object.keys(contactUpdates).length) db.get("users").find({ id: user.id }).assign(contactUpdates).write();
     const perms = user.permissions || {};
     const updates = {};
     if (perms.editCatalog === undefined) updates["permissions.editCatalog"] = user.role === "admin" || user.role === "manager";
@@ -1730,11 +1738,46 @@ function requirePermission(perm){
 
 app.get("/api/healthz",(_,res)=>res.json({status:"ok"}));
 
+const otpAttempts = new Map();
+function normalizeEmail(value) { return String(value || "").trim().toLowerCase(); }
+function normalizePhone(value) { return String(value || "").trim().replace(/[\s()-]/g, ""); }
+function makeOtp() { return String(crypto.randomInt(100000, 1000000)); }
+function hashOtp(value) { return crypto.createHash("sha256").update(String(value)).digest("hex"); }
+function otpAllowed(key) {
+  const now = Date.now();
+  const recent = (otpAttempts.get(key) || []).filter(t => now - t < 15 * 60 * 1000);
+  if (recent.length >= 5) { otpAttempts.set(key, recent); return false; }
+  recent.push(now); otpAttempts.set(key, recent); return true;
+}
+async function deliverEmailOtp({ email, code, purpose }) {
+  const webhook = process.env.OTP_EMAIL_WEBHOOK_URL;
+  if (webhook) {
+    const response = await fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(process.env.OTP_EMAIL_WEBHOOK_SECRET ? { "x-otp-webhook-secret": process.env.OTP_EMAIL_WEBHOOK_SECRET } : {}) },
+      body: JSON.stringify({ to: email, code, purpose, expiresInMinutes: 10 })
+    });
+    if (!response.ok) throw new Error(`Email delivery failed (${response.status})`);
+    return;
+  }
+  if (process.env.OTP_DEV_MODE === "true") { console.warn(`[OTP_DEV_MODE] ${purpose} OTP for ${email}: ${code}`); return; }
+  throw new Error("Email delivery is not configured");
+}
+function safeUser(user) {
+  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, accountStatus: user.accountStatus || "active", role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
+}
+
 // AUTH
 app.post("/api/auth/login",(req,res)=>{
-  const {username,password}=req.body;
-  const user=db.get("users").find({username}).value();
+  const {identifier,password}=req.body;
+  const loginIdentifier = String(identifier ?? req.body?.username ?? "").trim();
+  if (!loginIdentifier || !password) return res.status(401).json({error:"Invalid credentials"});
+  const normalizedEmail = normalizeEmail(loginIdentifier);
+  const normalizedPhone = normalizePhone(loginIdentifier);
+  const user=db.get("users").find(u => String(u.username || "").toLowerCase() === loginIdentifier.toLowerCase() || normalizeEmail(u.email) === normalizedEmail || normalizePhone(u.phone) === normalizedPhone).value();
   if(!user||!bcrypt.compareSync(password,user.passwordHash)) return res.status(401).json({error:"Invalid credentials"});
+  if (user.accountStatus === "pending_verification") return res.status(403).json({error:"Please verify your email before logging in"});
+  if (user.accountStatus === "disabled" || user.isActive === false) return res.status(403).json({error:"This account is inactive"});
   const settings = getSettings();
   const maintenanceActive = !!settings.maintenanceMode && settings.maintenanceEndsAt && new Date(settings.maintenanceEndsAt).getTime() > Date.now();
   if(maintenanceActive && user.role !== "admin") return res.status(423).json({error:"System maintenance is in progress", maintenanceEndsAt: settings.maintenanceEndsAt});
@@ -1742,7 +1785,7 @@ app.post("/api/auth/login",(req,res)=>{
   const permissions = normalizePermissions(user.role, user.permissions);
   req.session.permissions = permissions;
   logActivity(req, "LOGIN", "AUTH", user.id, null);
-  res.json({id:user.id,username:user.username,fullName:user.fullName,role:user.role,permissions});
+  res.json(safeUser(user));
 });
 app.post("/api/auth/logout",(req,res)=>{
   logActivity(req, "LOGOUT", "AUTH", req.session.userId, null);
@@ -1765,13 +1808,13 @@ app.get("/api/auth/me",(req,res)=>{
   const user=db.get("users").find({id:req.session.userId}).value();
   if(!user) return res.status(401).json({error:"Unauthorized"});
   const freshPerms = normalizePermissions(user.role, user.permissions);
-  res.json({id:user.id,username:user.username,fullName:user.fullName,role:user.role,permissions:freshPerms});
+  res.json(safeUser({ ...user, permissions: freshPerms }));
 });
 // Self-service password change (any logged-in user changes their own password)
 app.patch("/api/auth/change-password",requireAuth,(req,res)=>{
   const {currentPassword,newPassword}=req.body;
   if(!currentPassword||!newPassword) return res.status(400).json({error:"Missing fields"});
-  if(newPassword.length<6) return res.status(400).json({error:"New password must be at least 6 characters"});
+  if(newPassword.length<12) return res.status(400).json({error:"New password must be at least 12 characters"});
   const user=db.get("users").find({id:req.session.userId}).value();
   if(!user) return res.status(401).json({error:"Unauthorized"});
   if(!bcrypt.compareSync(currentPassword,user.passwordHash)) return res.status(401).json({error:"Current password is incorrect"});
@@ -1792,26 +1835,33 @@ app.patch("/api/auth/change-username",requireAuth,(req,res)=>{
   logActivity(req, "CHANGE_USERNAME", "USER", req.session.userId, { username });
   res.json({success:true, username});
 });
-app.get("/api/auth/users",requirePermission("manageUsers"),(_,res)=>{ res.json(db.get("users").orderBy("username","asc").value().map(u=>({id:u.id,username:u.username,fullName:u.fullName,role:u.role,permissions:normalizePermissions(u.role, u.permissions)}))); });
+app.get("/api/auth/users",requirePermission("manageUsers"),(_,res)=>{ res.json(db.get("users").orderBy("username","asc").value().map(safeUser)); });
 app.post("/api/auth/users",requireAdmin,(req,res)=>{
-  const {username,password,fullName,role,permissions}=req.body;
+  const {username,password,fullName,role,permissions,email,phone}=req.body;
   if(!username||!password) return res.status(400).json({error:"Missing fields"});
   if(db.get("users").find({username}).value()) return res.status(400).json({error:"Username already exists"});
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
+  if (normalizedEmail && db.get("users").find(u => normalizeEmail(u.email) === normalizedEmail).value()) return res.status(409).json({error:"Email already exists"});
+  if (normalizedPhone && db.get("users").find(u => normalizePhone(u.phone) === normalizedPhone).value()) return res.status(409).json({error:"Phone number already exists"});
   const id=nextId("users");
   const resolvedRole = role || "staff";
-  const user={id,username,passwordHash:bcrypt.hashSync(password,10),fullName:fullName||null,role:resolvedRole,permissions:normalizePermissions(resolvedRole, permissions)};
+  const user={id,username:username.trim(),passwordHash:bcrypt.hashSync(password,10),fullName:fullName||null,email:normalizedEmail||null,phone:normalizedPhone||null,emailVerifiedAt:normalizedEmail?new Date().toISOString():null,phoneVerifiedAt:normalizedPhone?new Date().toISOString():null,accountStatus:"active",role:resolvedRole,permissions:normalizePermissions(resolvedRole, permissions),createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req, "CREATE_USER", "USER", id, { username, role: user.role });
-  res.status(201).json({id,username,fullName:user.fullName,role:user.role,permissions:user.permissions});
+  res.status(201).json(safeUser(user));
 });
 app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   const userId=Number(req.params.userId);
-  const {fullName,role,password,permissions}=req.body;
+  const {fullName,role,password,permissions,email,phone,accountStatus}=req.body;
   const user=db.get("users").find({id:userId});
   if(!user.value()) return res.status(404).json({error:"Not found"});
   const current = user.value();
   const updates={};
   if(fullName!==undefined) updates.fullName=fullName;
+  if(email!==undefined) updates.email=normalizeEmail(email)||null;
+  if(phone!==undefined) updates.phone=normalizePhone(phone)||null;
+  if(accountStatus!==undefined && ["active","disabled","pending_verification"].includes(accountStatus)) updates.accountStatus=accountStatus;
   if(role!==undefined) updates.role=role;
   if(password) updates.passwordHash=bcrypt.hashSync(password,10);
   const resolvedRole = updates.role || current.role;
@@ -1819,7 +1869,7 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   user.assign(updates).write();
   const u=user.value();
   logActivity(req, "UPDATE_USER", "USER", u.id, { role: u.role });
-  res.json({id:u.id,username:u.username,fullName:u.fullName,role:u.role,permissions:normalizePermissions(u.role, u.permissions)});
+  res.json(safeUser(u));
 });
 app.delete("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   const userId=Number(req.params.userId);
@@ -4123,44 +4173,69 @@ app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
 
 
 // ── Self Registration (if enabled in settings) ────────────────────────────
-app.post("/api/auth/register",(req,res)=>{
+app.post("/api/auth/register",async (req,res)=>{
   const s=getSettings();
   if(!s.allowSelfRegistration) return res.status(403).json({error:"Self-registration is disabled"});
-  const {username,password,fullName}=req.body;
-  if(!username||!password||!fullName) return res.status(400).json({error:"All fields are required"});
-  if(password.length<6) return res.status(400).json({error:"Password must be at least 6 characters"});
-  if(db.get("users").find({username}).value()) return res.status(400).json({error:"Username already taken"});
+  const {username,password,fullName,email,phone}=req.body;
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
+  if(!username||!password||!fullName||!normalizedEmail) return res.status(400).json({error:"Full name, username, email, and password are required"});
+  if(password.length<12) return res.status(400).json({error:"Password must be at least 12 characters"});
+  if(db.get("users").find(u => String(u.username).toLowerCase() === String(username).trim().toLowerCase()).value()) return res.status(400).json({error:"Username already taken"});
+  if(db.get("users").find(u => normalizeEmail(u.email) === normalizedEmail).value()) return res.status(400).json({error:"Email already registered"});
+  if(normalizedPhone && db.get("users").find(u => normalizePhone(u.phone) === normalizedPhone).value()) return res.status(400).json({error:"Phone number already registered"});
   const hash=bcrypt.hashSync(password,10);
   const defaultPerms={viewDashboard:true,viewCatalog:false,viewDepartments:false,viewPurchases:false,viewIssues:false,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
-  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
+  const code=makeOtp();
+  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:"pending_verification",emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpPurpose:"signup",emailOtpAttempts:0,role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
-  res.status(201).json({success:true,message:"Account created. Please wait for admin approval before logging in."});
+  try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
+  catch (error) { db.get("users").remove({id:user.id}).write(); return res.status(503).json({error:"We could not send the verification email. Please try again later."}); }
+  const response={success:true,message:"Account created. Check your email for the verification code."};
+  if (process.env.OTP_DEV_MODE === "true") response.devOtp=code;
+  res.status(201).json(response);
 });
 
-// ── Forgot Password (admin resets — no email yet) ─────────────────────────
-app.post("/api/auth/forgot-password",(req,res)=>{
-  const {username}=req.body;
-  if(!username) return res.status(400).json({error:"Username is required"});
-  const user=db.get("users").find({username}).value();
-  if(!user) return res.status(404).json({error:"No account found with that username"});
-  // Generate a temporary reset token stored in db
-  const token=Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
-  const expires=new Date(Date.now()+3600000).toISOString(); // 1 hour
-  db.get("users").find({username}).assign({resetToken:token,resetExpires:expires}).write();
-  // In a real system, email the token. Here we return it so admin can relay it.
-  res.json({success:true,message:"Token generated.",resetToken:token,username,expiresIn:"1 hour"});
+// ── Email OTP recovery and signup verification ─────────────────────────────
+app.post("/api/auth/forgot-password",async (req,res)=>{
+  const identifier=String(req.body?.identifier ?? req.body?.username ?? "").trim();
+  const email=normalizeEmail(identifier);
+  const user=db.get("users").find(u => String(u.username || "").toLowerCase() === identifier.toLowerCase() || normalizeEmail(u.email) === email || normalizePhone(u.phone) === normalizePhone(identifier)).value();
+  const generic={success:true,message:"If an account matches those details, we will send a verification code."};
+  if(!user || !user.email || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
+  const code=makeOtp();
+  db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpPurpose:"reset",emailOtpAttempts:0}).write();
+  try { await deliverEmailOtp({email:user.email,code,purpose:"password-reset"}); }
+  catch { return res.json(generic); }
+  if (process.env.OTP_DEV_MODE === "true") generic.devOtp=code;
+  res.json(generic);
+});
+
+app.post("/api/auth/verify-otp",(req,res)=>{
+  const {identifier,otp,purpose}=req.body || {};
+  const key=String(identifier || "").trim();
+  const user=db.get("users").find(u => String(u.username || "").toLowerCase() === key.toLowerCase() || normalizeEmail(u.email) === normalizeEmail(key)).value();
+  if(!user || !otp || !user.emailOtpHash || user.emailOtpPurpose !== purpose || !user.emailOtpExpires || new Date(user.emailOtpExpires) < new Date()) return res.status(400).json({error:"Invalid or expired verification code"});
+  if ((user.emailOtpAttempts || 0) >= 5) return res.status(429).json({error:"Too many verification attempts. Request a new code."});
+  if (hashOtp(otp) !== user.emailOtpHash) { db.get("users").find({id:user.id}).assign({emailOtpAttempts:(user.emailOtpAttempts || 0)+1}).write(); return res.status(400).json({error:"Invalid or expired verification code"}); }
+  if (purpose === "signup") {
+    db.get("users").find({id:user.id}).assign({emailVerifiedAt:new Date().toISOString(),accountStatus:"active",emailOtpHash:null,emailOtpExpires:null,emailOtpPurpose:null,emailOtpAttempts:0}).write();
+    return res.json({success:true,message:"Email verified. You can now sign in."});
+  }
+  const resetSession=crypto.randomBytes(32).toString("hex");
+  db.get("users").find({id:user.id}).assign({resetSessionHash:hashOtp(resetSession),resetSessionExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpHash:null,emailOtpExpires:null,emailOtpPurpose:null,emailOtpAttempts:0}).write();
+  res.json({success:true,resetSession});
 });
 
 app.patch("/api/auth/reset-password",(req,res)=>{
-  const {username,token,newPassword}=req.body;
-  if(!username||!token||!newPassword) return res.status(400).json({error:"Missing fields"});
-  if(newPassword.length<6) return res.status(400).json({error:"Password must be at least 6 characters"});
-  const user=db.get("users").find({username}).value();
-  if(!user||user.resetToken!==token) return res.status(400).json({error:"Invalid or expired reset token"});
-  if(user.resetExpires&&new Date(user.resetExpires)<new Date()) return res.status(400).json({error:"Reset token has expired"});
+  const {resetSession,newPassword,confirmPassword}=req.body || {};
+  if(!resetSession||!newPassword||newPassword!==confirmPassword) return res.status(400).json({error:"Enter matching new passwords"});
+  if(newPassword.length<12) return res.status(400).json({error:"New password must be at least 12 characters"});
+  const user=db.get("users").find(u => u.resetSessionHash === hashOtp(resetSession)).value();
+  if(!user||!user.resetSessionExpires||new Date(user.resetSessionExpires)<new Date()) return res.status(400).json({error:"Invalid or expired reset session"});
   const hash=bcrypt.hashSync(newPassword,10);
-  db.get("users").find({username}).assign({passwordHash:hash,resetToken:null,resetExpires:null}).write();
+  db.get("users").find({id:user.id}).assign({passwordHash:hash,resetSessionHash:null,resetSessionExpires:null}).write();
   res.json({success:true,message:"Password reset successfully. You can now log in."});
 });
 

@@ -42,7 +42,7 @@ export type Permissions = {
   manageAssets: boolean;
   manageDigitalForms: boolean;
 };
-export type AuthUser = { id: number; username: string; fullName: string | null; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
+export type AuthUser = { id: number; username: string; fullName: string | null; email?: string | null; phone?: string | null; emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null; accountStatus?: string; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
 export type Department = { id: number; name: string; slug: string };
 export type Item = { id: number; itemCode?: string | null; description: string; unit: string; quantity: number; categoryId?: number | null; categoryName?: string | null; expiryDate?: string | null; expired?: boolean };
 export type ItemStock = Item & { purchasedTotal: number; issuedTotal: number; adjustmentTotal: number; stockBalance: number; rawStockBalance?: number; packUnit?: string | null; packSize?: number; quantityUnit?: string; quantityLabel?: string };
@@ -128,8 +128,18 @@ export function useGetCurrentUser(options?: QueryOpts<AuthUser>) {
   return useQuery({ queryKey: getGetCurrentUserQueryKey(), queryFn: () => apiFetch<AuthUser>("/api/auth/me"), ...options?.query });
 }
 
-export function useLogin(options?: MutOpts<AuthUser, { data: { username: string; password: string } }>) {
+export function useLogin(options?: MutOpts<AuthUser, { data: { identifier: string; password: string } }>) {
   return useMutation({ mutationFn: ({ data }) => apiFetch<AuthUser>("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...options?.mutation });
+}
+
+export async function requestPasswordOtp(identifier: string) {
+  return apiFetch<{ success: boolean; message: string; devOtp?: string }>("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
+}
+export async function verifyOtp(identifier: string, otp: string, purpose: "signup" | "reset") {
+  return apiFetch<{ success: boolean; message?: string; resetSession?: string }>("/api/auth/verify-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, otp, purpose }) });
+}
+export async function resetPassword(resetSession: string, newPassword: string, confirmPassword: string) {
+  return apiFetch<{ success: boolean; message: string }>("/api/auth/reset-password", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resetSession, newPassword, confirmPassword }) });
 }
 
 export function useLogout(options?: MutOpts<void, void>) {

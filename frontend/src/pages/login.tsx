@@ -1,12 +1,12 @@
-import { API_BASE } from "@/lib/api";
+import { API_BASE, requestPasswordOtp, resetPassword, verifyOtp } from "@/lib/api";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Copy, CheckCircle, Download, X } from "lucide-react";
+import { Loader2, Eye, EyeOff, User, Lock, UserPlus, ArrowLeft, Download, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme, LOGOS } from "@/lib/theme-context";
 import { useLocation } from "wouter";
 
-type Panel = "login" | "signup" | "forgot" | "reset_token";
+type Panel = "login" | "signup" | "forgot" | "verify_signup" | "verify_reset" | "reset_password";
 type Effect = "split" | "particles" | "glass" | "wave" | "gradient";
 
 // ── Particle canvas ───────────────────────────────────────────────────────
@@ -198,63 +198,35 @@ function Field({ label, type="text", value, onChange, placeholder, icon:Icon, fo
 }
 
 // ── Form panels ───────────────────────────────────────────────────────────
-function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, resetTokenData, setResetTokenData }: any) {
-  const [u,setU]=useState(""); const [p,setP]=useState(""); const [p2,setP2]=useState("");
-  const [name,setName]=useState(""); const [loading,setLoading]=useState(false);
-  const [focused,setFocused]=useState<string|null>(null);
-  const [copied,setCopied]=useState(false);
-  const f=(id:string)=>({focused:focused===id,onFocus:()=>setFocused(id),onBlur:()=>setFocused(null)});
-  const shared={accentColor,inputBg,inputBorder,textColor:textMuted};
-
+function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup }: any) {
+  const [u,setU]=useState(""); const [p,setP]=useState(""); const [p2,setP2]=useState(""); const [email,setEmail]=useState(""); const [phone,setPhone]=useState(""); const [otp,setOtp]=useState(""); const [resetSession,setResetSession]=useState("");
+  const [name,setName]=useState(""); const [loading,setLoading]=useState(false); const [focused,setFocused]=useState<string|null>(null);
+  const f=(id:string)=>({focused:focused===id,onFocus:()=>setFocused(id),onBlur:()=>setFocused(null)}); const shared={accentColor,inputBg,inputBorder,textColor:textMuted};
   const btnStyle:any={width:"100%",padding:"13px",border:"none",borderRadius:10,background:`linear-gradient(135deg,${accentColor},${accentColor}cc)`,color:"white",fontWeight:700,fontSize:15,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 20px ${accentColor}44`,transition:"all 0.2s",marginTop:6,opacity:loading?0.7:1};
   const linkStyle:any={color:accentColor,background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,textDecoration:"underline",padding:0};
+  const handleLogin=async(e:React.FormEvent)=>{e.preventDefault();if(!u||!p)return;setLoading(true);try{await onLogin(u,p);}catch{toast.error("Invalid username, email, phone, or password");}finally{setLoading(false);}};
+  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{await onSignup(name,u,email,phone,p);setPanel("verify_signup");}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
+  const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{await requestPasswordOtp(u);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
+  const handleVerify=async(e:React.FormEvent,purpose:"signup"|"reset")=>{e.preventDefault();setLoading(true);try{const result=await verifyOtp(purpose==="signup"?email:u,otp,purpose);if(purpose==="reset"){setResetSession(result.resetSession||"");setPanel("reset_password");}else{toast.success("Email verified. You can now sign in.");setPanel("login");}}catch(err:any){toast.error(err?.error||"Invalid or expired code");}finally{setLoading(false);}};
+  const handleReset=async(e:React.FormEvent)=>{e.preventDefault();if(p!==p2){toast.error("Passwords do not match");return;}setLoading(true);try{await resetPassword(resetSession,p,p2);toast.success("Password changed. You can now sign in.");setPanel("login");setP("");setP2("");}catch(err:any){toast.error(err?.error||"Unable to reset password");}finally{setLoading(false);}};
 
-  const handleLogin=async(e:React.FormEvent)=>{e.preventDefault();if(!u||!p)return;setLoading(true);try{await onLogin(u,p);}catch{toast.error("Invalid username or password");}finally{setLoading(false);}};
-  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<6){toast.error("Password must be at least 6 characters");return;}setLoading(true);try{await onSignup(name,u,p);}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
-  const handleForgot=async(e:React.FormEvent)=>{
-    e.preventDefault();if(!u)return;setLoading(true);
-    try{
-      const res=await fetch(`${API_BASE}/api/auth/forgot-password`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u})});
-      const data=await res.json();
-      if(!res.ok)throw new Error(data.error);
-      setResetTokenData(data);
-      setPanel("reset_token");
-    }catch(err:any){toast.error(err?.message||"Failed");}
-    finally{setLoading(false);}
-  };
-
-  const copyToken=()=>{
-    if(resetTokenData?.resetToken){navigator.clipboard.writeText(resetTokenData.resetToken);setCopied(true);setTimeout(()=>setCopied(false),2000);}
-  };
-
-  // ── Reset token panel ──────────────────────────────────────────────────
-  if(panel==="reset_token") return (
-    <div style={{animation:"fadeUp 0.4s ease",display:"flex",flexDirection:"column",gap:16}}>
-      <div style={{background:"rgba(16,185,129,0.1)",border:"1px solid rgba(16,185,129,0.3)",borderRadius:12,padding:"14px 16px"}}>
-        <p style={{color:"#10b981",fontWeight:700,fontSize:13,marginBottom:8}}>✅ Reset token generated!</p>
-        <p style={{color:textMuted,fontSize:12,marginBottom:12,lineHeight:1.5}}>
-          Share this token with <strong style={{color:"white"}}>{resetTokenData?.username}</strong>. They must give it to the administrator to complete the reset.
-        </p>
-        <div style={{background:"rgba(0,0,0,0.3)",borderRadius:8,padding:"10px 14px",fontFamily:"monospace",fontSize:13,color:"white",wordBreak:"break-all",marginBottom:10}}>
-          {resetTokenData?.resetToken}
-        </div>
-        <button onClick={copyToken} style={{...btnStyle,marginTop:0,padding:"9px 16px",width:"auto",fontSize:13}}>
-          {copied?<><CheckCircle size={14}/>Copied!</>:<><Copy size={14}/>Copy Token</>}
-        </button>
-        <p style={{color:textMuted,fontSize:11,marginTop:8}}>⏰ Expires in: {resetTokenData?.expiresIn}</p>
-      </div>
-      <p style={{color:textMuted,fontSize:12,lineHeight:1.5}}>
-        To reset: go to <strong style={{color:"white"}}>Activity Log</strong> or the administrator can use the token at:<br/>
-        <code style={{fontSize:11,color:accentColor}}>PATCH /api/auth/reset-password</code>
-      </p>
-      <button type="button" onClick={()=>{setPanel("login");setResetTokenData(null);}} style={{...linkStyle,textAlign:"center",display:"block"}}>← Back to Login</button>
-    </div>
-  );
+  if(panel==="verify_signup"||panel==="verify_reset") return <form onSubmit={e=>handleVerify(e,panel==="verify_signup"?"signup":"reset")} style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
+    <p style={{color:textMuted,fontSize:13,lineHeight:1.5}}>Enter the six-digit code sent to your email. The code expires soon.</p>
+    <Field label="Verification Code" value={otp} onChange={setOtp} placeholder="123456" icon={Lock} {...f("otp")} {...shared}/>
+    <button type="submit" className="login-btn" disabled={loading||otp.length<6} style={btnStyle}>{loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Verifying…</>:"Verify Code"}</button>
+    <button type="button" onClick={()=>setPanel("login")} style={{...linkStyle,textAlign:"center"}}>← Back to login</button>
+  </form>;
+  if(panel==="reset_password") return <form onSubmit={handleReset} style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
+    <p style={{color:textMuted,fontSize:13,lineHeight:1.5}}>Choose a new password for your account.</p>
+    <Field label="New Password" type="password" value={p} onChange={setP} placeholder="At least 12 characters" icon={Lock} {...f("p")} {...shared}/>
+    <Field label="Confirm Password" type="password" value={p2} onChange={setP2} placeholder="Repeat password" icon={Lock} {...f("p2")} {...shared}/>
+    <button type="submit" className="login-btn" disabled={loading||!p||!p2} style={btnStyle}>{loading?"Saving…":"Set New Password"}</button>
+  </form>;
 
   // ── Login panel ────────────────────────────────────────────────────────
   if(panel==="login") return (
     <form onSubmit={handleLogin} style={{display:"flex",flexDirection:"column",gap:14,animation:"slideRight 0.45s cubic-bezier(0.34,1.56,0.64,1)"}}>
-      <Field label="Username" value={u} onChange={setU} placeholder="Enter username" icon={User} {...f("u")} {...shared}/>
+      <Field label="Username, Email, or Phone" value={u} onChange={setU} placeholder="Enter username, email, or phone" icon={User} {...f("u")} {...shared}/>
       <Field label="Password" type="password" value={p} onChange={setP} placeholder="Enter password" icon={Lock} {...f("p")} {...shared}/>
       <button type="button" onClick={()=>setPanel("forgot")} style={{...linkStyle,textAlign:"right",marginTop:-6}}>Forgot password?</button>
       <button type="submit" className="login-btn" disabled={loading||!u||!p} style={btnStyle}>
@@ -272,12 +244,14 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
     <form onSubmit={handleSignup} style={{display:"flex",flexDirection:"column",gap:12,animation:"slideLeft 0.45s cubic-bezier(0.34,1.56,0.64,1)"}}>
       <Field label="Full Name" value={name} onChange={setName} placeholder="e.g. John Kamau" icon={User} {...f("n")} {...shared}/>
       <Field label="Username" value={u} onChange={setU} placeholder="Choose a username" icon={User} {...f("u")} {...shared}/>
-      <Field label="Password" type="password" value={p} onChange={setP} placeholder="Min. 6 characters" icon={Lock} {...f("p")} {...shared}/>
+      <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="name@example.com" icon={User} {...f("email")} {...shared}/>
+      <Field label="Phone (optional)" value={phone} onChange={setPhone} placeholder="+254..." icon={User} {...f("phone")} {...shared}/>
+      <Field label="Password" type="password" value={p} onChange={setP} placeholder="At least 12 characters" icon={Lock} {...f("p")} {...shared}/>
       <Field label="Confirm Password" type="password" value={p2} onChange={setP2} placeholder="Repeat password" icon={Lock} {...f("p2")} {...shared}/>
       <button type="submit" className="login-btn" disabled={loading||!name||!u||!p||!p2} style={btnStyle}>
         {loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Creating…</>:<><UserPlus size={16}/>Create Account</>}
       </button>
-      <p style={{textAlign:"center",color:textMuted,fontSize:11,fontStyle:"italic"}}>{allowSignup?"New accounts require admin approval.":"Contact administrator if you cannot log in."}</p>
+      <p style={{textAlign:"center",color:textMuted,fontSize:11,fontStyle:"italic"}}>{allowSignup?"A verification code will be sent to your email.":"Contact administrator if you cannot log in."}</p>
       <p style={{textAlign:"center",color:textMuted,fontSize:13}}>
         Already have an account?{" "}
         <button type="button" onClick={()=>setPanel("login")} style={linkStyle}>Sign in</button>
@@ -291,10 +265,10 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
       <button type="button" onClick={()=>setPanel("login")} style={{...linkStyle,display:"flex",alignItems:"center",gap:4,fontSize:13}}>
         <ArrowLeft size={14}/> Back to login
       </button>
-      <p style={{color:textMuted,fontSize:13,lineHeight:1.5}}>Enter your username. A reset token will be generated for your administrator to share with you.</p>
-      <Field label="Username" value={u} onChange={setU} placeholder="Your username" icon={User} {...f("u")} {...shared}/>
+      <p style={{color:textMuted,fontSize:13,lineHeight:1.5}}>Enter your username, email, or phone. If the account matches, we will email a verification code.</p>
+      <Field label="Username, Email, or Phone" value={u} onChange={setU} placeholder="Your account identifier" icon={User} {...f("u")} {...shared}/>
       <button type="submit" className="login-btn" disabled={loading||!u} style={btnStyle}>
-        {loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Generating…</>:"Get Reset Token"}
+        {loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Sending…</>:"Send Verification Code"}
       </button>
     </form>
   );
@@ -305,13 +279,17 @@ const PANEL_META:Record<string,any>={
   login:{title:"Login",sub:"Welcome back — sign in to continue"},
   signup:{title:"Create Account",sub:"Join the hospital stores system"},
   forgot:{title:"Forgot Password",sub:"We'll help you get back in"},
-  reset_token:{title:"Reset Token",sub:"Share this with your administrator"},
+  verify_signup:{title:"Verify Email",sub:"Confirm your email address"},
+  verify_reset:{title:"Verify Identity",sub:"Enter the code from your email"},
+  reset_password:{title:"New Password",sub:"Create a new password"},
 };
 const WELCOME_META:Record<string,any>={
   login:{title:"WELCOME\nBACK!",body:"Access your hospital stores system securely and efficiently."},
   signup:{title:"JOIN US\nTODAY!",body:"Create your account. An administrator will approve it before you can log in."},
   forgot:{title:"DON'T\nWORRY!",body:"We will generate a reset token. Your administrator will help you complete the password reset."},
-  reset_token:{title:"ALMOST\nTHERE!",body:"Copy the token and give it to your system administrator. They will reset your password for you."},
+  verify_signup:{title:"ALMOST\nTHERE!",body:"Check your email and enter the verification code."},
+  verify_reset:{title:"ALMOST\nTHERE!",body:"Check your email to continue securely."},
+  reset_password:{title:"WELCOME\nBACK!",body:"Create a new password and return to your account."},
 };
 
 // ── Effect themes ─────────────────────────────────────────────────────────
@@ -342,7 +320,6 @@ export default function LoginPage(){
   const [hospitalName,setHospitalName]=useState("Mukurweini Hospital Stores");
   const [allowSignup,setAllowSignup]=useState(false);
   const [effectIdx,setEffectIdx]=useState(0);
-  const [resetTokenData,setResetTokenData]=useState<any>(null);
   const [producedBy,setProducedBy]=useState("");
   const [appVersion,setAppVersion]=useState("dev");
   const [maintenance,setMaintenance]=useState({active:false,endsAt:null as string|null,message:"System maintenance is in progress. Please check back soon."});
@@ -391,16 +368,15 @@ export default function LoginPage(){
   const reshuffleEffect=()=>{ const next=(effectIdx+1)%effects.length; setEffectIdx(next); setEffect(effects[next]); };
 
   const onLogin=async(u:string,p:string)=>{
-    try{ await login({data:{username:u,password:p}}); setLocation("/"); toast.success("Welcome back!"); }
+    try{ await login({data:{identifier:u,password:p}}); setLocation("/"); toast.success("Welcome back!"); }
     catch{ setShake(true); setTimeout(()=>setShake(false),600); throw new Error(""); }
   };
 
-  const onSignup=async(fullName:string,username:string,password:string)=>{
-    const res=await fetch(`${API_BASE}/api/auth/register`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,username,password})});
+  const onSignup=async(fullName:string,username:string,email:string,phone:string,password:string)=>{
+    const res=await fetch(`${API_BASE}/api/auth/register`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,username,email,phone,password})});
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||"Registration failed");
-    toast.success("Account created! Wait for admin approval.");
-    setPanel("login");
+    toast.success("Account created. Check your email for the verification code.");
   };
 
   const t=EFFECT_THEMES[effect];
@@ -447,7 +423,7 @@ export default function LoginPage(){
             </div>
             <FormContent panel={panel} setPanel={setPanel} onLogin={onLogin} onSignup={onSignup}
               accentColor={t.accentColor} inputBg={t.inputBg} inputBorder={t.inputBorder}
-              textMuted={t.textMuted} allowSignup={allowSignup} resetTokenData={resetTokenData} setResetTokenData={setResetTokenData}/>
+              textMuted={t.textMuted} allowSignup={allowSignup}/>
           </div>
 
           {/* Welcome panel */}

@@ -171,6 +171,8 @@ export default function UserManagement() {
     username: "",
     password: "",
     fullName: "",
+    email: "",
+    phone: "",
     role: "staff",
     permissions: defaultPermissionsByRole("staff")
   });
@@ -187,6 +189,8 @@ export default function UserManagement() {
           username: "",
           password: "",
           fullName: "",
+          email: "",
+          phone: "",
           role: "staff",
           permissions: defaultPermissionsByRole("staff")
         });
@@ -247,6 +251,8 @@ export default function UserManagement() {
       username: user.username,
       password: "",
       fullName: user.fullName,
+      email: user.email || "",
+      phone: user.phone || "",
       role: user.role
       ,
       permissions: { ...defaultPermissionsByRole(user.role, customRoles), ...user.permissions }
@@ -290,6 +296,14 @@ export default function UserManagement() {
                 <div className="space-y-2">
                   <Label htmlFor="username">Username</Label>
                   <Input id="username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input id="phone" type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
@@ -339,6 +353,8 @@ export default function UserManagement() {
                 <TableHead className="w-12"></TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Username</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead className="w-24 text-right">Actions</TableHead>
               </TableRow>
@@ -364,6 +380,8 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell className="font-medium">{u.fullName} {u.id === currentUser?.id && <span className="text-xs text-muted-foreground ml-1">(You)</span>}</TableCell>
                     <TableCell className="text-sm font-mono">{u.username}</TableCell>
+                    <TableCell className="text-sm">{u.email || <span className="text-muted-foreground">Not set</span>}{u.emailVerifiedAt && <span className="ml-1 text-xs text-emerald-600">Verified</span>}</TableCell>
+                    <TableCell className="text-sm">{u.phone || <span className="text-muted-foreground">Not set</span>}</TableCell>
                     <TableCell>{getRoleBadge(u.role)}</TableCell>
                     <TableCell className="text-right flex items-center justify-end gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
@@ -396,12 +414,20 @@ export default function UserManagement() {
                 <Label htmlFor="edit-fullName">Full Name</Label>
                 <Input id="edit-fullName" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} required />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-username">Username</Label>
-                <Input id="edit-username" value={formData.username} disabled />
-                <p className="text-[10px] text-muted-foreground">Username cannot be changed</p>
-              </div>
-              <div className="space-y-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-username">Username</Label>
+                  <Input id="edit-username" value={formData.username} disabled />
+                  <p className="text-[10px] text-muted-foreground">Username cannot be changed</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">Email</Label>
+                  <Input id="edit-email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">Phone Number</Label>
+                  <Input id="edit-phone" type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                </div>
+                <div className="space-y-2">
                 <Label htmlFor="edit-password">New Password (Optional)</Label>
                 <Input id="edit-password" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Leave blank to keep current" />
               </div>
