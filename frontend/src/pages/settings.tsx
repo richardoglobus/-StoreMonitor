@@ -21,6 +21,8 @@ interface AppSettings {
   warningBeforeSeconds: number;
   sessionDurationDays: number;
   maxLoginAttempts: number;
+  otpExpiryMinutes: number;
+  otpResendCooldownSeconds: number;
   // Branding
   hospitalName: string;
   producedBy: string;
@@ -73,6 +75,8 @@ const DEFAULTS: AppSettings = {
   warningBeforeSeconds: 10,
   sessionDurationDays: 30,
   maxLoginAttempts: 5,
+  otpExpiryMinutes: 10,
+  otpResendCooldownSeconds: 60,
   hospitalName: "Mukurweini Hospital Stores",
   producedBy: "",
   facilityCode: "",
@@ -311,16 +315,26 @@ export default function SettingsPage() {
     setNewProcurementMethod("");
   };
 
-  const editProcurementMethod = (name: string) => {
+  const dropdownUsageWarning = async (type: string, value: string, action: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/settings/dropdown-usage?type=${encodeURIComponent(type)}&value=${encodeURIComponent(value)}`, { credentials: "include" });
+      const data = await res.json();
+      return !data.count || confirm(`${data.count} record${data.count === 1 ? "" : "s"} use${data.count === 1 ? "s" : ""} "${value}". ${action} it may affect historical records. Continue?`);
+    } catch { return confirm(`Could not check usage of "${value}". Continue with caution?`); }
+  };
+
+  const editProcurementMethod = async (name: string) => {
     const next = prompt("Procurement method:", name)?.trim();
     if (!next) return;
     if (next !== name && settings.procurementMethods.some(m => m.toLowerCase() === next.toLowerCase())) return toast.error("That procurement method already exists");
+    if (next !== name && !(await dropdownUsageWarning("procurementMethod", name, "Renaming"))) return;
     update("procurementMethods", settings.procurementMethods.map(m => m === name ? next : m));
   };
 
-  const deleteProcurementMethod = (name: string) => {
+  const deleteProcurementMethod = async (name: string) => {
     if (settings.procurementMethods.length <= 1) return toast.error("Keep at least one procurement method");
     if (!confirm(`Delete procurement method "${name}"?`)) return;
+    if (!(await dropdownUsageWarning("procurementMethod", name, "Deleting"))) return;
     update("procurementMethods", settings.procurementMethods.filter(m => m !== name));
   };
 
@@ -332,16 +346,18 @@ export default function SettingsPage() {
     setNewSupplierStatus("");
   };
 
-  const editSupplierStatus = (name: string) => {
+  const editSupplierStatus = async (name: string) => {
     const next = prompt("Supplier status:", name)?.trim();
     if (!next) return;
     if (next !== name && settings.supplierStatuses.some(m => m.toLowerCase() === next.toLowerCase())) return toast.error("That supplier status already exists");
+    if (next !== name && !(await dropdownUsageWarning("supplierStatus", name, "Renaming"))) return;
     update("supplierStatuses", settings.supplierStatuses.map(m => m === name ? next : m));
   };
 
-  const deleteSupplierStatus = (name: string) => {
+  const deleteSupplierStatus = async (name: string) => {
     if (settings.supplierStatuses.length <= 1) return toast.error("Keep at least one supplier status");
     if (!confirm(`Delete supplier status "${name}"?`)) return;
+    if (!(await dropdownUsageWarning("supplierStatus", name, "Deleting"))) return;
     update("supplierStatuses", settings.supplierStatuses.filter(m => m !== name));
   };
   const addPurchaseOrderClassification = () => {
@@ -434,6 +450,12 @@ export default function SettingsPage() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
+      const validation = await fetch(`${API_BASE}/api/admin/restore/validate`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+      });
+      if (!validation.ok) { const message = await validation.json().catch(() => ({})); toast.error(message.error || "Backup validation failed"); return; }
+      const validationResult = await validation.json();
+      if (!confirm(`Backup validated: ${validationResult.counts.items} items and ${validationResult.counts.users} users. Continue with restore?`)) return;
       const res = await fetch(`${API_BASE}/api/admin/restore`, {
         method: "POST",
         credentials: "include",
@@ -569,6 +591,16 @@ export default function SettingsPage() {
               <Input type="number" min="3" max="20" value={settings.maxLoginAttempts} onChange={e => update("maxLoginAttempts", Number(e.target.value))} />
               <p className="text-xs text-muted-foreground">Account locks after this many wrong passwords.</p>
             </div>
+            <div className="space-y-2">
+              <Label>OTP Expiry (minutes)</Label>
+              <Input type="number" min="1" max="60" value={settings.otpExpiryMinutes} onChange={e => update("otpExpiryMinutes", Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground">How long verification and password-reset codes remain valid.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>OTP Resend Cooldown (seconds)</Label>
+              <Input type="number" min="10" max="600" value={settings.otpResendCooldownSeconds} onChange={e => update("otpResendCooldownSeconds", Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground">Minimum wait before another code can be requested.</p>
+            </div>
           </div>
         </SectionCard>
 
@@ -637,26 +669,6 @@ export default function SettingsPage() {
           <ToggleRow label="Independent Accounting Mode" description="New GRNs, purchases, accounting, and stock movements remain separate. Existing linked records are preserved as historical data." checked={settings.independentAccountingMode} onChange={(v: boolean) => update("independentAccountingMode", v)} />
           {settings.independentAccountingMode && <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-900 dark:text-blue-200"><strong>How it works:</strong> approving a new GRN changes only the GRN status. It does not update purchases, stock, supplier balances, or journal entries. New purchases do not automatically create GRNs. Existing records remain unchanged for historical reference.</div>}
           {!settings.independentAccountingMode && <div className="rounded-lg border border-green-200 bg-green-50 dark:bg-green-950/30 p-3 text-sm text-green-900 dark:text-green-200"><strong>Integrated mode:</strong> each new purchase automatically creates a pending GRN. The purchase will not increase Catalog stock until the linked GRN is approved. Approval then posts the received quantity to Catalog stock, records the stock movement, updates the supplier balance, and creates the accounting entry. Existing historical records are not changed when you switch modes.</div>}
-          <div className="space-y-3 border rounded-lg p-3">
-            <div><Label>Procurement Methods</Label><p className="text-xs text-muted-foreground">Options offered on the Purchase Order form (Request for Quotations, Framework Agreement, etc.).</p></div>
-            <div className="flex gap-2">
-              <Input value={newProcurementMethod} onChange={e => setNewProcurementMethod(e.target.value)} placeholder="e.g. Restricted Tender" />
-              <Button type="button" onClick={addProcurementMethod}><Plus className="h-4 w-4 mr-1" />Add</Button>
-            </div>
-            <div className="space-y-2">
-              {settings.procurementMethods.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editProcurementMethod(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteProcurementMethod(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
-            </div>
-          </div>
-          <div className="space-y-3 border rounded-lg p-3">
-            <div><Label>Supplier Statuses</Label><p className="text-xs text-muted-foreground">Options offered on the Supplier form's Status dropdown.</p></div>
-            <div className="flex gap-2">
-              <Input value={newSupplierStatus} onChange={e => setNewSupplierStatus(e.target.value)} placeholder="e.g. Under Review" />
-              <Button type="button" onClick={addSupplierStatus}><Plus className="h-4 w-4 mr-1" />Add</Button>
-            </div>
-            <div className="space-y-2">
-              {settings.supplierStatuses.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editSupplierStatus(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteSupplierStatus(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
-            </div>
-          </div>
         </SectionCard>
 
         {/* 6. Dropdown Lists */}
@@ -670,6 +682,16 @@ export default function SettingsPage() {
             <div className="space-y-2">
               {settings.purchaseOrderClassifications.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editPurchaseOrderClassification(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deletePurchaseOrderClassification(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}
             </div>
+          </div>
+          <div className="space-y-3 border rounded-lg p-3">
+            <div><Label>Procurement Methods</Label><p className="text-xs text-muted-foreground">Options offered on the Purchase Order form.</p></div>
+            <div className="flex gap-2"><Input value={newProcurementMethod} onChange={e => setNewProcurementMethod(e.target.value)} placeholder="e.g. Restricted Tender" /><Button type="button" onClick={addProcurementMethod}><Plus className="h-4 w-4 mr-1" />Add</Button></div>
+            <div className="space-y-2">{settings.procurementMethods.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editProcurementMethod(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteProcurementMethod(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}</div>
+          </div>
+          <div className="space-y-3 border rounded-lg p-3">
+            <div><Label>Supplier Statuses</Label><p className="text-xs text-muted-foreground">Options offered on the Supplier form's Status dropdown.</p></div>
+            <div className="flex gap-2"><Input value={newSupplierStatus} onChange={e => setNewSupplierStatus(e.target.value)} placeholder="e.g. Under Review" /><Button type="button" onClick={addSupplierStatus}><Plus className="h-4 w-4 mr-1" />Add</Button></div>
+            <div className="space-y-2">{settings.supplierStatuses.map(entry => <div key={entry} className="flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm"><span className="flex-1">{entry}</span><Button type="button" variant="ghost" size="icon" onClick={() => editSupplierStatus(entry)} title="Edit"><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => deleteSupplierStatus(entry)} title="Delete"><Trash2 className="h-4 w-4" /></Button></div>)}</div>
           </div>
         </SectionCard>
 

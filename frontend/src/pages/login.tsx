@@ -198,7 +198,7 @@ function Field({ label, type="text", value, onChange, placeholder, icon:Icon, fo
 }
 
 // ── Form panels ───────────────────────────────────────────────────────────
-function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup }: any) {
+function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, otpExpirySeconds = 600, otpResendCooldownSeconds = 60 }: any) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [p2,setP2]=useState(""); const [email,setEmail]=useState(""); const [phone,setPhone]=useState(""); const [otp,setOtp]=useState(""); const [resetSession,setResetSession]=useState("");
   const [name,setName]=useState(""); const [loading,setLoading]=useState(false); const [focused,setFocused]=useState<string|null>(null); const [otpCooldown,setOtpCooldown]=useState(0);
   useEffect(()=>{ if (otpCooldown <= 0) return; const timer=setInterval(()=>setOtpCooldown(value=>Math.max(0,value-1)),1000); return ()=>clearInterval(timer); },[otpCooldown]);
@@ -206,14 +206,14 @@ function FormContent({ panel, setPanel, onLogin, onSignup, accentColor, inputBg,
   const btnStyle:any={width:"100%",padding:"13px",border:"none",borderRadius:10,background:`linear-gradient(135deg,${accentColor},${accentColor}cc)`,color:"white",fontWeight:700,fontSize:15,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:`0 4px 20px ${accentColor}44`,transition:"all 0.2s",marginTop:6,opacity:loading?0.7:1};
   const linkStyle:any={color:accentColor,background:"none",border:"none",cursor:"pointer",fontSize:13,fontWeight:600,textDecoration:"underline",padding:0};
   const handleLogin=async(e:React.FormEvent)=>{e.preventDefault();if(!u||!p)return;setLoading(true);try{await onLogin(u,p);}catch{toast.error("Invalid username, email, phone, or password");}finally{setLoading(false);}};
-  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{await onSignup(name,u,email,phone,p);setOtpCooldown(600);setPanel("verify_signup");}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
-  const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{await requestPasswordOtp(u);setOtpCooldown(600);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
-  const handleResend=async()=>{const purpose: "signup" | "reset" = panel==="verify_signup" ? "signup" : "reset";const identifier=purpose==="signup"?email:u;if(!identifier||otpCooldown>0)return;setLoading(true);try{await resendOtp(identifier,purpose);setOtp("");setOtpCooldown(600);toast.success("A new verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to resend code");}finally{setLoading(false);}};
+  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{await onSignup(name,u,email,phone,p);setOtpCooldown(otpExpirySeconds);setPanel("verify_signup");}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
+  const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{await requestPasswordOtp(u);setOtpCooldown(otpExpirySeconds);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
+  const handleResend=async()=>{const purpose: "signup" | "reset" = panel==="verify_signup" ? "signup" : "reset";const identifier=purpose==="signup"?email:u;if(!identifier||otpCooldown>0)return;setLoading(true);try{await resendOtp(identifier,purpose);setOtp("");setOtpCooldown(otpExpirySeconds);toast.success("A new verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to resend code");}finally{setLoading(false);}};
   const handleVerify=async(e:React.FormEvent,purpose:"signup"|"reset")=>{e.preventDefault();setLoading(true);try{const result=await verifyOtp(purpose==="signup"?email:u,otp,purpose);if(purpose==="reset"){setResetSession(result.resetSession||"");setPanel("reset_password");}else{toast.success("Email verified. You can now sign in.");setPanel("login");}}catch(err:any){toast.error(err?.error||"Invalid or expired code");}finally{setLoading(false);}};
   const handleReset=async(e:React.FormEvent)=>{e.preventDefault();if(p!==p2){toast.error("Passwords do not match");return;}setLoading(true);try{await resetPassword(resetSession,p,p2);toast.success("Password changed. You can now sign in.");setPanel("login");setP("");setP2("");}catch(err:any){toast.error(err?.error||"Unable to reset password");}finally{setLoading(false);}};
 
   if(panel==="verify_signup"||panel==="verify_reset") return <form onSubmit={e=>handleVerify(e,panel==="verify_signup"?"signup":"reset")} style={{display:"flex",flexDirection:"column",gap:14,animation:"fadeUp 0.4s ease"}}>
-    <p style={{color:textMuted,fontSize:13,lineHeight:1.5}}>Enter the six-digit code sent to your email. The code expires in 10 minutes.</p>
+    <p style={{color:textMuted,fontSize:13,lineHeight:1.5}}>Enter the six-digit code sent to your email. The code expires in {Math.floor(otpExpirySeconds / 60)} minutes.</p>
     <Field label="Verification Code" value={otp} onChange={setOtp} placeholder="123456" icon={Lock} {...f("otp")} {...shared}/>
     <button type="submit" className="login-btn" disabled={loading||otp.length<6} style={btnStyle}>{loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Verifying…</>:"Verify Code"}</button>
     <p style={{color:textMuted,fontSize:12,textAlign:"center",margin:0}}>{otpCooldown>0?`Code expires in ${Math.floor(otpCooldown/60)}m ${String(otpCooldown%60).padStart(2,"0")}s`:`This code has expired.`}</p>
@@ -323,6 +323,8 @@ export default function LoginPage(){
   const [shake,setShake]=useState(false);
   const [hospitalName,setHospitalName]=useState("Mukurweini Hospital Stores");
   const [allowSignup,setAllowSignup]=useState(false);
+  const [otpExpirySeconds,setOtpExpirySeconds]=useState(600);
+  const [otpResendCooldownSeconds,setOtpResendCooldownSeconds]=useState(60);
   const [effectIdx,setEffectIdx]=useState(0);
   const [producedBy,setProducedBy]=useState("");
   const [appVersion,setAppVersion]=useState("dev");
@@ -338,6 +340,8 @@ export default function LoginPage(){
       if(s.producedBy) setProducedBy(s.producedBy);
       setMaintenance({active:!!s.maintenanceMode,endsAt:s.maintenanceEndsAt||null,message:s.maintenanceMessage||"System maintenance is in progress. Please check back soon."});
       if(s.allowSelfRegistration) setAllowSignup(s.allowSelfRegistration);
+      if(s.otpExpiryMinutes) setOtpExpirySeconds(Math.max(60, Number(s.otpExpiryMinutes) * 60));
+      if(s.otpResendCooldownSeconds) setOtpResendCooldownSeconds(Math.max(10, Number(s.otpResendCooldownSeconds)));
 
       if(s.shuffleEffect){
         // Start on a random effect
@@ -427,7 +431,7 @@ export default function LoginPage(){
             </div>
             <FormContent panel={panel} setPanel={setPanel} onLogin={onLogin} onSignup={onSignup}
               accentColor={t.accentColor} inputBg={t.inputBg} inputBorder={t.inputBorder}
-              textMuted={t.textMuted} allowSignup={allowSignup}/>
+              textMuted={t.textMuted} allowSignup={allowSignup} otpExpirySeconds={otpExpirySeconds} otpResendCooldownSeconds={otpResendCooldownSeconds}/>
           </div>
 
           {/* Welcome panel */}

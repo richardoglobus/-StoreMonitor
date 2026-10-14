@@ -15,6 +15,7 @@ import Items from "@/pages/items";
 import Purchases from "@/pages/purchases";
 import Issues from "@/pages/issues";
 import Reports from "@/pages/reports";
+import OperationalReports from "@/pages/operational-reports";
 import UserManagement from "@/pages/user-management";
 import SettingsPage from "@/pages/settings";
 import StockValuationPage from "@/pages/stock-valuation";
@@ -134,6 +135,7 @@ function AppWithAuth() {
         <Route path="/purchases" component={Purchases} />
         <Route path="/issues" component={Issues} />
         <Route path="/reports" component={Reports} />
+        <Route path="/reports/operational" component={OperationalReports} />
         <Route path="/exports" component={Exports} />
         <Route path="/assets" component={Assets} />
         <Route path="/admin/users" component={UserManagement} />

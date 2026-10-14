@@ -1435,6 +1435,9 @@ function logActivity(req, action, entityType, entityId, details = null) {
     createdAt: new Date().toISOString()
   }).write();
 }
+function logSecurityEvent(req, action, details = null, userId = null) {
+  db.get("activities").push({ id: nextId("activities"), userId: userId ?? req?.session?.userId ?? null, username: req?.session?.username || null, action, entityType: "AUTH", entityId: userId, details, createdAt: new Date().toISOString() }).write();
+}
 
 function seedAdmin() {
   if (db.get("departments").value().length === 0) {
@@ -1741,6 +1744,8 @@ app.get("/api/healthz",(_,res)=>res.json({status:"ok"}));
 const otpAttempts = new Map();
 function normalizeEmail(value) { return String(value || "").trim().toLowerCase(); }
 function normalizePhone(value) { return String(value || "").trim().replace(/[\s()-]/g, ""); }
+function validEmail(value) { return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value)); }
+function validPhone(value) { return !value || /^\+?[0-9]{9,15}$/.test(normalizePhone(value)); }
 function makeOtp() { return String(crypto.randomInt(100000, 1000000)); }
 function hashOtp(value) { return crypto.createHash("sha256").update(String(value)).digest("hex"); }
 function otpAllowed(key) {
@@ -1786,7 +1791,7 @@ app.post("/api/auth/login",(req,res)=>{
   const normalizedEmail = normalizeEmail(loginIdentifier);
   const normalizedPhone = normalizePhone(loginIdentifier);
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === loginIdentifier.toLowerCase() || normalizeEmail(u.email) === normalizedEmail || normalizePhone(u.phone) === normalizedPhone).value();
-  if(!user||!bcrypt.compareSync(password,user.passwordHash)) return res.status(401).json({error:"Invalid credentials"});
+  if(!user||!bcrypt.compareSync(password,user.passwordHash)) { logSecurityEvent(req, "LOGIN_FAILED", { identifierType: loginIdentifier.includes("@") ? "email" : (/^\+?[0-9\s()-]+$/.test(loginIdentifier) ? "phone" : "username") }); return res.status(401).json({error:"Invalid credentials"}); }
   if (user.accountStatus === "pending_verification") return res.status(403).json({error:"Please verify your email before logging in"});
   if (user.accountStatus === "disabled" || user.isActive === false) return res.status(403).json({error:"This account is inactive"});
   const settings = getSettings();
@@ -1853,6 +1858,8 @@ app.post("/api/auth/users",requireAdmin,(req,res)=>{
   if(db.get("users").find({username}).value()) return res.status(400).json({error:"Username already exists"});
   const normalizedEmail = normalizeEmail(email);
   const normalizedPhone = normalizePhone(phone);
+  if (!validEmail(normalizedEmail)) return res.status(400).json({error:"Enter a valid email address"});
+  if (!validPhone(normalizedPhone)) return res.status(400).json({error:"Enter a valid phone number"});
   if (normalizedEmail && db.get("users").find(u => normalizeEmail(u.email) === normalizedEmail).value()) return res.status(409).json({error:"Email already exists"});
   if (normalizedPhone && db.get("users").find(u => normalizePhone(u.phone) === normalizedPhone).value()) return res.status(409).json({error:"Phone number already exists"});
   const id=nextId("users");
@@ -1872,6 +1879,8 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   if(fullName!==undefined) updates.fullName=fullName;
   if(email!==undefined) updates.email=normalizeEmail(email)||null;
   if(phone!==undefined) updates.phone=normalizePhone(phone)||null;
+  if (email !== undefined && !validEmail(updates.email)) return res.status(400).json({error:"Enter a valid email address"});
+  if (phone !== undefined && !validPhone(updates.phone)) return res.status(400).json({error:"Enter a valid phone number"});
   if(accountStatus!==undefined && ["active","disabled","pending_verification"].includes(accountStatus)) updates.accountStatus=accountStatus;
   if(role!==undefined) updates.role=role;
   if(password) updates.passwordHash=bcrypt.hashSync(password,10);
@@ -3276,6 +3285,8 @@ const DEFAULT_SETTINGS = {
   warningBeforeSeconds: 10,
   sessionDurationDays: 30,
   maxLoginAttempts: 5,
+  otpExpiryMinutes: 10,
+  otpResendCooldownSeconds: 60,
   // Branding
   hospitalName: "Mukurweini Hospital Stores",
   facilityCode: "",
@@ -3384,6 +3395,8 @@ app.get("/api/settings/public",(req,res)=>{
     subCountyName:s.subCountyName,
     inactivityTimeoutMinutes:s.inactivityTimeoutMinutes,
     warningBeforeSeconds:s.warningBeforeSeconds,
+    otpExpiryMinutes:Math.max(1,Number(s.otpExpiryMinutes)||10),
+    otpResendCooldownSeconds:Math.max(10,Number(s.otpResendCooldownSeconds)||60),
     defaultCurrency:s.defaultCurrency||"KES",
     financialYear:s.financialYear,
     issueDays:s.issueDays,
@@ -3415,6 +3428,16 @@ app.get("/api/settings/procurement-methods", requireAuth, (_req, res) => {
 app.get("/api/settings/supplier-statuses", requireAuth, (_req, res) => {
   const statuses = getSettings().supplierStatuses;
   res.json(Array.isArray(statuses) ? statuses : []);
+});
+app.get("/api/settings/dropdown-usage", requirePermission("manageUsers"), (req, res) => {
+  const type = String(req.query.type || "");
+  const value = String(req.query.value || "");
+  let count = 0;
+  if (type === "procurementMethod") count = db.get("purchaseOrders").value().filter(row => String(row.procurementMethod || "") === value).length;
+  else if (type === "supplierStatus") count = db.get("suppliers").value().filter(row => String(row.status || "") === value).length;
+  else if (type === "purchaseOrderClassification") count = db.get("purchaseOrders").value().filter(row => String(row.classification || "") === value).length;
+  else return res.status(400).json({error:"Unsupported dropdown type"});
+  res.json({type, value, count});
 });
 
 app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{
@@ -3559,6 +3582,26 @@ app.get("/api/reports/monthly",requirePermission("viewReports"),(req,res)=>{
   const startMonth=req.query.startMonth||currentMonth(),endMonth=req.query.endMonth||currentMonth();
   const itemId=req.query.itemId?Number(req.query.itemId):undefined;
   res.json(buildReport(startMonth,endMonth,itemId));
+});
+app.get("/api/reports/expiry", requirePermission("viewReports"), (req, res) => {
+  const itemMap = getItemMap();
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = db.get("purchases").value().filter(p => p.expiryDate || p.expiry || p.expirationDate).map(p => ({ ...p, item: itemMap.get(p.itemId), expiryDate: p.expiryDate || p.expiry || p.expirationDate })).sort((a,b) => String(a.expiryDate).localeCompare(String(b.expiryDate)));
+  res.json(rows.map(p => ({ id:p.id, itemId:p.itemId, itemDescription:p.item?.description || "", unit:p.item?.unit || "", quantity:p.quantity, expiryDate:p.expiryDate, expired:String(p.expiryDate) < today })));
+});
+app.get("/api/reports/stock-movement", requirePermission("viewReports"), (req, res) => {
+  let rows = unifiedStockMovements(req.query.itemCode);
+  if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
+  if (req.query.to) rows = rows.filter(r => r.date <= req.query.to);
+  res.json(rows.sort((a,b) => String(b.date).localeCompare(String(a.date))));
+});
+app.get("/api/reports/supplier-performance", requirePermission("viewReports"), (req, res) => {
+  const suppliers = db.get("suppliers").value(); const orders = db.get("purchaseOrders").value(); const grns = db.get("grns").value();
+  res.json(suppliers.map(s => { const so=orders.filter(o=>Number(o.supplierId)===Number(s.id)); const sg=grns.filter(g=>Number(g.supplierId)===Number(s.id)); return { supplierId:s.id, supplierName:s.name, orderCount:so.length, orderValue:so.reduce((n,o)=>n+Number(o.totalAmount||0),0), approvedGrns:sg.filter(g=>g.status==="approved").length, pendingGrns:sg.filter(g=>g.status!=="approved").length }; }).sort((a,b)=>b.orderValue-a.orderValue));
+});
+app.get("/api/reports/purchase-orders-outstanding", requirePermission("viewReports"), (req, res) => {
+  const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s.name]));
+  res.json(db.get("purchaseOrders").value().filter(o => o.status !== "approved" && o.status !== "completed").map(o => ({ id:o.id, poNo:o.poNo, date:o.date, supplierName:suppliers.get(o.supplierId) || "", status:o.status, totalAmount:Number(o.totalAmount||0), procurementMethod:o.procurementMethod || "" })).sort((a,b)=>String(a.date).localeCompare(String(b.date))));
 });
 
 // EXPORTS
@@ -4148,6 +4191,15 @@ app.get("/api/admin/backup", requirePermission("manageUsers"), (req, res) => {
   res.send(json);
 });
 
+app.post("/api/admin/restore/validate", requirePermission("manageUsers"), (req, res) => {
+  const raw = req.body;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return res.status(400).json({error:"Invalid backup file — expected a JSON object"});
+  const collections = ["users","departments","items","inventory","receipts","issues","purchases","purchaseOrders","supplierInvoices","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements","modesOfPayment"];
+  if (!Array.isArray(raw.users) || !raw.users.length || !Array.isArray(raw.items) || !raw.items.length) return res.status(400).json({error:"Invalid backup file — users and catalog items are missing or empty"});
+  const counts = Object.fromEntries(collections.map(key => [key, Array.isArray(raw[key]) ? raw[key].length : 0]));
+  res.json({valid:true, counts});
+});
+
 app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
   try {
     const raw = req.body;
@@ -4191,6 +4243,8 @@ app.post("/api/auth/register",async (req,res)=>{
   const normalizedEmail = normalizeEmail(email);
   const normalizedPhone = normalizePhone(phone);
   if(!username||!password||!fullName||!normalizedEmail) return res.status(400).json({error:"Full name, username, email, and password are required"});
+  if (!validEmail(normalizedEmail)) return res.status(400).json({error:"Enter a valid email address"});
+  if (!validPhone(normalizedPhone)) return res.status(400).json({error:"Enter a valid phone number"});
   if(password.length<12) return res.status(400).json({error:"Password must be at least 12 characters"});
   if(db.get("users").find(u => String(u.username).toLowerCase() === String(username).trim().toLowerCase()).value()) return res.status(400).json({error:"Username already taken"});
   if(db.get("users").find(u => normalizeEmail(u.email) === normalizedEmail).value()) return res.status(400).json({error:"Email already registered"});
@@ -4198,7 +4252,7 @@ app.post("/api/auth/register",async (req,res)=>{
   const hash=bcrypt.hashSync(password,10);
   const defaultPerms={viewDashboard:true,viewCatalog:false,viewDepartments:false,viewPurchases:false,viewIssues:false,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
   const code=makeOtp();
-  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:"pending_verification",emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpPurpose:"signup",emailOtpAttempts:0,role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
+  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:"pending_verification",emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:"signup",emailOtpAttempts:0,role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
   try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
@@ -4216,7 +4270,7 @@ app.post("/api/auth/forgot-password",async (req,res)=>{
   const generic={success:true,message:"If an account matches those details, we will send a verification code."};
   if(!user || !user.email || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
   const code=makeOtp();
-  db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpPurpose:"reset",emailOtpAttempts:0}).write();
+  db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:"reset",emailOtpAttempts:0}).write();
   console.log(`[OTP] password-reset requested for ${maskEmail(user.email)}`);
   try { await deliverEmailOtp({email:user.email,code,purpose:"password-reset"}); }
   catch (error) { console.error(`[OTP] password-reset delivery failed: ${error.message}`); return res.json(generic); }
@@ -4232,7 +4286,7 @@ app.post("/api/auth/resend-otp",async (req,res)=>{
   if (!user || !user.email || (purpose === "signup" && user.accountStatus !== "pending_verification")) return res.json({success:true,message:"If the account matches, a new code has been sent."});
   if (!otpAllowed(`resend:${purpose}:${user.id}`)) return res.status(429).json({error:"Please wait before requesting another code"});
   const code=makeOtp();
-  db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpPurpose:purpose,emailOtpAttempts:0}).write();
+  db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:purpose,emailOtpAttempts:0}).write();
   console.log(`[OTP] ${purpose} resend requested for ${maskEmail(user.email)}`);
   try { await deliverEmailOtp({email:user.email,code,purpose:purpose === "signup" ? "signup" : "password-reset"}); }
   catch (error) { console.error(`[OTP] resend delivery failed: ${error.message}`); return res.status(503).json({error:"Unable to send a new verification code"}); }
