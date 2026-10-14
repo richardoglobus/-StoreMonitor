@@ -3586,18 +3586,21 @@ app.get("/api/reports/monthly",requirePermission("viewReports"),(req,res)=>{
 app.get("/api/reports/expiry", requirePermission("viewReports"), (req, res) => {
   const itemMap = getItemMap();
   const today = new Date().toISOString().slice(0, 10);
-  const rows = db.get("purchases").value().filter(p => p.expiryDate || p.expiry || p.expirationDate).map(p => ({ ...p, item: itemMap.get(p.itemId), expiryDate: p.expiryDate || p.expiry || p.expirationDate })).sort((a,b) => String(a.expiryDate).localeCompare(String(b.expiryDate)));
-  res.json(rows.map(p => ({ id:p.id, itemId:p.itemId, itemDescription:p.item?.description || "", unit:p.item?.unit || "", quantity:p.quantity, expiryDate:p.expiryDate, expired:String(p.expiryDate) < today })));
+  const limit=Math.min(100,Math.max(1,Number(req.query.limit)||50)),offset=Math.max(0,Number(req.query.offset)||0),search=String(req.query.search||"").toLowerCase();
+  let rows = db.get("purchases").value().filter(p => p.expiryDate || p.expiry || p.expirationDate).map(p => ({ ...p, item: itemMap.get(p.itemId), expiryDate: p.expiryDate || p.expiry || p.expirationDate })).filter(p => !search || String(p.item?.description||"").toLowerCase().includes(search)).filter(p => !req.query.from || String(p.expiryDate)>=String(req.query.from)).filter(p => !req.query.to || String(p.expiryDate)<=String(req.query.to)).sort((a,b) => String(a.expiryDate).localeCompare(String(b.expiryDate)));
+  const total=rows.length; rows=rows.slice(offset,offset+limit); res.json({rows:rows.map(p => ({ id:p.id, itemId:p.itemId, itemDescription:p.item?.description || "", unit:p.item?.unit || "", quantity:p.quantity, expiryDate:p.expiryDate, expired:String(p.expiryDate) < today })),total,hasMore:offset+limit<total});
 });
 app.get("/api/reports/stock-movement", requirePermission("viewReports"), (req, res) => {
   let rows = unifiedStockMovements(req.query.itemCode);
   if (req.query.from) rows = rows.filter(r => r.date >= req.query.from);
   if (req.query.to) rows = rows.filter(r => r.date <= req.query.to);
-  res.json(rows.sort((a,b) => String(b.date).localeCompare(String(a.date))));
+  const search=String(req.query.search||"").toLowerCase(); if(search) rows=rows.filter(r=>String(r.description||"").toLowerCase().includes(search));
+  const limit=Math.min(100,Math.max(1,Number(req.query.limit)||50)),offset=Math.max(0,Number(req.query.offset)||0),total=rows.length; rows=rows.sort((a,b) => String(b.date).localeCompare(String(a.date))).slice(offset,offset+limit); res.json({rows,total,hasMore:offset+limit<total});
 });
 app.get("/api/reports/supplier-performance", requirePermission("viewReports"), (req, res) => {
   const suppliers = db.get("suppliers").value(); const orders = db.get("purchaseOrders").value(); const grns = db.get("grns").value();
-  res.json(suppliers.map(s => { const so=orders.filter(o=>Number(o.supplierId)===Number(s.id)); const sg=grns.filter(g=>Number(g.supplierId)===Number(s.id)); return { supplierId:s.id, supplierName:s.name, orderCount:so.length, orderValue:so.reduce((n,o)=>n+Number(o.totalAmount||0),0), approvedGrns:sg.filter(g=>g.status==="approved").length, pendingGrns:sg.filter(g=>g.status!=="approved").length }; }).sort((a,b)=>b.orderValue-a.orderValue));
+  const search=String(req.query.search||"").toLowerCase(); let rows=suppliers.map(s => { const so=orders.filter(o=>Number(o.supplierId)===Number(s.id)); const sg=grns.filter(g=>Number(g.supplierId)===Number(s.id)); return { supplierId:s.id, supplierName:s.name, orderCount:so.length, orderValue:so.reduce((n,o)=>n+Number(o.totalAmount||0),0), approvedGrns:sg.filter(g=>g.status==="approved").length, pendingGrns:sg.filter(g=>g.status!=="approved").length }; }).filter(r=>!search||String(r.supplierName||"").toLowerCase().includes(search)).sort((a,b)=>b.orderValue-a.orderValue);
+  const limit=Math.min(100,Math.max(1,Number(req.query.limit)||50)),offset=Math.max(0,Number(req.query.offset)||0),total=rows.length; res.json({rows:rows.slice(offset,offset+limit),total,hasMore:offset+limit<total});
 });
 app.get("/api/reports/purchase-orders-outstanding", requirePermission("viewReports"), (req, res) => {
   const suppliers = new Map(db.get("suppliers").value().map(s => [s.id, s.name]));
