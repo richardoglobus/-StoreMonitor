@@ -95,3 +95,33 @@
     color-scheme: dark;
   }
 }
+
+@layer components {
+  .app-content > *,
+  .app-content .grid > *,
+  [role="dialog"] form > * {
+    min-width: 0;
+  }
+
+  @media (max-width: 639px) {
+    /* Page headings and filter/action bars reflow; tables keep their own scroll area. */
+    .app-content :where(.flex.items-center.justify-between) {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .app-content input:not([type="checkbox"]):not([type="radio"]),
+    .app-content textarea,
+    .app-content [role="combobox"],
+    [role="dialog"] input:not([type="checkbox"]):not([type="radio"]),
+    [role="dialog"] textarea,
+    [role="dialog"] [role="combobox"] {
+      min-height: 44px;
+      font-size: 16px;
+    }
+
+    [role="dialog"] form .grid-cols-2 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

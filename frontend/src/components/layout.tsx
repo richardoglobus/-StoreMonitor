@@ -281,7 +281,7 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+    <div className="min-h-dvh bg-background flex flex-col md:flex-row">
 
       {/* ── Mobile / Tablet header ── */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b bg-card sticky top-0 z-30">
@@ -295,26 +295,26 @@ export function Layout({ children }: { children: ReactNode }) {
           <ThemeToggle />
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon"><Menu className="h-5 w-5" /></Button>
+              <Button variant="ghost" size="icon" aria-label="Open navigation"><Menu className="h-5 w-5" /></Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0 flex flex-col">
-              <div className="p-5 border-b flex items-center gap-2">
+            <SheetContent side="left" className="w-72 max-w-[calc(100%-2rem)] h-dvh p-0 flex flex-col">
+              <div className="shrink-0 p-5 pr-10 border-b flex items-center gap-2">
                 <div className="h-8 w-8 rounded bg-primary flex items-center justify-center">
                   <AppLogoIcon className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <span className="font-bold text-base">Mukurweini Hospital Stores</span>
               </div>
-              <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
+              <nav className="min-h-0 flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto overscroll-contain">
                 <NavLinks onNavigate={() => setMobileOpen(false)} />
               </nav>
               {user && (
-                <div className="border-t p-4 space-y-3">
+                <div className="shrink-0 border-t p-4 space-y-3">
                   <div className="flex items-center gap-3 px-1">
                     <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
                       <UserIcon className="h-4 w-4 text-primary" />
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">{user.fullName || user.username}</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{user.fullName || user.username}</p>
                       <Badge variant="secondary" className="h-4 text-[10px] px-1 uppercase">{user.role}</Badge>
                     </div>
                   </div>
@@ -329,7 +329,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Desktop sidebar ── */}
-      <aside className={`hidden md:flex flex-col border-r bg-card h-screen sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
+      <aside className={`hidden md:flex flex-col border-r bg-card h-dvh sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
 
         {/* Logo + toggle button */}
         <div className={`flex items-center border-b h-14 shrink-0 ${collapsed ? "justify-center px-2" : "px-4 gap-2"}`}>
@@ -396,10 +396,10 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 p-4 md:p-8 min-w-0 overflow-auto">
-        <div className="max-w-6xl mx-auto">
+      <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 overflow-auto">
+        <div className="app-content min-w-0 max-w-6xl mx-auto">
           {user?.role === "admin" && maintenanceEndsAt && maintenanceRemaining > 0 && (
-            <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
               <div className="flex items-center gap-2 text-sm font-medium"><Timer className="h-4 w-4" />Maintenance is active</div>
               <div className="font-mono text-lg font-bold tabular-nums" aria-label="Maintenance time remaining">{maintenanceClock}</div>
             </div>
