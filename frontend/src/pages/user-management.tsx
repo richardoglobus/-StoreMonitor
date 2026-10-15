@@ -152,6 +152,22 @@ const PERMISSION_LABELS: Record<string, string> = {
   manageDigitalForms: "Manage Digital Forms / CCTV Logs (Add/Edit/Delete)",
 };
 
+function TrustedOtpCountdown({ until }: { until?: string | null }) {
+  const [remaining, setRemaining] = useState(0);
+  useEffect(() => {
+    const update = () => setRemaining(Math.max(0, until ? new Date(until).getTime() - Date.now() : 0));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [until]);
+  if (!remaining) return <span className="text-muted-foreground">OTP required</span>;
+  const totalSeconds = Math.ceil(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return <span className="text-emerald-600">{days ? `${days}d ` : ""}{String(hours).padStart(2, "0")}:{String(minutes).padStart(2, "0")}:{String(totalSeconds % 60).padStart(2, "0")}</span>;
+}
+
 export default function UserManagement() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
@@ -276,16 +292,25 @@ export default function UserManagement() {
   };
 
   const adminOnly = currentUser?.role === "admin";
+  const securityHelpId = `${isEditOpen ? "edit" : "add"}-sign-in-security-help`;
+  const securityHelp = !adminOnly
+    ? "Only an administrator can change sign-in security options."
+    : !formData.email.trim()
+      ? "Enter this user's email above to enable email ownership confirmation."
+      : !formData.adminEmailVerified
+        ? "Confirm email ownership first to enable the password-only option."
+        : "Email ownership is confirmed. Email OTP remains required unless you explicitly approve the exemption below.";
   const loginSecurityControls = <div className="space-y-3 rounded-md border p-3">
     <p className="text-sm font-semibold">Sign-in security</p>
-    <label className="flex items-start gap-2 text-sm">
-      <input type="checkbox" disabled={!adminOnly || !formData.email.trim()} checked={formData.adminEmailVerified}
+    <p id={securityHelpId} className="text-sm text-muted-foreground" role="status">{securityHelp}</p>
+    <label className="flex min-h-11 items-start gap-3 rounded-md p-2 text-sm">
+      <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-primary disabled:cursor-not-allowed disabled:opacity-50" aria-describedby={securityHelpId} disabled={!adminOnly || !formData.email.trim()} checked={formData.adminEmailVerified}
         onChange={e=>setFormData({...formData,adminEmailVerified:e.target.checked,allowPasswordOnlyLogin:e.target.checked && formData.allowPasswordOnlyLogin})}/>
       <span>I have verified this email belongs to this user.</span>
     </label>
     <p className="text-xs text-muted-foreground">Administrators must confirm ownership through a trusted process. Changing the email clears its verification. Without a verified email, sign-in is blocked.</p>
-    <label className="flex items-start gap-2 text-sm">
-      <input type="checkbox" disabled={!adminOnly || !formData.email.trim() || !formData.adminEmailVerified} checked={formData.allowPasswordOnlyLogin}
+    <label className="flex min-h-11 items-start gap-3 rounded-md p-2 text-sm">
+      <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-primary disabled:cursor-not-allowed disabled:opacity-50" aria-describedby={securityHelpId} disabled={!adminOnly || !formData.email.trim() || !formData.adminEmailVerified} checked={formData.allowPasswordOnlyLogin}
         onChange={e=>setFormData({...formData,allowPasswordOnlyLogin:e.target.checked})}/>
       <span>Allow password-only sign-in (skip Email OTP)</span>
     </label>
@@ -295,9 +320,9 @@ export default function UserManagement() {
   return (
     <Layout>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">User Management</h1>
             <p className="text-muted-foreground">Manage system access and roles.</p>
           </div>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -307,11 +332,12 @@ export default function UserManagement() {
                 Add User
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="flex flex-col overflow-hidden sm:max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create New User</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4 py-4">
+              <form onSubmit={handleCreate} className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-1 pr-1">
                 <div className="space-y-2">
                   <Label htmlFor="fullName">Full Name</Label>
                   <Input id="fullName" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} required />
@@ -350,16 +376,17 @@ export default function UserManagement() {
                 </div>
                 <div className="space-y-2">
                   <Label>Access Rights</Label>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                     {Object.entries(formData.permissions).map(([key, value]) => (
-                      <label key={key} className="flex items-center gap-2">
-                        <input type="checkbox" checked={!!value} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
+                      <label key={key} className="flex min-h-11 items-center gap-3 rounded-md p-2">
+                        <input type="checkbox" className="h-4 w-4 shrink-0 accent-primary" checked={!!value} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
                         <span>{PERMISSION_LABELS[key] || key}</span>
                       </label>
                     ))}
                   </div>
                 </div>
-                <DialogFooter>
+                </div>
+                <DialogFooter className="mt-4 border-t pt-4">
                   <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
                   <Button type="submit" disabled={createUser.isPending}>
                     {createUser.isPending ? "Creating..." : "Create User"}
@@ -379,6 +406,7 @@ export default function UserManagement() {
                 <TableHead>Username</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
+                <TableHead>OTP Trusted For</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead className="w-24 text-right">Actions</TableHead>
               </TableRow>
@@ -406,6 +434,7 @@ export default function UserManagement() {
                     <TableCell className="text-sm font-mono">{u.username}</TableCell>
                     <TableCell className="text-sm">{u.email || <span className="text-muted-foreground">Not set</span>}{u.emailVerifiedAt && <span className="ml-1 text-xs text-emerald-600">Verified</span>}</TableCell>
                     <TableCell className="text-sm">{u.phone || <span className="text-muted-foreground">Not set</span>}</TableCell>
+                    <TableCell className="text-sm whitespace-nowrap"><TrustedOtpCountdown until={u.loginOtpTrustedUntil} /></TableCell>
                     <TableCell>{getRoleBadge(u.role)}<div className="mt-1 text-xs text-muted-foreground">{!u.email || !u.emailVerifiedAt ? "Sign-in blocked: verify email" : u.allowPasswordOnlyLogin ? "Password only (admin approved)" : "Email OTP required"}</div></TableCell>
                     <TableCell className="text-right flex items-center justify-end gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
@@ -429,11 +458,12 @@ export default function UserManagement() {
         </Card>
 
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent>
+          <DialogContent className="flex flex-col overflow-hidden sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Edit User: {editingUser?.fullName}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleUpdate} className="space-y-4 py-4">
+            <form onSubmit={handleUpdate} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-1 pr-1">
               <div className="space-y-2">
                 <Label htmlFor="edit-fullName">Full Name</Label>
                 <Input id="edit-fullName" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} required />
@@ -474,16 +504,17 @@ export default function UserManagement() {
               </div>
               <div className="space-y-2">
                 <Label>Access Rights</Label>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   {Object.entries(formData.permissions).map(([key, value]) => (
-                    <label key={key} className="flex items-center gap-2">
-                      <input type="checkbox" checked={!!value} disabled={editingUser?.id === currentUser?.id} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
+                    <label key={key} className="flex min-h-11 items-center gap-3 rounded-md p-2">
+                      <input type="checkbox" className="h-4 w-4 shrink-0 accent-primary disabled:opacity-50" checked={!!value} disabled={editingUser?.id === currentUser?.id} onChange={(e) => setFormData({...formData, permissions: { ...formData.permissions, [key]: e.target.checked }})} />
                       <span>{PERMISSION_LABELS[key] || key}</span>
                     </label>
                   ))}
                 </div>
               </div>
-              <DialogFooter>
+              </div>
+              <DialogFooter className="mt-4 border-t pt-4">
                 <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={updateUser.isPending}>
                   {updateUser.isPending ? "Saving..." : "Save Changes"}

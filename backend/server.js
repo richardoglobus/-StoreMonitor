@@ -1782,7 +1782,8 @@ async function deliverEmailOtp({ email, code, purpose, expiresInSeconds }) {
   throw new Error("Resend email delivery is not configured");
 }
 function safeUser(user) {
-  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, accountStatus: user.accountStatus || "active", allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
+  const loginOtpTrustedUntil = user.loginOtpTrustedUntil && new Date(user.loginOtpTrustedUntil).getTime() > Date.now() ? user.loginOtpTrustedUntil : null;
+  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, loginOtpTrustedUntil, accountStatus: user.accountStatus || "active", allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
 }
 function maskEmail(value) { const email = normalizeEmail(value); const [name, domain] = email.split("@"); return name && domain ? `${name.slice(0, 2)}***@${domain}` : "unknown"; }
 
@@ -1823,7 +1824,7 @@ app.patch("/api/auth/change-password",requireAuth,(req,res)=>{
   if(!user) return res.status(401).json({error:"Unauthorized"});
   if(!bcrypt.compareSync(currentPassword,user.passwordHash)) return res.status(401).json({error:"Current password is incorrect"});
   const hash=bcrypt.hashSync(newPassword,10);
-  db.get("users").find({id:user.id}).assign({passwordHash:hash}).write();
+  db.get("users").find({id:user.id}).assign({passwordHash:hash, loginOtpTrustHash:null, loginOtpTrustedUntil:null, loginOtpTrustFingerprint:null}).write();
   logActivity(req, "CHANGE_PASSWORD", "USER", user.id, null);
   res.json({success:true,message:"Password changed successfully"});
 });
@@ -1884,7 +1885,7 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   if (!resulting.email || !resulting.emailVerifiedAt) updates.allowPasswordOnlyLogin=false;
   if(accountStatus!==undefined && ["active","disabled","pending_verification"].includes(accountStatus)) updates.accountStatus=accountStatus;
   if(role!==undefined) updates.role=role;
-  if(password) updates.passwordHash=bcrypt.hashSync(password,10);
+  if(password) { updates.passwordHash=bcrypt.hashSync(password,10); updates.loginOtpTrustHash=null; updates.loginOtpTrustedUntil=null; updates.loginOtpTrustFingerprint=null; }
   const resolvedRole = updates.role || current.role;
   if (permissions !== undefined || role !== undefined) updates.permissions = normalizePermissions(resolvedRole, permissions !== undefined ? permissions : current.permissions);
   user.assign(updates).write();
@@ -3290,6 +3291,7 @@ const DEFAULT_SETTINGS = {
   maxLoginAttempts: 5,
   otpExpiryMinutes: 10,
   otpResendCooldownSeconds: 60,
+  otpRememberHours: 24,
   // Branding
   hospitalName: "Mukurweini Hospital Stores",
   facilityCode: "",
@@ -3400,6 +3402,7 @@ app.get("/api/settings/public",(req,res)=>{
     warningBeforeSeconds:s.warningBeforeSeconds,
     otpExpiryMinutes:Math.max(1,Number(s.otpExpiryMinutes)||10),
     otpResendCooldownSeconds:Math.max(10,Number(s.otpResendCooldownSeconds)||60),
+    otpRememberHours:Math.min(168,Math.max(0,Number(s.otpRememberHours) ?? 24)),
     defaultCurrency:s.defaultCurrency||"KES",
     financialYear:s.financialYear,
     issueDays:s.issueDays,

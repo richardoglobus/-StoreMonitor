@@ -28,6 +28,9 @@ function adminContactUpdates(current, input) {
     updates.emailOtpAttempts = 0;
     updates.resetSessionHash = null;
     updates.resetSessionExpires = null;
+    updates.loginOtpTrustHash = null;
+    updates.loginOtpTrustedUntil = null;
+    updates.loginOtpTrustFingerprint = null;
   }
   if (input.phone !== undefined) {
     const phone = normalizePhone(input.phone);
@@ -48,6 +51,10 @@ function registerLoginOtp(app, deps) {
   const save = req => new Promise((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
   const regenerate = req => new Promise((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
   const hashCode = (id, code) => crypto.createHmac("sha256", secret).update(`${id}:${code}`).digest("hex");
+  const trustHash = token => crypto.createHmac("sha256", secret).update(`otp-trust:${token}`).digest("hex");
+  const readTrustToken = req => String(req.headers.cookie || "").split(";").map(v => v.trim()).find(v => v.startsWith("storemonitor_otp_trust="))?.slice("storemonitor_otp_trust=".length) || "";
+  const rememberHours = () => Math.min(168, Math.max(0, Number(getSettings().otpRememberHours) ?? 24));
+  const setTrustCookie = (res, token, hours) => res.set("Set-Cookie", `storemonitor_otp_trust=${token}; Max-Age=${Math.floor(hours * 3600)}; Path=/; HttpOnly; SameSite=None${process.env.NODE_ENV === "production" ? "; Secure" : ""}`);
   const settingsSeconds = () => {
     const s = getSettings();
     return {
@@ -172,6 +179,15 @@ function registerLoginOtp(app, deps) {
     req.session.username = fresh.username;
     req.session.role = fresh.role;
     req.session.permissions = normalizePermissions(fresh.role, fresh.permissions);
+    if (method === "email_otp") {
+      const hours = rememberHours();
+      if (hours > 0) {
+        const token = crypto.randomBytes(32).toString("hex");
+        const trustedUntil = new Date(now() + hours * 60 * 60 * 1000).toISOString();
+        update(fresh.id, { loginOtpTrustHash: trustHash(token), loginOtpTrustedUntil: trustedUntil, loginOtpTrustFingerprint: proof.password });
+        setTrustCookie(res, token, hours);
+      }
+    }
     await save(req);
     logActivity(req, "LOGIN", "AUTH", fresh.id, { method });
     return res.json(safeUser(fresh));
@@ -198,6 +214,10 @@ function registerLoginOtp(app, deps) {
     if (user.allowPasswordOnlyLogin === true) {
       update(user.id, { loginOtp: null });
       return completeLogin(req, res, user, "password_only");
+    }
+    const trustToken = readTrustToken(req);
+    if (rememberHours() > 0 && trustToken && user.loginOtpTrustHash && user.loginOtpTrustedUntil && new Date(user.loginOtpTrustedUntil).getTime() > now() && user.loginOtpTrustFingerprint === passwordFingerprint && user.loginOtpTrustHash === trustHash(trustToken)) {
+      return completeLogin(req, res, user, "remembered_otp");
     }
     if (sendLimited(user, res)) return;
     await regenerate(req);

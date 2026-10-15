@@ -23,6 +23,7 @@ interface AppSettings {
   maxLoginAttempts: number;
   otpExpiryMinutes: number;
   otpResendCooldownSeconds: number;
+  otpRememberHours: number;
   // Branding
   hospitalName: string;
   producedBy: string;
@@ -77,6 +78,7 @@ const DEFAULTS: AppSettings = {
   maxLoginAttempts: 5,
   otpExpiryMinutes: 10,
   otpResendCooldownSeconds: 60,
+  otpRememberHours: 24,
   hospitalName: "Mukurweini Hospital Stores",
   producedBy: "",
   facilityCode: "",
@@ -600,6 +602,11 @@ export default function SettingsPage() {
               <Label>OTP Resend Cooldown (seconds)</Label>
               <Input type="number" min="10" max="600" value={settings.otpResendCooldownSeconds} onChange={e => update("otpResendCooldownSeconds", Number(e.target.value))} />
               <p className="text-xs text-muted-foreground">Minimum wait before another code can be requested.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Remember OTP Verification (hours)</Label>
+              <Input type="number" min="0" max="168" value={settings.otpRememberHours} onChange={e => update("otpRememberHours", Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground">After a successful OTP sign-in, the same browser skips OTP for this period. Use 0 to require OTP every time.</p>
             </div>
           </div>
         </SectionCard>
