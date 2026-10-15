@@ -215,7 +215,7 @@ export default function UserManagement() {
           permissions: defaultPermissionsByRole("staff")
         });
       },
-      onError: () => toast.error("Failed to create user")
+      onError: (error: any) => toast.error(error?.error || error?.message || "Failed to create user")
     }
   });
 
