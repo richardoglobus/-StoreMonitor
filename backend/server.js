@@ -4275,13 +4275,16 @@ app.post("/api/auth/register",async (req,res)=>{
   if(normalizedPhone && db.get("users").find(u => normalizePhone(u.phone) === normalizedPhone).value()) return res.status(400).json({error:"Phone number already registered"});
   const hash=bcrypt.hashSync(password,10);
   const defaultPerms={viewDashboard:true,viewCatalog:false,viewDepartments:false,viewPurchases:false,viewIssues:false,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
+  const otpRequired = s.requireOtpForLogin === true;
   const code=makeOtp();
-  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:"pending_verification",emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:"signup",emailOtpAttempts:0,role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
+  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:otpRequired ? null : new Date().toISOString(),phoneVerifiedAt:null,accountStatus:otpRequired ? "pending_verification" : "active",emailOtpHash:otpRequired ? hashOtp(code) : null,emailOtpExpires:otpRequired ? new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString() : null,emailOtpPurpose:otpRequired ? "signup" : null,emailOtpAttempts:0,role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
-  try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
-  catch (error) { db.get("users").remove({id:user.id}).write(); return res.status(503).json({error:"We could not send the verification email. Please try again later."}); }
-  const response={success:true,message:"Account created. Check your email for the verification code."};
+  if (otpRequired) {
+    try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
+    catch (error) { db.get("users").remove({id:user.id}).write(); return res.status(503).json({error:"We could not send the verification email. Please try again later."}); }
+  }
+  const response={success:true,otpRequired,message:otpRequired ? "Account created. Check your email for the verification code." : "Account created. You can now sign in with your password."};
   if (process.env.OTP_DEV_MODE === "true") response.devOtp=code;
   res.status(201).json(response);
 });
