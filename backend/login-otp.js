@@ -62,7 +62,8 @@ function registerLoginOtp(app, deps) {
       resendAfterSeconds: Math.min(1800, Math.max(10, Number(s.otpResendCooldownSeconds) || 60))
     };
   };
-  const eligible = user => !!(user && user.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(user.email)) && user.emailVerifiedAt);
+  const otpRequired = () => getSettings().requireOtpForLogin === true;
+  const eligible = user => !!(user && (otpRequired() ? user.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(user.email)) && user.emailVerifiedAt : user.accountStatus === "active"));
   const inactive = user => user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false;
   function contact(res) {
     return res.status(403).json({ code: "CONTACT_ADMIN_REQUIRED", error: CONTACT_MESSAGE });
@@ -171,7 +172,7 @@ function registerLoginOtp(app, deps) {
     await regenerate(req);
     const fresh = userById(user.id);
     if (!eligible(fresh)) return contact(res);
-    if (inactive(fresh) || normalizeEmail(fresh.email) !== proof.email || fresh.emailVerifiedAt !== proof.verifiedAt || digest(fresh.passwordHash) !== proof.password || (method === "password_only" && fresh.allowPasswordOnlyLogin !== true)) {
+    if (inactive(fresh) || (otpRequired() && (normalizeEmail(fresh.email) !== proof.email || fresh.emailVerifiedAt !== proof.verifiedAt)) || digest(fresh.passwordHash) !== proof.password || (method === "password_only" && otpRequired() && fresh.allowPasswordOnlyLogin !== true)) {
       return res.status(401).json({ error: "Your account changed. Please sign in again." });
     }
     if (maintenance(fresh, res)) return;
@@ -211,7 +212,7 @@ function registerLoginOtp(app, deps) {
     // Never accept email/phone supplied alongside credentials as an enrollment request.
     if (!eligible(user) || user.accountStatus === "pending_verification") return contact(res);
     if (maintenance(user, res)) return;
-    if (user.allowPasswordOnlyLogin === true) {
+    if (!otpRequired() || user.allowPasswordOnlyLogin === true) {
       update(user.id, { loginOtp: null });
       return completeLogin(req, res, user, "password_only");
     }

@@ -241,7 +241,7 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
     catch(err:any) { if(err?.retryAfterSeconds) setLoginResendAt(Date.now()+err.retryAfterSeconds*1000); loginError(err); }
     finally { setLoading(false); }
   };
-  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{await onSignup(name,u,email,phone,p);setOtpCooldown(otpExpirySeconds);setPanel("verify_signup");}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
+  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{const result=await onSignup(name,u,email,phone,p);setOtpCooldown(otpExpirySeconds);setPanel("verify_signup");if(result?.devOtp){setOtp(String(result.devOtp));toast.info(`Development OTP: ${result.devOtp}`);}}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
   const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{await requestPasswordOtp(u);setOtpCooldown(otpExpirySeconds);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
   const handleResend=async()=>{const purpose: "signup" | "reset" = panel==="verify_signup" ? "signup" : "reset";const identifier=purpose==="signup"?email:u;if(!identifier||otpCooldown>0)return;setLoading(true);try{await resendOtp(identifier,purpose);setOtp("");setOtpCooldown(otpExpirySeconds);toast.success("A new verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to resend code");}finally{setLoading(false);}};
   const handleVerify=async(e:React.FormEvent,purpose:"signup"|"reset")=>{e.preventDefault();setLoading(true);try{const result=await verifyOtp(purpose==="signup"?email:u,otp,purpose);if(purpose==="reset"){setResetSession(result.resetSession||"");setPanel("reset_password");}else{toast.success("Email verified. You can now sign in.");setPanel("login");}}catch(err:any){toast.error(err?.error||"Invalid or expired code");}finally{setLoading(false);}};
@@ -448,7 +448,8 @@ export default function LoginPage(){
     const res=await fetch(`${API_BASE}/api/auth/register`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,username,email,phone,password})});
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||"Registration failed");
-    toast.success("Account created. Check your email for the verification code.");
+    toast.success(data.message || "Account created. Check your email for the verification code.");
+    return data;
   };
 
   const t=EFFECT_THEMES[effect];

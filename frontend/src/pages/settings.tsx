@@ -24,6 +24,7 @@ interface AppSettings {
   otpExpiryMinutes: number;
   otpResendCooldownSeconds: number;
   otpRememberHours: number;
+  requireOtpForLogin: boolean;
   // Branding
   hospitalName: string;
   producedBy: string;
@@ -79,6 +80,7 @@ const DEFAULTS: AppSettings = {
   otpExpiryMinutes: 10,
   otpResendCooldownSeconds: 60,
   otpRememberHours: 24,
+  requireOtpForLogin: false,
   hospitalName: "Mukurweini Hospital Stores",
   producedBy: "",
   facilityCode: "",
@@ -607,6 +609,9 @@ export default function SettingsPage() {
               <Label>Remember OTP Verification (hours)</Label>
               <Input type="number" min="0" max="168" value={settings.otpRememberHours} onChange={e => update("otpRememberHours", Number(e.target.value))} />
               <p className="text-xs text-muted-foreground">After a successful OTP sign-in, the same browser skips OTP for this period. Use 0 to require OTP every time.</p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <ToggleRow label="Require OTP for sign-in" description="When off, active users can sign in with their password without a verified email. Turn this on after email or SMS delivery is configured." checked={settings.requireOtpForLogin} onChange={(value: boolean) => update("requireOtpForLogin", value)} />
             </div>
           </div>
         </SectionCard>

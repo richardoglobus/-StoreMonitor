@@ -1756,6 +1756,7 @@ function otpAllowed(key) {
   recent.push(now); otpAttempts.set(key, recent); return true;
 }
 async function deliverEmailOtp({ email, code, purpose, expiresInSeconds }) {
+  if (process.env.OTP_DEV_MODE === "true") { console.warn(`[OTP_DEV_MODE] ${purpose} OTP for ${email}: ${code}`); return; }
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
   if (apiKey) {
@@ -3292,6 +3293,7 @@ const DEFAULT_SETTINGS = {
   otpExpiryMinutes: 10,
   otpResendCooldownSeconds: 60,
   otpRememberHours: 24,
+  requireOtpForLogin: false,
   // Branding
   hospitalName: "Mukurweini Hospital Stores",
   facilityCode: "",
@@ -3403,6 +3405,7 @@ app.get("/api/settings/public",(req,res)=>{
     otpExpiryMinutes:Math.max(1,Number(s.otpExpiryMinutes)||10),
     otpResendCooldownSeconds:Math.max(10,Number(s.otpResendCooldownSeconds)||60),
     otpRememberHours:Math.min(168,Math.max(0,Number(s.otpRememberHours) ?? 24)),
+    requireOtpForLogin:s.requireOtpForLogin === true,
     defaultCurrency:s.defaultCurrency||"KES",
     financialYear:s.financialYear,
     issueDays:s.issueDays,
@@ -4279,7 +4282,7 @@ app.post("/api/auth/register",async (req,res)=>{
   try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
   catch (error) { db.get("users").remove({id:user.id}).write(); return res.status(503).json({error:"We could not send the verification email. Please try again later."}); }
   const response={success:true,message:"Account created. Check your email for the verification code."};
-  if (process.env.OTP_DEV_MODE === "true" && !isProd) response.devOtp=code;
+  if (process.env.OTP_DEV_MODE === "true") response.devOtp=code;
   res.status(201).json(response);
 });
 
