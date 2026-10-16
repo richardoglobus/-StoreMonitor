@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, todayStr, firstOfMonth } from "@/components/date-range-picker";
-import { useListDepartments, getListDepartmentsQueryKey, API_BASE } from "@/lib/api";
+import { useListDepartments, getListDepartmentsQueryKey, API_BASE, apiFetchResponse } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,11 +10,13 @@ import { Download, FileSpreadsheet, Activity, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 
-async function downloadCsv(url: string, filename: string, setLoading: (v: boolean) => void) {
+async function downloadCsv(url: string, filename: string, setLoading: (v: boolean) => void, setStatus?: (v: string) => void) {
   setLoading(true);
+  setStatus?.("Preparing compressed export…");
   try {
-    const res = await fetch(url, { credentials: "include" });
+    const res = await apiFetchResponse(url);
     if (!res.ok) { alert("Export failed. Make sure you are logged in and have export permission."); return; }
+    setStatus?.("Downloading compressed file…");
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -24,7 +26,7 @@ async function downloadCsv(url: string, filename: string, setLoading: (v: boolea
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
   } catch { alert("Download error. Please try again."); }
-  finally { setLoading(false); }
+  finally { setLoading(false); setStatus?.(""); }
 }
 
 export default function Exports() {
@@ -38,6 +40,8 @@ export default function Exports() {
   const [loadingIssues, setLoadingIssues] = useState(false);
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [loadingMonthly, setLoadingMonthly] = useState(false);
+  const [loadingMonthlyExcel, setLoadingMonthlyExcel] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
 
   const { data: departments } = useListDepartments({ query: { queryKey: getListDepartmentsQueryKey() } });
 
@@ -49,6 +53,9 @@ export default function Exports() {
     : `${API_BASE}/api/export/issues.csv?month=${month}`;
   const inventoryUrl = `${API_BASE}/api/export/inventory.csv?departmentId=${departmentId}&month=${month}`;
   const monthlyUrl = `${API_BASE}/api/export/monthly-report.csv?startMonth=${month}&endMonth=${endMonth}`;
+  const monthlyExcelUrl = `${API_BASE}/api/export/monthly-report.xlsx?startMonth=${month}&endMonth=${endMonth}`;
+  const rangeDays = (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000;
+  const invalidRange = !from || !to || from > to || !Number.isFinite(rangeDays) || rangeDays > 366 || (endMonth < month || (Number(endMonth.slice(0,4)) * 12 + Number(endMonth.slice(5)) - Number(month.slice(0,4)) * 12 - Number(month.slice(5))) > 11);
 
   return (
     <Layout>
@@ -65,6 +72,8 @@ export default function Exports() {
           </CardHeader>
           <CardContent className="pt-6 space-y-6">
             <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
+            {invalidRange && <p className="text-sm text-destructive">Choose a valid date range of no more than 366 days and 12 months.</p>}
+            {exportStatus && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{exportStatus}</div>}
             <div className="space-y-2">
               <Label>Department</Label>
               <Select value={departmentId} onValueChange={setDepartmentId}>
@@ -92,8 +101,8 @@ export default function Exports() {
               <CardDescription>Line-by-line log of all items issued, dates, quantities, and notes.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" disabled={loadingIssues}
-                onClick={()=>downloadCsv(issuesUrl,`issues_${month}.csv`,setLoadingIssues)}>
+              <Button className="w-full" disabled={loadingIssues || invalidRange}
+                onClick={()=>downloadCsv(issuesUrl,`issues_${month}.csv`,setLoadingIssues,setExportStatus)}>
                 {loadingIssues?<Loader2 className="h-4 w-4 mr-2 animate-spin"/>:<Download className="h-4 w-4 mr-2"/>}
                 {loadingIssues?"Downloading…":"Download Issues"}
               </Button>
@@ -112,8 +121,8 @@ export default function Exports() {
               {departmentId==="all" ? (
                 <Button className="w-full" variant="outline" disabled>Select a specific department first</Button>
               ) : (
-                <Button className="w-full" variant="outline" disabled={loadingInventory}
-                  onClick={()=>downloadCsv(inventoryUrl,`inventory_${departmentId}_${month}.csv`,setLoadingInventory)}>
+                <Button className="w-full" variant="outline" disabled={loadingInventory || invalidRange}
+                  onClick={()=>downloadCsv(inventoryUrl,`inventory_${departmentId}_${month}.csv`,setLoadingInventory,setExportStatus)}>
                   {loadingInventory?<Loader2 className="h-4 w-4 mr-2 animate-spin"/>:<Download className="h-4 w-4 mr-2"/>}
                   {loadingInventory?"Downloading…":"Download Inventory"}
                 </Button>
@@ -130,10 +139,15 @@ export default function Exports() {
               <CardDescription>Full commodity report with opening balances, additions, issues, and closing balances.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="outline" disabled={loadingMonthly}
-                onClick={()=>downloadCsv(monthlyUrl,`monthly_report_${month}_${endMonth}.csv`,setLoadingMonthly)}>
+              <Button className="w-full" variant="outline" disabled={loadingMonthly || invalidRange}
+                onClick={()=>downloadCsv(monthlyUrl,`monthly_report_${month}_${endMonth}.csv`,setLoadingMonthly,setExportStatus)}>
                 {loadingMonthly?<Loader2 className="h-4 w-4 mr-2 animate-spin"/>:<Download className="h-4 w-4 mr-2"/>}
                 {loadingMonthly?"Downloading…":"Download Monthly Report"}
+              </Button>
+              <Button className="mt-2 w-full" variant="outline" disabled={loadingMonthlyExcel || invalidRange}
+                onClick={()=>downloadCsv(monthlyExcelUrl,`monthly_report_${month}_${endMonth}.xlsx`,setLoadingMonthlyExcel,setExportStatus)}>
+                {loadingMonthlyExcel?<Loader2 className="h-4 w-4 mr-2 animate-spin"/>:<FileSpreadsheet className="h-4 w-4 mr-2"/>}
+                {loadingMonthlyExcel?"Downloading…":"Download Monthly Report Excel"}
               </Button>
             </CardContent>
           </Card>

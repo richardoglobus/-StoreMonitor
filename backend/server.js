@@ -3637,9 +3637,21 @@ function operationalExportRows(kind, query) {
   if (kind === "purchase-orders-outstanding") { const suppliers=new Map(db.get("suppliers").value().map(s=>[s.id,s.name])); return db.get("purchaseOrders").value().filter(o=>o.status!=="approved"&&o.status!=="completed").map(o=>({poNo:o.poNo,date:o.date,supplierName:suppliers.get(o.supplierId)||"",status:o.status,totalAmount:Number(o.totalAmount||0),procurementMethod:o.procurementMethod||""})); }
   return [];
 }
-function sendOperationalZip(res, filename, content) { const archiver=require("archiver"); const archive=archiver("zip",{zlib:{level:9}}); const chunks=[]; archive.on("data",chunk=>chunks.push(chunk)); archive.on("error",err=>res.status(500).json({error:"Export compression failed: "+err.message})); archive.on("end",()=>{res.setHeader("Content-Type","application/zip");res.setHeader("Content-Disposition",`attachment; filename="${filename}.zip"`);res.send(Buffer.concat(chunks));}); archive.append(content,{name:filename}); archive.finalize(); }
-app.get("/api/export/operational-report.csv", requirePermission("exportData"), (req,res)=>{ const rows=operationalExportRows(String(req.query.kind||""),req.query); if(!rows.length) return res.status(404).json({error:"No report data found"}); const headers=Object.keys(rows[0]); const lines=[headers.map(csvEscape).join(","),...rows.map(row=>headers.map(key=>csvEscape(row[key])).join(","))]; sendOperationalZip(res,`operational_${req.query.kind||"report"}.csv`,Buffer.from(lines.join("\n"),"utf8")); });
-app.get("/api/export/operational-report.xlsx", requirePermission("exportData"), async (req,res)=>{ const rows=operationalExportRows(String(req.query.kind||""),req.query); if(!rows.length) return res.status(404).json({error:"No report data found"}); const ExcelJS=require("exceljs"); const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Operational Report"); const headers=Object.keys(rows[0]); ws.columns=headers.map(key=>({header:key.replace(/[A-Z]/g,m=>` ${m}`),key,width:Math.min(32,Math.max(14,key.length+4))})); rows.forEach(row=>ws.addRow(row)); ws.getRow(1).font={bold:true}; const buffer=await wb.xlsx.writeBuffer(); sendOperationalZip(res,`operational_${req.query.kind||"report"}.xlsx`,Buffer.from(buffer)); });
+const MAX_EXPORT_BYTES = 25 * 1024 * 1024;
+const MAX_EXPORT_ROWS = 50000;
+function validExportDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)); }
+function validExportMonth(value) { return /^\d{4}-\d{2}$/.test(String(value || "")) && Number(value.slice(5)) >= 1 && Number(value.slice(5)) <= 12; }
+function validateExportQuery(req, res) {
+  const q=req.query||{}, from=String(q.from||""), to=String(q.to||"");
+  if (from || to) { if (!validExportDate(from) || !validExportDate(to) || from > to || (Date.parse(`${to}T00:00:00Z`)-Date.parse(`${from}T00:00:00Z`)) / 86400000 > 366) { res.status(400).json({error:"Export date range must be valid and no longer than 366 days"}); return false; } }
+  const startMonth=String(q.startMonth||q.month||""), endMonth=String(q.endMonth||q.month||"");
+  if (startMonth || endMonth) { if (!validExportMonth(startMonth) || !validExportMonth(endMonth) || startMonth > endMonth || ((Number(endMonth.slice(0,4))*12+Number(endMonth.slice(5)))-(Number(startMonth.slice(0,4))*12+Number(startMonth.slice(5)))) > 11) { res.status(400).json({error:"Export month range must be valid and no longer than 12 months"}); return false; } }
+  return true;
+}
+app.use("/api/export", (req,res,next)=>req.method === "GET" && !validateExportQuery(req,res) ? undefined : next());
+function sendOperationalZip(req, res, filename, content, rowCount=0) { const archiver=require("archiver"); const archive=archiver("zip",{zlib:{level:9}}); const chunks=[]; archive.on("data",chunk=>chunks.push(chunk)); archive.on("error",err=>res.status(500).json({error:"Export compression failed: "+err.message})); archive.on("end",()=>{const zip=Buffer.concat(chunks); if(zip.length>MAX_EXPORT_BYTES) return res.status(413).json({error:"Export is too large. Narrow the date range or use CSV."}); res.setHeader("Content-Type","application/zip");res.setHeader("Content-Disposition",`attachment; filename="${filename}.zip"`); logActivity(req,"EXPORT_DOWNLOAD","EXPORT",null,{file:filename,bytes:zip.length,rows:rowCount,path:req.path}); res.send(zip);}); archive.append(content,{name:filename}); archive.finalize(); }
+app.get("/api/export/operational-report.csv", requirePermission("exportData"), (req,res)=>{ const rows=operationalExportRows(String(req.query.kind||""),req.query); if(!rows.length) return res.status(404).json({error:"No report data found"}); if(rows.length>MAX_EXPORT_ROWS) return res.status(413).json({error:"Export contains too many rows. Narrow the filters."}); const headers=Object.keys(rows[0]); const lines=[headers.map(csvEscape).join(","),...rows.map(row=>headers.map(key=>csvEscape(row[key])).join(","))]; sendOperationalZip(req,res,`operational_${req.query.kind||"report"}.csv`,Buffer.from(lines.join("\n"),"utf8"),rows.length); });
+app.get("/api/export/operational-report.xlsx", requirePermission("exportData"), async (req,res)=>{ const rows=operationalExportRows(String(req.query.kind||""),req.query); if(!rows.length) return res.status(404).json({error:"No report data found"}); if(rows.length>MAX_EXPORT_ROWS) return res.status(413).json({error:"Export contains too many rows. Narrow the filters or use CSV."}); const ExcelJS=require("exceljs"); const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Operational Report"); const headers=Object.keys(rows[0]); ws.columns=headers.map(key=>({header:key.replace(/[A-Z]/g,m=>` ${m}`),key,width:Math.min(32,Math.max(14,key.length+4))})); rows.forEach(row=>ws.addRow(row)); ws.getRow(1).font={bold:true}; const buffer=await wb.xlsx.writeBuffer(); sendOperationalZip(req,res,`operational_${req.query.kind||"report"}.xlsx`,Buffer.from(buffer),rows.length); });
 
 // EXPORTS
 // Exports are delivered as ZIP archives so large downloads do not need to be
@@ -3665,11 +3677,13 @@ app.use("/api/export", (req, res, next) => {
       archive.append(Buffer.concat(chunks), { name: entryName });
       await archive.finalize();
       const zip = Buffer.concat(zipChunks);
+      if (zip.length > MAX_EXPORT_BYTES) { res.statusCode = 413; res.setHeader("Content-Type", "application/json"); return originalEnd(JSON.stringify({error:"Export is too large. Narrow the date range or use CSV."})); }
       res.removeHeader("Content-Type");
       res.removeHeader("Content-Length");
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="${entryName.replace(/\.(csv|xlsx)$/i, "")}.zip"`);
       res.setHeader("Content-Length", zip.length);
+      logActivity(req, "EXPORT_DOWNLOAD", "EXPORT", null, { file: entryName, bytes: zip.length, path: req.path });
       originalEnd(zip);
     } catch (error) {
       console.error("Export archive error:", error);
