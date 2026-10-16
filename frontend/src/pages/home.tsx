@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { Plus, ShoppingCart, ClipboardList, ReceiptText, PackageSearch, FileText, Wallet, BarChart3, ArrowRight, UserCheck, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { apiFetch, type AuthUser } from "@/lib/api";
 
 type Visit = { href: string; label: string };
 
@@ -24,9 +25,8 @@ export default function HomePage() {
     if (!user.permissions.manageUsers) return;
     setLoadingPending(true);
     try {
-      const response = await fetch("/api/auth/users", { credentials: "include", cache: "no-store" });
-      const list = response.ok ? await response.json() : [];
-      setPendingUsers(Array.isArray(list) ? list.filter((u: any) => u.accountStatus === "pending_approval") : []);
+      const list = await apiFetch<AuthUser[]>("/api/auth/users", { cache: "no-store" });
+      setPendingUsers(Array.isArray(list) ? list.filter((u: AuthUser) => u.accountStatus === "pending_approval") : []);
     } catch { setPendingUsers([]); }
     finally { setLoadingPending(false); }
   };
@@ -36,9 +36,7 @@ export default function HomePage() {
   const approvePendingUser = async (pendingUser: any) => {
     if (!confirm(`Approve ${pendingUser.fullName || pendingUser.username}? You can assign permissions later in User Management.`)) return;
     try {
-      const response = await fetch(`/api/auth/users/${pendingUser.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accountStatus: "active", permissions: {} }) });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Approval failed");
+      await apiFetch(`/api/auth/users/${pendingUser.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accountStatus: "active", permissions: {} }) });
       toast.success(`${pendingUser.fullName || pendingUser.username} approved`);
       await loadPendingApprovals();
     } catch (error: any) { toast.error(error?.message || "Approval failed"); }
