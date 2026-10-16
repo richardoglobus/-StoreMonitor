@@ -64,7 +64,7 @@ function registerLoginOtp(app, deps) {
   };
   const otpRequired = () => getSettings().requireOtpForLogin === true;
   const eligible = user => !!(user && (otpRequired() ? user.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(user.email)) && user.emailVerifiedAt : user.accountStatus === "active"));
-  const inactive = user => user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false;
+  const inactive = user => user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.accountStatus === "pending_approval" || user.isActive === false;
   function contact(res) {
     return res.status(403).json({ code: "CONTACT_ADMIN_REQUIRED", error: CONTACT_MESSAGE });
   }
@@ -209,6 +209,7 @@ function registerLoginOtp(app, deps) {
     }
     if (digest(userById(user.id)?.passwordHash) !== passwordFingerprint) return res.status(401).json({ error: "Invalid credentials" });
     if (user.accountStatus === "disabled" || user.isActive === false) return res.status(403).json({ error: "This account is inactive" });
+    if (user.accountStatus === "pending_approval") return res.status(403).json({ code: "ACCOUNT_PENDING_APPROVAL", error: "Your account is awaiting administrator approval." });
     // Never accept email/phone supplied alongside credentials as an enrollment request.
     if (!eligible(user) || user.accountStatus === "pending_verification") return contact(res);
     if (maintenance(user, res)) return;

@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Edit, Users as UsersIcon, Shield, User as UserIcon, Loader2 } from "lucide-react";
+import { Plus, Trash2, Edit, CheckCircle, Users as UsersIcon, Shield, User as UserIcon, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -291,6 +291,11 @@ export default function UserManagement() {
     }
   };
 
+  const handleApprove = (user: any) => {
+    if (!confirm(`Approve ${user.fullName || user.username}? You can assign additional permissions by editing the user afterward.`)) return;
+    updateUser.mutate({ userId: user.id, data: { accountStatus: "active", permissions: {} } });
+  };
+
   const adminOnly = currentUser?.role === "admin";
   const securityHelpId = `${isEditOpen ? "edit" : "add"}-sign-in-security-help`;
   const securityHelp = !adminOnly
@@ -323,7 +328,7 @@ export default function UserManagement() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">User Management</h1>
-            <p className="text-muted-foreground">Manage system access and roles.</p>
+            <p className="text-muted-foreground">Manage system access and roles. {users?.filter(u => u.accountStatus === "pending_approval").length ? <span className="font-medium text-amber-600">{users.filter(u => u.accountStatus === "pending_approval").length} awaiting approval</span> : null}</p>
           </div>
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>
@@ -435,8 +440,9 @@ export default function UserManagement() {
                     <TableCell className="text-sm">{u.email || <span className="text-muted-foreground">Not set</span>}{u.emailVerifiedAt && <span className="ml-1 text-xs text-emerald-600">Verified</span>}</TableCell>
                     <TableCell className="text-sm">{u.phone || <span className="text-muted-foreground">Not set</span>}</TableCell>
                     <TableCell className="text-sm whitespace-nowrap"><TrustedOtpCountdown until={u.loginOtpTrustedUntil} /></TableCell>
-                    <TableCell>{getRoleBadge(u.role)}<div className="mt-1 text-xs text-muted-foreground">{!u.email || !u.emailVerifiedAt ? "Sign-in blocked: verify email" : u.allowPasswordOnlyLogin ? "Password only (admin approved)" : "Email OTP required"}</div></TableCell>
+                    <TableCell>{getRoleBadge(u.role)}<div className="mt-1 text-xs text-muted-foreground">{u.accountStatus === "pending_approval" ? <span className="text-amber-600">Awaiting approval</span> : !u.email || !u.emailVerifiedAt ? "Sign-in blocked: verify email" : u.allowPasswordOnlyLogin ? "Password only (admin approved)" : "Email OTP required"}</div></TableCell>
                     <TableCell className="text-right flex items-center justify-end gap-1">
+                      {u.accountStatus === "pending_approval" && <Button variant="outline" size="sm" className="h-8 gap-1 text-emerald-700" onClick={() => handleApprove(u)} disabled={updateUser.isPending}><CheckCircle className="h-4 w-4" />Approve</Button>}
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                         <Edit className="h-4 w-4" />
                       </Button>

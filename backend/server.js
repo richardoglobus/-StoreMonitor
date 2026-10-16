@@ -1884,7 +1884,7 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   if (allowPasswordOnlyLogin === true && (!resulting.email || !resulting.emailVerifiedAt)) return res.status(400).json({error:"Password-only sign-in requires an administrator-verified email"});
   if (allowPasswordOnlyLogin !== undefined) { updates.allowPasswordOnlyLogin=allowPasswordOnlyLogin; updates.loginOtp=null; }
   if (!resulting.email || !resulting.emailVerifiedAt) updates.allowPasswordOnlyLogin=false;
-  if(accountStatus!==undefined && ["active","disabled","pending_verification"].includes(accountStatus)) updates.accountStatus=accountStatus;
+  if(accountStatus!==undefined && ["active","disabled","pending_verification","pending_approval"].includes(accountStatus)) updates.accountStatus=accountStatus;
   if(role!==undefined) updates.role=role;
   if(password) { updates.passwordHash=bcrypt.hashSync(password,10); updates.loginOtpTrustHash=null; updates.loginOtpTrustedUntil=null; updates.loginOtpTrustFingerprint=null; }
   const resolvedRole = updates.role || current.role;
@@ -4277,14 +4277,14 @@ app.post("/api/auth/register",async (req,res)=>{
   const defaultPerms={viewDashboard:true,viewCatalog:false,viewDepartments:false,viewPurchases:false,viewIssues:false,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
   const otpRequired = s.requireOtpForLogin === true;
   const code=makeOtp();
-  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:otpRequired ? null : new Date().toISOString(),phoneVerifiedAt:null,accountStatus:otpRequired ? "pending_verification" : "active",emailOtpHash:otpRequired ? hashOtp(code) : null,emailOtpExpires:otpRequired ? new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString() : null,emailOtpPurpose:otpRequired ? "signup" : null,emailOtpAttempts:0,role:"staff",permissions:defaultPerms,createdAt:new Date().toISOString()};
+  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:otpRequired ? "pending_verification" : "pending_approval",emailOtpHash:otpRequired ? hashOtp(code) : null,emailOtpExpires:otpRequired ? new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString() : null,emailOtpPurpose:otpRequired ? "signup" : null,emailOtpAttempts:0,role:"staff",permissions:Object.fromEntries(Object.keys(defaultPerms).map(key => [key, false])),createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
   if (otpRequired) {
     try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
     catch (error) { db.get("users").remove({id:user.id}).write(); return res.status(503).json({error:"We could not send the verification email. Please try again later."}); }
   }
-  const response={success:true,otpRequired,message:otpRequired ? "Account created. Check your email for the verification code." : "Account created. You can now sign in with your password."};
+  const response={success:true,otpRequired,message:otpRequired ? "Account created. Check your email for the verification code." : "Account created. Await administrator approval before signing in."};
   if (process.env.OTP_DEV_MODE === "true") response.devOtp=code;
   res.status(201).json(response);
 });
@@ -4331,8 +4331,8 @@ app.post("/api/auth/verify-otp",(req,res)=>{
   if ((user.emailOtpAttempts || 0) >= 5) return res.status(429).json({error:"Too many verification attempts. Request a new code."});
   if (hashOtp(otp) !== user.emailOtpHash) { db.get("users").find({id:user.id}).assign({emailOtpAttempts:(user.emailOtpAttempts || 0)+1}).write(); return res.status(400).json({error:"Invalid or expired verification code"}); }
   if (purpose === "signup") {
-    db.get("users").find({id:user.id}).assign({emailVerifiedAt:new Date().toISOString(),accountStatus:"active",emailOtpHash:null,emailOtpExpires:null,emailOtpPurpose:null,emailOtpAttempts:0}).write();
-    return res.json({success:true,message:"Email verified. You can now sign in."});
+    db.get("users").find({id:user.id}).assign({emailVerifiedAt:new Date().toISOString(),accountStatus:"pending_approval",emailOtpHash:null,emailOtpExpires:null,emailOtpPurpose:null,emailOtpAttempts:0}).write();
+    return res.json({success:true,message:"Email verified. Await administrator approval before signing in."});
   }
   const resetSession=crypto.randomBytes(32).toString("hex");
   db.get("users").find({id:user.id}).assign({resetSessionHash:hashOtp(resetSession),resetSessionExpires:new Date(Date.now()+10*60*1000).toISOString(),emailOtpHash:null,emailOtpExpires:null,emailOtpPurpose:null,emailOtpAttempts:0}).write();

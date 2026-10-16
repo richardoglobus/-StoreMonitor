@@ -46,7 +46,7 @@ export default function Departments() {
         setIsDialogOpen(false);
         setNewDeptName("");
       },
-      onError: () => toast.error("Failed to create department"),
+      onError: (error: any) => toast.error(error?.error || error?.message || "Failed to create department"),
     }
   });
 
@@ -84,7 +84,7 @@ export default function Departments() {
       toast.success(`Renamed to "${data.name}"`);
       queryClient.invalidateQueries({ queryKey: getListDepartmentsQueryKey() });
       setRenamingId(null);
-    } catch { toast.error("Rename failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Rename failed"); }
     finally { setRenameSaving(false); }
   };
 
@@ -104,7 +104,7 @@ export default function Departments() {
       }
       const data = await res.json();
       toast.error(data.error || "Delete failed");
-    } catch { toast.error("Delete failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Delete failed"); }
     finally { setDeleteLoading(false); }
   };
 

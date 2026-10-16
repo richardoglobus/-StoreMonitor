@@ -79,7 +79,7 @@ export default function Assets() {
       setDepartments(deptNames);
       const assetLocs = [...new Set(assetList.map((x: Asset) => (x.location||"").trim().toUpperCase()).filter(Boolean))];
       setLocationMismatches(assetLocs.filter(l => !deptNames.includes(l)));
-    } catch { toast.error("Failed to load assets"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Failed to load assets"); }
     finally { setLoading(false); }
   }, []);
 
@@ -126,7 +126,7 @@ export default function Assets() {
       if (!res.ok) { toast.error(data.error || "Save failed"); return; }
       toast.success(editAsset ? "Asset updated" : "Asset added");
       setAddOpen(false); setEditAsset(null); setForm({...EMPTY_FORM}); fetchAll();
-    } catch { toast.error("Save failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Save failed"); }
     finally { setSaving(false); }
   };
 
@@ -136,7 +136,7 @@ export default function Assets() {
       const res = await fetch(`${API_BASE}/api/assets/${deleteTarget.id}`, { method:"DELETE", credentials:"include" });
       if (res.status === 204 || res.ok) { toast.success("Asset deleted"); setDeleteTarget(null); fetchAll(); return; }
       const d = await res.json(); toast.error(d.error || "Delete failed");
-    } catch { toast.error("Delete failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Delete failed"); }
   };
 
   const handleMove = async () => {
@@ -150,7 +150,7 @@ export default function Assets() {
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || "Move failed"); return; }
       toast.success("Asset moved"); setMoveAsset(null); setMoveForm({ location:"", category:"" }); fetchAll();
-    } catch { toast.error("Move failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Move failed"); }
     finally { setSaving(false); }
   };
 
@@ -207,7 +207,7 @@ export default function Assets() {
       }
       toast.success(`Updated ${updated} asset locations`);
       setSyncOpen(false); setSyncSuggestions([]); fetchAll();
-    } catch { toast.error("Sync failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Sync failed"); }
     finally { setSyncing(false); }
   };
 
@@ -219,7 +219,7 @@ export default function Assets() {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a"); a.href = url; a.download = `asset-register.${type}`; a.click();
       URL.revokeObjectURL(url);
-    } catch { toast.error("Export failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Export failed"); }
   };
 
   // ── Location Select helper ────────────────────────────────────────────────

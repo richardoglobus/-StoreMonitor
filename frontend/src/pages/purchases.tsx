@@ -36,7 +36,7 @@ async function dl(url: string, filename: string, setLoading: (v: boolean) => voi
     a.href = URL.createObjectURL(blob); a.download = res.headers.get("content-disposition")?.match(/filename="?([^"]+)"?/i)?.[1] || filename.replace(/\.(csv|xlsx)$/i, ".zip");
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
-  } catch { toast.error("Download error"); }
+  } catch (error: any) { toast.error(error?.error || error?.message || "Download error"); }
   finally { setLoading(false); }
 }
 
@@ -91,7 +91,7 @@ export default function Purchases() {
   const deletePurchase = useDeletePurchase({
     mutation: {
       onSuccess: () => { toast.success("Purchase deleted"); queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) }); queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() }); },
-      onError: () => toast.error("Failed to delete"),
+      onError: (error: any) => toast.error(error?.error || error?.message || "Failed to delete"),
     }
   });
 
@@ -159,7 +159,7 @@ export default function Purchases() {
       setIsDialogOpen(false);
       setHeader({ supplierId: "", invoiceNo: "", lpoNo: "", purchasedAt: format(new Date(), "yyyy-MM-dd") });
       setLines([emptyLine()]);
-    } catch { toast.error("Failed to record purchases"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Failed to record purchases"); }
     finally { setSubmitting(false); }
   };
 
@@ -179,7 +179,7 @@ export default function Purchases() {
       queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey(queryParams) });
       queryClient.invalidateQueries({ queryKey: getListItemStockQueryKey() });
       setEditDialogOpen(false); setEditForm(null);
-    } catch { toast.error("Update failed"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Update failed"); }
     finally { setEditLoading(false); }
   };
 
@@ -202,7 +202,7 @@ export default function Purchases() {
       await Promise.all(selectedPurchaseIds.map(purchaseId => deletePurchase.mutateAsync({ purchaseId })));
       setSelectedPurchaseIds([]);
       toast.success("Selected purchases deleted");
-    } catch { toast.error("Some selected purchases could not be deleted"); }
+    } catch (error: any) { toast.error(error?.error || error?.message || "Some selected purchases could not be deleted"); }
   };
 
   const totalValue = displayed.reduce((s, p) => s + Number(p.quantity) * Number(p.unitPrice), 0);
