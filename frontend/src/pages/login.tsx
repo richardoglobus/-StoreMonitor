@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useTheme, LOGOS } from "@/lib/theme-context";
 import { useLocation } from "wouter";
 
-type Panel = "login" | "signup" | "forgot" | "verify_signup" | "verify_reset" | "reset_password" | "verify_login" | "contact_admin" | "pending_approval";
+type Panel = "login" | "signup" | "forgot" | "verify_signup" | "verify_reset" | "reset_password" | "verify_login" | "contact_admin" | "pending_approval" | "password_reset_admin";
 type Effect = "split" | "particles" | "glass" | "wave" | "gradient";
 
 // ── Particle canvas ───────────────────────────────────────────────────────
@@ -243,7 +243,7 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
     finally { setLoading(false); }
   };
   const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{const result=await onSignup(name,u,email,phone,p);if(result?.otpRequired===false){setPanel("pending_approval");}else{setOtpCooldown(otpExpirySeconds);setPanel("verify_signup");if(result?.devOtp){setOtp(String(result.devOtp));toast.info(`Development OTP: ${result.devOtp}`);}}}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
-  const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{await requestPasswordOtp(u);setOtpCooldown(otpExpirySeconds);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
+  const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{const result=await requestPasswordOtp(u);if(result?.otpRequired===false){setPanel("password_reset_admin");}else{setOtpCooldown(otpExpirySeconds);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
   const handleResend=async()=>{const purpose: "signup" | "reset" = panel==="verify_signup" ? "signup" : "reset";const identifier=purpose==="signup"?email:u;if(!identifier||otpCooldown>0)return;setLoading(true);try{await resendOtp(identifier,purpose);setOtp("");setOtpCooldown(otpExpirySeconds);toast.success("A new verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to resend code");}finally{setLoading(false);}};
   const handleVerify=async(e:React.FormEvent,purpose:"signup"|"reset")=>{e.preventDefault();setLoading(true);try{const result=await verifyOtp(purpose==="signup"?email:u,otp,purpose);if(purpose==="reset"){setResetSession(result.resetSession||"");setPanel("reset_password");}else{toast.success("Email verified. Await administrator approval before signing in.");setPanel("pending_approval");}}catch(err:any){toast.error(err?.error||"Invalid or expired code");}finally{setLoading(false);}};
   const handleReset=async(e:React.FormEvent)=>{e.preventDefault();if(p!==p2){toast.error("Passwords do not match");return;}setLoading(true);try{await resetPassword(resetSession,p,p2);toast.success("Password changed. You can now sign in.");setPanel("login");setP("");setP2("");}catch(err:any){toast.error(err?.error||"Unable to reset password");}finally{setLoading(false);}};
@@ -260,6 +260,13 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
     <UserPlus size={32} color={accentColor}/>
     <p style={{color:"#fff",fontSize:15,lineHeight:1.6,margin:0}}>Your account is awaiting administrator approval.</p>
     <p style={{color:textMuted,fontSize:13,lineHeight:1.6,margin:0}}>An administrator must review your account and assign access rights before you can sign in.</p>
+    <button type="button" onClick={()=>{setP("");setPanel("login");}} style={{...linkStyle,textAlign:"left"}}>← Back to sign in</button>
+  </section>;
+
+  if(panel==="password_reset_admin") return <section role="status" style={{display:"flex",flexDirection:"column",gap:16,animation:"fadeUp 0.4s ease"}}>
+    <Lock size={32} color={accentColor}/>
+    <p style={{color:"#fff",fontSize:15,lineHeight:1.6,margin:0}}>Password reset codes are currently disabled.</p>
+    <p style={{color:textMuted,fontSize:13,lineHeight:1.6,margin:0}}>Please contact an administrator to reset your password from User Management.</p>
     <button type="button" onClick={()=>{setP("");setPanel("login");}} style={{...linkStyle,textAlign:"left"}}>← Back to sign in</button>
   </section>;
 
@@ -358,6 +365,7 @@ const PANEL_META:Record<string,any>={
   verify_login:{title:"Verify Sign-In",sub:"One more step to protect your account"},
   contact_admin:{title:"Contact Your Administrator",sub:"A verified email is required to sign in"},
   pending_approval:{title:"Awaiting Approval",sub:"An administrator must approve your account"},
+  password_reset_admin:{title:"Contact Your Administrator",sub:"Password reset codes are disabled"},
 };
 const WELCOME_META:Record<string,any>={
   login:{title:"WELCOME\nBACK!",body:"Access your hospital stores system securely and efficiently."},
@@ -369,6 +377,7 @@ const WELCOME_META:Record<string,any>={
   verify_login:{title:"SECURE\nSIGN-IN",body:"Use the one-time code sent to your verified email. Never share your code with anyone."},
   contact_admin:{title:"ACCOUNT\nPROTECTION",body:"Only an administrator can configure your account's contact details. This helps prevent account takeover."},
   pending_approval:{title:"ALMOST\nTHERE!",body:"Your account was created. An administrator will review it and assign your access."},
+  password_reset_admin:{title:"PASSWORD\nRESET",body:"Contact an administrator to reset your password securely."},
 };
 
 // ── Effect themes ─────────────────────────────────────────────────────────

@@ -3294,6 +3294,7 @@ const DEFAULT_SETTINGS = {
   otpResendCooldownSeconds: 60,
   otpRememberHours: 24,
   requireOtpForLogin: false,
+  requireOtpForPasswordReset: true,
   // Branding
   hospitalName: "Mukurweini Hospital Stores",
   facilityCode: "",
@@ -3406,6 +3407,7 @@ app.get("/api/settings/public",(req,res)=>{
     otpResendCooldownSeconds:Math.max(10,Number(s.otpResendCooldownSeconds)||60),
     otpRememberHours:Math.min(168,Math.max(0,Number(s.otpRememberHours) ?? 24)),
     requireOtpForLogin:s.requireOtpForLogin === true,
+    requireOtpForPasswordReset:s.requireOtpForPasswordReset !== false,
     defaultCurrency:s.defaultCurrency||"KES",
     financialYear:s.financialYear,
     issueDays:s.issueDays,
@@ -4295,6 +4297,7 @@ app.post("/api/auth/forgot-password",async (req,res)=>{
   const email=normalizeEmail(identifier);
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === identifier.toLowerCase() || normalizeEmail(u.email) === email || normalizePhone(u.phone) === normalizePhone(identifier)).value();
   const generic={success:true,message:"If an account matches those details, we will send a verification code."};
+  if (getSettings().requireOtpForPasswordReset !== true) return res.json({ ...generic, otpRequired:false, message:"Password reset codes are disabled. Contact an administrator to reset your password." });
   if(!identifier || !user || !user.email || !user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
   const code=makeOtp();
   db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:"reset",emailOtpAttempts:0}).write();

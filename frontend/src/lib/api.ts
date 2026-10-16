@@ -141,7 +141,7 @@ export async function resendLoginOtp() {
 }
 
 export async function requestPasswordOtp(identifier: string) {
-  return apiFetch<{ success: boolean; message: string; devOtp?: string }>("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
+  return apiFetch<{ success: boolean; message: string; otpRequired?: boolean; devOtp?: string }>("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
 }
 export async function resendOtp(identifier: string, purpose: "signup" | "reset") {
   return apiFetch<{ success: boolean; message: string }>("/api/auth/resend-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, purpose }) });

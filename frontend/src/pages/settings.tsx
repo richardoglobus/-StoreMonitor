@@ -25,6 +25,7 @@ interface AppSettings {
   otpResendCooldownSeconds: number;
   otpRememberHours: number;
   requireOtpForLogin: boolean;
+  requireOtpForPasswordReset: boolean;
   // Branding
   hospitalName: string;
   producedBy: string;
@@ -81,6 +82,7 @@ const DEFAULTS: AppSettings = {
   otpResendCooldownSeconds: 60,
   otpRememberHours: 24,
   requireOtpForLogin: false,
+  requireOtpForPasswordReset: true,
   hospitalName: "Mukurweini Hospital Stores",
   producedBy: "",
   facilityCode: "",
@@ -612,6 +614,9 @@ export default function SettingsPage() {
             </div>
             <div className="space-y-2 sm:col-span-2">
               <ToggleRow label="Require OTP for sign-in" description="When off, active users can sign in with their password without a verified email. Turn this on after email or SMS delivery is configured." checked={settings.requireOtpForLogin} onChange={(value: boolean) => update("requireOtpForLogin", value)} />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <ToggleRow label="Require OTP for password reset" description="When off, forgot-password requests do not send a code. The user must contact an administrator to reset the password from User Management." checked={settings.requireOtpForPasswordReset} onChange={(value: boolean) => update("requireOtpForPasswordReset", value)} />
             </div>
           </div>
         </SectionCard>

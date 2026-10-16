@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Edit, CheckCircle, Users as UsersIcon, Shield, User as UserIcon, Loader2 } from "lucide-react";
+import { Plus, Trash2, Edit, CheckCircle, XCircle, Users as UsersIcon, Shield, User as UserIcon, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -296,6 +296,11 @@ export default function UserManagement() {
     updateUser.mutate({ userId: user.id, data: { accountStatus: "active", permissions: {} } });
   };
 
+  const handleDecline = (user: any) => {
+    if (!confirm(`Decline ${user.fullName || user.username}? This will disable the account.`)) return;
+    updateUser.mutate({ userId: user.id, data: { accountStatus: "disabled" } });
+  };
+
   const adminOnly = currentUser?.role === "admin";
   const securityHelpId = `${isEditOpen ? "edit" : "add"}-sign-in-security-help`;
   const securityHelp = !adminOnly
@@ -442,7 +447,7 @@ export default function UserManagement() {
                     <TableCell className="text-sm whitespace-nowrap"><TrustedOtpCountdown until={u.loginOtpTrustedUntil} /></TableCell>
                     <TableCell>{getRoleBadge(u.role)}<div className="mt-1 text-xs text-muted-foreground">{u.accountStatus === "pending_approval" ? <span className="text-amber-600">Awaiting approval</span> : !u.email || !u.emailVerifiedAt ? "Sign-in blocked: verify email" : u.allowPasswordOnlyLogin ? "Password only (admin approved)" : "Email OTP required"}</div></TableCell>
                     <TableCell className="text-right flex items-center justify-end gap-1">
-                      {u.accountStatus === "pending_approval" && <Button variant="outline" size="sm" className="h-8 gap-1 text-emerald-700" onClick={() => handleApprove(u)} disabled={updateUser.isPending}><CheckCircle className="h-4 w-4" />Approve</Button>}
+                      {u.accountStatus === "pending_approval" && <><Button variant="outline" size="sm" className="h-8 gap-1 text-emerald-700" onClick={() => handleApprove(u)} disabled={updateUser.isPending}><CheckCircle className="h-4 w-4" />Approve</Button><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Decline user" onClick={() => handleDecline(u)} disabled={updateUser.isPending}><XCircle className="h-4 w-4" /></Button></>}
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                         <Edit className="h-4 w-4" />
                       </Button>
