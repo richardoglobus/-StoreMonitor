@@ -202,7 +202,7 @@ function Field({ label, type="text", value, onChange, placeholder, icon:Icon, fo
 // ── Form panels ───────────────────────────────────────────────────────────
 function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, otpExpirySeconds = 600, otpResendCooldownSeconds = 60 }: any) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [p2,setP2]=useState(""); const [email,setEmail]=useState(""); const [phone,setPhone]=useState(""); const [otp,setOtp]=useState(""); const [resetSession,setResetSession]=useState("");
-  const [name,setName]=useState(""); const [loading,setLoading]=useState(false); const [focused,setFocused]=useState<string|null>(null); const [otpCooldown,setOtpCooldown]=useState(0);
+  const [name,setName]=useState(""); const [loading,setLoading]=useState(false); const [focused,setFocused]=useState<string|null>(null); const [otpCooldown,setOtpCooldown]=useState(0); const [showSignupPrompt,setShowSignupPrompt]=useState(false);
   const [loginChallenge,setLoginChallenge]=useState<LoginOtpChallenge|null>(null);
   const [loginExpiresAt,setLoginExpiresAt]=useState(0);
   const [loginResendAt,setLoginResendAt]=useState(0);
@@ -221,11 +221,11 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
   };
   const loginError=(err:any)=>{
     if(err?.code==="CONTACT_ADMIN_REQUIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("contact_admin"); }
-    else { if(err?.code==="LOGIN_CHALLENGE_EXPIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("login"); } toast.error(err?.error||err?.message||"Unable to sign in. Please try again."); }
+    else { setShowSignupPrompt(true); if(err?.code==="LOGIN_CHALLENGE_EXPIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("login"); } toast.error(err?.error||err?.message||"Unable to sign in. Please try again."); }
   };
   const handleLogin=async(e:React.FormEvent)=>{
     e.preventDefault(); if(!u||!p||loading)return; setLoading(true);
-    try { const result=await onLogin(u,p); if(result?.status==="otp_required") startLoginChallenge(result); }
+    try { setShowSignupPrompt(false); const result=await onLogin(u,p); if(result?.status==="otp_required") startLoginChallenge(result); }
     catch(err:any) { loginError(err); }
     finally { setLoading(false); }
   };
@@ -291,8 +291,12 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
       <Field label="Password" type="password" value={p} onChange={setP} placeholder="Enter password" icon={Lock} {...f("p")} {...shared}/>
       <button type="button" onClick={()=>setPanel("forgot")} style={{...linkStyle,textAlign:"right",marginTop:-6}}>Forgot password?</button>
       <button type="submit" className="login-btn" disabled={loading||!u||!p} style={btnStyle}>
-        {loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Signing in…</>:"Sign In →"}
+        {loading?<><Loader2 size={16} style={{animation:"spin 1s linear infinite"}}/>Signing in…</> :"Sign In →"}
       </button>
+      {allowSignup && showSignupPrompt && <div role="alert" style={{marginTop:4,padding:"12px 14px",borderRadius:10,border:`1px solid ${accentColor}66`,background:`${accentColor}14`,color:textMuted,fontSize:13,textAlign:"center"}}>
+        <div>We could not sign you in. If you do not have an account, create one below.</div>
+        <button type="button" onClick={()=>{setU("");setP("");setShowSignupPrompt(false);setPanel("signup");}} style={{...linkStyle,marginTop:8}}>Create an account</button>
+      </div>}
       {allowSignup && <p style={{textAlign:"center",color:textMuted,fontSize:13,marginTop:4}}>
         Don't have an account?{" "}
         <button type="button" onClick={()=>setPanel("signup")} style={linkStyle}>Sign up</button>
