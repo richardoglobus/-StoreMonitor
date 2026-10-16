@@ -1782,6 +1782,17 @@ async function deliverEmailOtp({ email, code, purpose, expiresInSeconds }) {
   if (process.env.OTP_DEV_MODE === "true" && !isProd) { console.warn(`[OTP_DEV_MODE] ${purpose} OTP for ${email}: ${code}`); return; }
   throw new Error("Resend email delivery is not configured");
 }
+async function notifyAdminsOfRegistration(user) {
+  const admins = db.get("users").value().filter(u => u.role === "admin" && u.accountStatus !== "disabled" && u.email).map(u => normalizeEmail(u.email));
+  if (!admins.length) return;
+  const subject = "New StoreMonitor account awaiting approval";
+  const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto"><h2>New account awaiting approval</h2><p>A new user has registered and requires administrator review:</p><p><strong>Name:</strong> ${String(user.fullName || "")}<br><strong>Username:</strong> ${String(user.username || "")}<br><strong>Email:</strong> ${String(user.email || "")}<br><strong>Registered:</strong> ${new Date(user.createdAt).toLocaleString("en-KE")}</p><p>Please open StoreMonitor → Users to approve or decline this account.</p></div>`;
+  if (process.env.OTP_DEV_MODE === "true") { console.warn(`[OTP_DEV_MODE] New registration awaiting approval: ${user.username}; admin recipients: ${admins.join(", ")}`); return; }
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) { console.warn("[EMAIL] Admin registration notification skipped: Resend is not configured"); return; }
+  const response = await fetch("https://api.resend.com/emails", { method: "POST", signal: AbortSignal.timeout(15000), headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev", to: admins, subject, html }) });
+  if (!response.ok) throw new Error(`Resend admin notification failed (${response.status})`);
+}
 function safeUser(user) {
   const loginOtpTrustedUntil = user.loginOtpTrustedUntil && new Date(user.loginOtpTrustedUntil).getTime() > Date.now() ? user.loginOtpTrustedUntil : null;
   return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, loginOtpTrustedUntil, accountStatus: user.accountStatus || "active", allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
@@ -4282,6 +4293,7 @@ app.post("/api/auth/register",async (req,res)=>{
   const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:otpRequired ? "pending_verification" : "pending_approval",emailOtpHash:otpRequired ? hashOtp(code) : null,emailOtpExpires:otpRequired ? new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString() : null,emailOtpPurpose:otpRequired ? "signup" : null,emailOtpAttempts:0,role:"staff",permissions:Object.fromEntries(Object.keys(defaultPerms).map(key => [key, false])),createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
+  notifyAdminsOfRegistration(user).catch(error => console.error("[EMAIL] Admin registration notification failed:", error.message));
   if (otpRequired) {
     try { await deliverEmailOtp({email:normalizedEmail,code,purpose:"signup"}); }
     catch (error) { db.get("users").remove({id:user.id}).write(); return res.status(503).json({error:"We could not send the verification email. Please try again later."}); }
