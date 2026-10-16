@@ -5,8 +5,13 @@ import type { UseQueryOptions, UseMutationOptions } from "@tanstack/react-query"
 
 export const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "";
 
+export async function apiFetchResponse(url: string, options?: RequestInit): Promise<Response> {
+  const target = url.startsWith("http://") || url.startsWith("https://") ? url : `${API_BASE}${url}`;
+  return fetch(target, { credentials: "include", cache: "no-store", ...options });
+}
+
 export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${url}`, { credentials: "include", cache: "no-store", ...options });
+  const res = await apiFetchResponse(url, options);
   if (res.status === 204) return undefined as T;
   const data = await res.json();
   if (!res.ok) throw data;

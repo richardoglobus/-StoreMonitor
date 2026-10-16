@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, firstOfMonth, todayStr } from "@/components/date-range-picker";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiFetchResponse } from "@/lib/api";
 import {
   useListPurchases, getListPurchasesQueryKey,
   useDeletePurchase,
@@ -29,7 +29,7 @@ import { useLocation } from "wouter";
 async function dl(url: string, filename: string, setLoading: (v: boolean) => void) {
   setLoading(true);
   try {
-    const res = await fetch(url, { credentials: "include" });
+    const res = await apiFetchResponse(url);
     if (!res.ok) { toast.error("Export failed"); return; }
     const blob = await res.blob();
     const a = document.createElement("a");
@@ -133,8 +133,8 @@ export default function Purchases() {
     try {
       // Post each line as a separate purchase with shared header
       const results = await Promise.all(lines.map(line =>
-        fetch(`${API_BASE}/api/purchases`, {
-          method: "POST", credentials: "include",
+        apiFetchResponse(`${API_BASE}/api/purchases`, {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             supplierId: Number(header.supplierId),
@@ -169,8 +169,8 @@ export default function Purchases() {
     if (editForm.purchasedAt > todayStr()) { toast.error("Purchase date cannot be in the future"); return; }
     setEditLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/purchases/${editForm.id}`, {
-        method: "PATCH", credentials: "include",
+      const res = await apiFetchResponse(`${API_BASE}/api/purchases/${editForm.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ supplierId: Number(editForm.supplierId), invoiceNo: editForm.invoiceNo, folioNo: editForm.folioNo, lpoNo: editForm.lpoNo, quantity: Number(editForm.quantity), unitPrice: Number(editForm.unitPrice), purchasedAt: editForm.purchasedAt, batchNo: editForm.batchNo, expiryDate: editForm.expiryDate, note: editForm.note }),
       });

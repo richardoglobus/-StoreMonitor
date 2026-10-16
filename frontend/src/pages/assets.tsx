@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/lib/auth-context";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiFetchResponse } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,9 +67,9 @@ export default function Assets() {
     setLoading(true);
     try {
       const [aRes, cRes, dRes] = await Promise.all([
-        fetch(`${API_BASE}/api/assets`,       { credentials:"include" }),
-        fetch(`${API_BASE}/api/asset-categories`, { credentials:"include" }),
-        fetch(`${API_BASE}/api/departments`,  { credentials:"include" }),
+        apiFetchResponse(`${API_BASE}/api/assets`),
+        apiFetchResponse(`${API_BASE}/api/asset-categories`),
+        apiFetchResponse(`${API_BASE}/api/departments`),
       ]);
       const [a, c, d] = await Promise.all([aRes.json(), cRes.json(), dRes.json()]);
       const assetList = Array.isArray(a) ? a : [];
@@ -121,7 +121,7 @@ export default function Assets() {
     try {
       const url    = editAsset ? `${API_BASE}/api/assets/${editAsset.id}` : `${API_BASE}/api/assets`;
       const method = editAsset ? "PATCH" : "POST";
-      const res    = await fetch(url, { method, credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify(form) });
+      const res    = await apiFetchResponse(url, { method, headers:{"Content-Type":"application/json"}, body: JSON.stringify(form) });
       const data   = await res.json();
       if (!res.ok) { toast.error(data.error || "Save failed"); return; }
       toast.success(editAsset ? "Asset updated" : "Asset added");
@@ -133,7 +133,7 @@ export default function Assets() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`${API_BASE}/api/assets/${deleteTarget.id}`, { method:"DELETE", credentials:"include" });
+      const res = await apiFetchResponse(`${API_BASE}/api/assets/${deleteTarget.id}`, { method:"DELETE" });
       if (res.status === 204 || res.ok) { toast.success("Asset deleted"); setDeleteTarget(null); fetchAll(); return; }
       const d = await res.json(); toast.error(d.error || "Delete failed");
     } catch (error: any) { toast.error(error?.error || error?.message || "Delete failed"); }
@@ -146,7 +146,7 @@ export default function Assets() {
       const payload: any = {};
       if (moveForm.location && moveForm.location !== NONE_VAL) payload.location = moveForm.location;
       if (moveForm.category && moveForm.category !== NONE_VAL) payload.category = moveForm.category;
-      const res  = await fetch(`${API_BASE}/api/assets/${moveAsset.id}/move`, { method:"PATCH", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+      const res  = await apiFetchResponse(`${API_BASE}/api/assets/${moveAsset.id}/move`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || "Move failed"); return; }
       toast.success("Asset moved"); setMoveAsset(null); setMoveForm({ location:"", category:"" }); fetchAll();
@@ -156,7 +156,7 @@ export default function Assets() {
 
   const handleAddCat = async () => {
     if (!newCatName.trim()) return;
-    const res = await fetch(`${API_BASE}/api/asset-categories`, { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ name: newCatName }) });
+    const res = await apiFetchResponse(`${API_BASE}/api/asset-categories`, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ name: newCatName }) });
     const d   = await res.json();
     if (!res.ok) { toast.error(d.error || "Failed"); return; }
     toast.success("Category added"); setNewCatName(""); fetchAll();
@@ -164,14 +164,14 @@ export default function Assets() {
 
   const handleEditCat = async () => {
     if (!editCat) return;
-    const res = await fetch(`${API_BASE}/api/asset-categories/${editCat.id}`, { method:"PATCH", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ name: editCat.name }) });
+    const res = await apiFetchResponse(`${API_BASE}/api/asset-categories/${editCat.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ name: editCat.name }) });
     if (!res.ok) { const d = await res.json(); toast.error(d.error || "Failed"); return; }
     toast.success("Category renamed"); setEditCat(null); fetchAll();
   };
 
   const handleDeleteCat = async () => {
     if (!deleteCat) return;
-    const res = await fetch(`${API_BASE}/api/asset-categories/${deleteCat.id}`, { method:"DELETE", credentials:"include" });
+    const res = await apiFetchResponse(`${API_BASE}/api/asset-categories/${deleteCat.id}`, { method:"DELETE" });
     if (res.status === 204 || res.ok) { toast.success("Category deleted"); setDeleteCat(null); fetchAll(); return; }
     const d = await res.json(); toast.error(d.error || "Failed"); setDeleteCat(null);
   };
@@ -201,7 +201,7 @@ export default function Assets() {
       for (const s of syncSuggestions) {
         const toUpdate = assets.filter(a => (a.location||"").toUpperCase().trim() === s.assetLoc.toUpperCase().trim());
         for (const a of toUpdate) {
-          await fetch(`${API_BASE}/api/assets/${a.id}`, { method:"PATCH", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ location: s.deptName }) });
+          await apiFetchResponse(`${API_BASE}/api/assets/${a.id}`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ location: s.deptName }) });
           updated++;
         }
       }
@@ -213,7 +213,7 @@ export default function Assets() {
 
   const downloadExport = async (type: "csv"|"xlsx") => {
     try {
-      const res  = await fetch(`${API_BASE}/api/assets/export/${type}`, { credentials:"include" });
+      const res  = await apiFetchResponse(`${API_BASE}/api/assets/export/${type}`);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);

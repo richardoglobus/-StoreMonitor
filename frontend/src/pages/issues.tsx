@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
 import { DateRangePicker, firstOfMonth, todayStr } from "@/components/date-range-picker";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiFetchResponse } from "@/lib/api";
 import {
   useListIssues, getListIssuesQueryKey,
   useListDepartments, getListDepartmentsQueryKey,
@@ -305,8 +305,8 @@ export default function Issues() {
     if (editIssue.issuedAt > todayStr()) { toast.error("Issue date cannot be in the future"); return; }
     setEditLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/issues/${editIssue.id}`, {
-        method: "PATCH", credentials: "include",
+      const res = await apiFetchResponse(`${API_BASE}/api/issues/${editIssue.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           quantity: Number(editIssue.quantity),
@@ -471,7 +471,7 @@ export default function Issues() {
           )}
 
           <Button variant="outline" onClick={async () => {
-            const res = await fetch(downloadUrl, { credentials: "include" });
+            const res = await apiFetchResponse(downloadUrl);
             if (!res.ok) { toast.error("Export failed. Check you are logged in."); return; }
             const blob = await res.blob();
             const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
