@@ -288,6 +288,21 @@ export default function SettingsPage() {
     if (key === "appLogo") setAppLogo(value as AppLogo);
   };
 
+  const persistSettings = async (nextSettings: AppSettings, successMessage = "Settings saved successfully") => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/settings`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nextSettings) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to save settings");
+      setSettings({ ...DEFAULTS, ...data });
+      setDirty(false);
+      toast.success(successMessage);
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save settings");
+      throw error;
+    } finally { setSaving(false); }
+  };
+
   const addChargeCode = () => {
     const code = newChargeCode.trim();
     const name = newChargeCodeName.trim();
@@ -389,7 +404,8 @@ export default function SettingsPage() {
     const name = newRoleName.trim();
     if (!name) return toast.error("Enter a role name");
     if (["admin", "manager", "accountant", "staff"].includes(name.toLowerCase()) || settings.customRoles.some(r => r.name.toLowerCase() === name.toLowerCase())) return toast.error("That role already exists or is reserved");
-    update("customRoles", [...settings.customRoles, { name, permissions: {} }]);
+    const permissions = Object.fromEntries(ROLE_PERMISSIONS.map(([key]) => [key, false]));
+    void persistSettings({ ...settings, customRoles: [...settings.customRoles, { name, permissions }] }, `Role "${name}" saved`);
     setNewRoleName("");
   };
 
@@ -410,24 +426,7 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/settings`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
-      });
-      if (!res.ok) throw new Error("Failed");
-      const saved = await res.json();
-      setSettings({ ...DEFAULTS, ...saved });
-      setDirty(false);
-      toast.success("Settings saved successfully");
-    } catch {
-      toast.error("Failed to save settings");
-    } finally {
-      setSaving(false);
-    }
+    try { await persistSettings(settings); } catch { /* message already shown */ }
   };
 
   const lastBackup = settings.lastManualBackupAt ? new Date(settings.lastManualBackupAt) : null;

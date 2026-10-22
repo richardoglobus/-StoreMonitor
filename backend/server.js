@@ -1795,7 +1795,7 @@ async function notifyAdminsOfRegistration(user) {
 }
 function safeUser(user) {
   const loginOtpTrustedUntil = user.loginOtpTrustedUntil && new Date(user.loginOtpTrustedUntil).getTime() > Date.now() ? user.loginOtpTrustedUntil : null;
-  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, loginOtpTrustedUntil, accountStatus: user.accountStatus || "active", allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, permissions: normalizePermissions(user.role, user.permissions) };
+  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, loginOtpTrustedUntil, accountStatus: user.accountStatus || "active", allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, requestedRole: user.requestedRole || user.role, permissions: normalizePermissions(user.role, user.permissions) };
 }
 function maskEmail(value) { const email = normalizeEmail(value); const [name, domain] = email.split("@"); return name && domain ? `${name.slice(0, 2)}***@${domain}` : "unknown"; }
 
@@ -1866,10 +1866,12 @@ app.post("/api/auth/users",requireAdmin,(req,res)=>{
   if (normalizedEmail && db.get("users").find(u => normalizeEmail(u.email) === normalizedEmail).value()) return res.status(409).json({error:"Email already exists"});
   if (normalizedPhone && db.get("users").find(u => normalizePhone(u.phone) === normalizedPhone).value()) return res.status(409).json({error:"Phone number already exists"});
   const id=nextId("users");
-  const resolvedRole = role || "staff";
+  const availableRoles = ["admin","manager","accountant","staff",...(Array.isArray(getSettings().customRoles) ? getSettings().customRoles.map(r => r.name) : [])];
+  const resolvedRole = availableRoles.find(value => value.toLowerCase() === String(role || "staff").trim().toLowerCase());
+  if (!resolvedRole) return res.status(400).json({error:"Invalid role"});
   const contact = adminContactUpdates({}, {email:normalizedEmail,phone:normalizedPhone,adminEmailVerified});
   if (allowPasswordOnlyLogin === true && !contact.emailVerifiedAt) return res.status(400).json({error:"Password-only sign-in requires an administrator-verified email"});
-  const user={id,username:username.trim(),passwordHash:bcrypt.hashSync(password,10),fullName:fullName||null,...contact,emailVerifiedAt:contact.emailVerifiedAt||null,phoneVerifiedAt:null,allowPasswordOnlyLogin:allowPasswordOnlyLogin===true,accountStatus:"active",role:resolvedRole,permissions:normalizePermissions(resolvedRole, permissions),createdAt:new Date().toISOString()};
+  const user={id,username:username.trim(),passwordHash:bcrypt.hashSync(password,10),fullName:fullName||null,...contact,emailVerifiedAt:contact.emailVerifiedAt||null,phoneVerifiedAt:null,allowPasswordOnlyLogin:allowPasswordOnlyLogin===true,accountStatus:"active",role:resolvedRole,requestedRole:resolvedRole,permissions:normalizePermissions(resolvedRole, permissions),createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req, "CREATE_USER", "USER", id, { username, role: user.role, allowPasswordOnlyLogin:user.allowPasswordOnlyLogin, adminEmailVerified:!!user.emailVerifiedAt });
   res.status(201).json(safeUser(user));
@@ -1896,7 +1898,13 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   if (allowPasswordOnlyLogin !== undefined) { updates.allowPasswordOnlyLogin=allowPasswordOnlyLogin; updates.loginOtp=null; }
   if (!resulting.email || !resulting.emailVerifiedAt) updates.allowPasswordOnlyLogin=false;
   if(accountStatus!==undefined && ["active","disabled","pending_verification","pending_approval"].includes(accountStatus)) updates.accountStatus=accountStatus;
-  if(role!==undefined) updates.role=role;
+  if(role!==undefined) {
+    const availableRoles = ["admin","manager","accountant","staff",...(Array.isArray(getSettings().customRoles) ? getSettings().customRoles.map(r => r.name) : [])];
+    const canonicalRole = availableRoles.find(value => value.toLowerCase() === String(role).trim().toLowerCase());
+    if (!canonicalRole) return res.status(400).json({error:"Invalid role"});
+    updates.role=canonicalRole;
+    updates.requestedRole=canonicalRole;
+  }
   if(password) { updates.passwordHash=bcrypt.hashSync(password,10); updates.loginOtpTrustHash=null; updates.loginOtpTrustedUntil=null; updates.loginOtpTrustFingerprint=null; }
   const resolvedRole = updates.role || current.role;
   if (permissions !== undefined || role !== undefined) updates.permissions = normalizePermissions(resolvedRole, permissions !== undefined ? permissions : current.permissions);
@@ -3429,6 +3437,7 @@ app.get("/api/settings/public",(req,res)=>{
     shuffleIntervalSeconds:s.shuffleIntervalSeconds||30,
     allowSelfRegistration:s.allowSelfRegistration||false,
     selfRegistrationNote:s.selfRegistrationNote||'',
+    signupRoles:["manager","accountant","staff",...(Array.isArray(s.customRoles) ? s.customRoles.map(r => r.name) : [])],
     producedBy:s.producedBy||'',
     maintenanceMode:!!s.maintenanceMode && !!s.maintenanceEndsAt && new Date(s.maintenanceEndsAt).getTime() > Date.now(),
     maintenanceEndsAt:s.maintenanceEndsAt||null,
@@ -4290,13 +4299,16 @@ app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
 app.post("/api/auth/register",async (req,res)=>{
   const s=getSettings();
   if(!s.allowSelfRegistration) return res.status(403).json({error:"Self-registration is disabled"});
-  const {username,password,fullName,email,phone}=req.body;
+  const {username,password,fullName,email,phone,requestedRole}=req.body;
   const normalizedEmail = normalizeEmail(email);
   const normalizedPhone = normalizePhone(phone);
   if(!username||!password||!fullName||!normalizedEmail) return res.status(400).json({error:"Full name, username, email, and password are required"});
   if (!validEmail(normalizedEmail)) return res.status(400).json({error:"Enter a valid email address"});
   if (!validPhone(normalizedPhone)) return res.status(400).json({error:"Enter a valid phone number"});
   if(password.length<12) return res.status(400).json({error:"Password must be at least 12 characters"});
+  const availableRoles = ["manager","accountant","staff",...(Array.isArray(s.customRoles) ? s.customRoles.map(r => r.name) : [])];
+  const role = String(requestedRole || "staff").trim();
+  if (!availableRoles.some(value => value.toLowerCase() === role.toLowerCase())) return res.status(400).json({error:"Please select a valid non-administrator role"});
   if(db.get("users").find(u => String(u.username).toLowerCase() === String(username).trim().toLowerCase()).value()) return res.status(400).json({error:"Username already taken"});
   if(db.get("users").find(u => normalizeEmail(u.email) === normalizedEmail).value()) return res.status(400).json({error:"Email already registered"});
   if(normalizedPhone && db.get("users").find(u => normalizePhone(u.phone) === normalizedPhone).value()) return res.status(400).json({error:"Phone number already registered"});
@@ -4304,7 +4316,8 @@ app.post("/api/auth/register",async (req,res)=>{
   const defaultPerms={viewDashboard:true,viewCatalog:false,viewDepartments:false,viewPurchases:false,viewIssues:false,manageDepartments:false,manageCatalog:false,managePurchases:false,issueItems:true,viewReports:false,viewAccounts:false,manageAccounts:false,exportData:false,manageUsers:false,deleteTransactions:false,manageInventory:false};
   const otpRequired = s.requireOtpForLogin === true;
   const code=makeOtp();
-  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:otpRequired ? "pending_verification" : "pending_approval",emailOtpHash:otpRequired ? hashOtp(code) : null,emailOtpExpires:otpRequired ? new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString() : null,emailOtpPurpose:otpRequired ? "signup" : null,emailOtpAttempts:0,role:"staff",permissions:Object.fromEntries(Object.keys(defaultPerms).map(key => [key, false])),createdAt:new Date().toISOString()};
+  const canonicalRole = availableRoles.find(value => value.toLowerCase() === role.toLowerCase()) || "staff";
+  const user={id:nextId("users"),username:username.trim(),passwordHash:hash,fullName:fullName.trim(),email:normalizedEmail,phone:normalizedPhone||null,emailVerifiedAt:null,phoneVerifiedAt:null,accountStatus:otpRequired ? "pending_verification" : "pending_approval",emailOtpHash:otpRequired ? hashOtp(code) : null,emailOtpExpires:otpRequired ? new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString() : null,emailOtpPurpose:otpRequired ? "signup" : null,emailOtpAttempts:0,role:canonicalRole,requestedRole:canonicalRole,permissions:Object.fromEntries(Object.keys(defaultPerms).map(key => [key, false])),createdAt:new Date().toISOString()};
   db.get("users").push(user).write();
   logActivity(req,"SELF_REGISTER","USER",user.id,{username:user.username});
   notifyAdminsOfRegistration(user).catch(error => console.error("[EMAIL] Admin registration notification failed:", error.message));

@@ -200,8 +200,9 @@ function Field({ label, type="text", value, onChange, placeholder, icon:Icon, fo
 }
 
 // ── Form panels ───────────────────────────────────────────────────────────
-function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, otpExpirySeconds = 600, otpResendCooldownSeconds = 60 }: any) {
+function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accentColor, inputBg, inputBorder, textMuted, allowSignup, signupRoles = ["manager", "accountant", "staff"], otpExpirySeconds = 600, otpResendCooldownSeconds = 60 }: any) {
   const [u,setU]=useState(""); const [p,setP]=useState(""); const [p2,setP2]=useState(""); const [email,setEmail]=useState(""); const [phone,setPhone]=useState(""); const [otp,setOtp]=useState(""); const [resetSession,setResetSession]=useState("");
+  const [requestedRole,setRequestedRole]=useState("staff");
   const [name,setName]=useState(""); const [loading,setLoading]=useState(false); const [focused,setFocused]=useState<string|null>(null); const [otpCooldown,setOtpCooldown]=useState(0); const [showSignupPrompt,setShowSignupPrompt]=useState(false);
   const [loginChallenge,setLoginChallenge]=useState<LoginOtpChallenge|null>(null);
   const [loginExpiresAt,setLoginExpiresAt]=useState(0);
@@ -242,7 +243,7 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
     catch(err:any) { if(err?.retryAfterSeconds) setLoginResendAt(Date.now()+err.retryAfterSeconds*1000); loginError(err); }
     finally { setLoading(false); }
   };
-  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{const result=await onSignup(name,u,email,phone,p);if(result?.otpRequired===false){setPanel("pending_approval");}else{setOtpCooldown(otpExpirySeconds);setPanel("verify_signup");if(result?.devOtp){setOtp(String(result.devOtp));toast.info(`Development OTP: ${result.devOtp}`);}}}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
+  const handleSignup=async(e:React.FormEvent)=>{e.preventDefault();if(!name||!u||!email||!p)return;if(p!==p2){toast.error("Passwords do not match");return;}if(p.length<12){toast.error("Password must be at least 12 characters");return;}setLoading(true);try{const result=await onSignup(name,u,email,phone,p,requestedRole);if(result?.otpRequired===false){setPanel("pending_approval");}else{setOtpCooldown(otpExpirySeconds);setPanel("verify_signup");if(result?.devOtp){setOtp(String(result.devOtp));toast.info(`Development OTP: ${result.devOtp}`);}}}catch(err:any){toast.error(err?.message||"Registration failed");}finally{setLoading(false);}};
   const handleForgot=async(e:React.FormEvent)=>{e.preventDefault();if(!u)return;setLoading(true);try{const result=await requestPasswordOtp(u);if(result?.otpRequired===false){setPanel("password_reset_admin");}else{setOtpCooldown(otpExpirySeconds);setPanel("verify_reset");toast.success("If an account matches, a verification code has been sent.");}}catch(err:any){toast.error(err?.error||"Unable to request code");}finally{setLoading(false);}};
   const handleResend=async()=>{const purpose: "signup" | "reset" = panel==="verify_signup" ? "signup" : "reset";const identifier=purpose==="signup"?email:u;if(!identifier||otpCooldown>0)return;setLoading(true);try{await resendOtp(identifier,purpose);setOtp("");setOtpCooldown(otpExpirySeconds);toast.success("A new verification code has been sent.");}catch(err:any){toast.error(err?.error||"Unable to resend code");}finally{setLoading(false);}};
   const handleVerify=async(e:React.FormEvent,purpose:"signup"|"reset")=>{e.preventDefault();setLoading(true);try{const result=await verifyOtp(purpose==="signup"?email:u,otp,purpose);if(purpose==="reset"){setResetSession(result.resetSession||"");setPanel("reset_password");}else{toast.success("Email verified. Await administrator approval before signing in.");setPanel("pending_approval");}}catch(err:any){toast.error(err?.error||"Invalid or expired code");}finally{setLoading(false);}};
@@ -326,6 +327,13 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
       <Field label="Username" value={u} onChange={setU} placeholder="Choose a username" icon={User} {...f("u")} {...shared}/>
       <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="name@example.com" icon={User} {...f("email")} {...shared}/>
       <Field label="Phone (optional)" required={false} value={phone} onChange={setPhone} placeholder="+254..." icon={User} {...f("phone")} {...shared}/>
+      <div>
+        <label style={{fontSize:11,fontWeight:700,color:textMuted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:1.2}}>Requested Role</label>
+        <select value={requestedRole} onChange={e=>setRequestedRole(e.target.value)} style={{width:"100%",padding:"11px 14px",background:inputBg,border:`1.5px solid ${inputBorder}`,borderRadius:10,color:"#fff",fontSize:14}}>
+          {signupRoles.filter((role:string)=>role.toLowerCase() !== "admin").map((role:string)=><option key={role} value={role} style={{color:"#111"}}>{role.charAt(0).toUpperCase()+role.slice(1)}</option>)}
+        </select>
+        <p style={{color:textMuted,fontSize:11,margin:"5px 0 0"}}>This is a request. An administrator will confirm or change it before approval.</p>
+      </div>
       <Field label="Password" type="password" value={p} onChange={setP} placeholder="At least 12 characters" icon={Lock} {...f("p")} {...shared}/>
       <Field label="Confirm Password" type="password" value={p2} onChange={setP2} placeholder="Repeat password" icon={Lock} {...f("p2")} {...shared}/>
       <button type="submit" className="login-btn" disabled={loading||!name||!u||!p||!p2} style={btnStyle}>
@@ -407,6 +415,7 @@ export default function LoginPage(){
   const [shake,setShake]=useState(false);
   const [hospitalName,setHospitalName]=useState("Mukurweini Hospital Stores");
   const [allowSignup,setAllowSignup]=useState(false);
+  const [signupRoles,setSignupRoles]=useState<string[]>(["manager","accountant","staff"]);
   const [otpExpirySeconds,setOtpExpirySeconds]=useState(600);
   const [otpResendCooldownSeconds,setOtpResendCooldownSeconds]=useState(60);
   const [effectIdx,setEffectIdx]=useState(0);
@@ -424,6 +433,7 @@ export default function LoginPage(){
       if(s.producedBy) setProducedBy(s.producedBy);
       setMaintenance({active:!!s.maintenanceMode,endsAt:s.maintenanceEndsAt||null,message:s.maintenanceMessage||"System maintenance is in progress. Please check back soon."});
       if(s.allowSelfRegistration) setAllowSignup(s.allowSelfRegistration);
+      if(Array.isArray(s.signupRoles) && s.signupRoles.length) setSignupRoles(s.signupRoles.filter((role:string)=>role.toLowerCase() !== "admin"));
       if(s.otpExpiryMinutes) setOtpExpirySeconds(Math.max(60, Number(s.otpExpiryMinutes) * 60));
       if(s.otpResendCooldownSeconds) setOtpResendCooldownSeconds(Math.max(10, Number(s.otpResendCooldownSeconds)));
 
@@ -467,8 +477,8 @@ export default function LoginPage(){
     await completeLoginOtp(otp); setLocation("/"); toast.success("Welcome back!");
   };
 
-  const onSignup=async(fullName:string,username:string,email:string,phone:string,password:string)=>{
-    const res=await fetch(`${API_BASE}/api/auth/register`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,username,email,phone,password})});
+  const onSignup=async(fullName:string,username:string,email:string,phone:string,password:string,requestedRole:string)=>{
+    const res=await fetch(`${API_BASE}/api/auth/register`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({fullName,username,email,phone,password,requestedRole})});
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||"Registration failed");
     toast.success(data.message || "Account created. Check your email for the verification code.");
@@ -517,7 +527,7 @@ export default function LoginPage(){
               <h2 style={{color:"#fff",fontSize:24,fontWeight:800,margin:0}}>{meta.title}</h2>
               <p style={{color:t.textMuted,fontSize:13,marginTop:4}}>{meta.sub}</p>
             </div>
-            <FormContent panel={panel} setPanel={setPanel} onLogin={onLogin} onVerifyLogin={onVerifyLogin} onSignup={onSignup}
+            <FormContent panel={panel} setPanel={setPanel} onLogin={onLogin} onVerifyLogin={onVerifyLogin} onSignup={onSignup} signupRoles={signupRoles}
               accentColor={t.accentColor} inputBg={t.inputBg} inputBorder={t.inputBorder}
               textMuted={t.textMuted} allowSignup={allowSignup} otpExpirySeconds={otpExpirySeconds} otpResendCooldownSeconds={otpResendCooldownSeconds}/>
           </div>

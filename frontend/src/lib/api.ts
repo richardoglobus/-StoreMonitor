@@ -47,7 +47,7 @@ export type Permissions = {
   manageAssets: boolean;
   manageDigitalForms: boolean;
 };
-export type AuthUser = { id: number; username: string; fullName: string | null; email?: string | null; phone?: string | null; emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null; loginOtpTrustedUntil?: string | null; accountStatus?: string; allowPasswordOnlyLogin?: boolean; role: "admin" | "manager" | "accountant" | "staff"; permissions: Permissions };
+export type AuthUser = { id: number; username: string; fullName: string | null; email?: string | null; phone?: string | null; emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null; loginOtpTrustedUntil?: string | null; accountStatus?: string; allowPasswordOnlyLogin?: boolean; role: string; permissions: Permissions };
 export type LoginOtpChallenge = { status: "otp_required"; maskedEmail: string; expiresInSeconds: number; resendAfterSeconds: number };
 export type LoginResult = AuthUser | LoginOtpChallenge;
 export type Department = { id: number; name: string; slug: string };

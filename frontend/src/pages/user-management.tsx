@@ -6,6 +6,7 @@ import {
   useCreateUser,
   useUpdateUser,
   useDeleteUser,
+  apiFetch,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -182,7 +183,7 @@ export default function UserManagement() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [customRoles, setCustomRoles] = useState<any[]>([]);
-  useEffect(() => { fetch("/api/settings", { credentials: "include" }).then(r => r.json()).then(s => setCustomRoles(Array.isArray(s.customRoles) ? s.customRoles : [])).catch(() => {}); }, []);
+  useEffect(() => { apiFetch<any>("/api/settings").then(s => setCustomRoles(Array.isArray(s.customRoles) ? s.customRoles : [])).catch(() => {}); }, []);
   const [formData, setFormData] = useState({
     username: "",
     password: "",
@@ -227,7 +228,7 @@ export default function UserManagement() {
         setIsEditOpen(false);
         setEditingUser(null);
       },
-      onError: () => toast.error("Failed to update user")
+      onError: (error: any) => toast.error(error?.error || error?.message || "Failed to update user")
     }
   });
 
@@ -293,7 +294,7 @@ export default function UserManagement() {
 
   const handleApprove = (user: any) => {
     if (!confirm(`Approve ${user.fullName || user.username}? You can assign additional permissions by editing the user afterward.`)) return;
-    updateUser.mutate({ userId: user.id, data: { accountStatus: "active", permissions: {} } });
+    updateUser.mutate({ userId: user.id, data: { accountStatus: "active", role: user.role, permissions: user.permissions } });
   };
 
   const handleDecline = (user: any) => {
