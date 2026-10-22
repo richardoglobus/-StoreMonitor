@@ -583,12 +583,13 @@ export default function Issues() {
                   <TableHead>Item</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-center">Folio/S11</TableHead>
-                  <TableHead className="w-16"></TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? Array(5).fill(0).map((_,i) => (
                   <TableRow key={i}>
+                    {canDeleteIssues && <TableCell><Skeleton className="h-4 w-4" /></TableCell>}
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-16 mx-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-32" /></TableCell>
@@ -629,7 +630,8 @@ export default function Issues() {
                           {!issue.folioNo && !issue.s11No && "-"}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
                         {user?.permissions?.editIssues && (
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
                           onClick={() => openEditIssue(issue)}>
@@ -643,12 +645,13 @@ export default function Issues() {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
                 }) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={canDeleteIssues ? 8 : 7} className="h-32 text-center text-muted-foreground">
                       {search ? `No issues match "${search}"` : "No issues found for the selected criteria"}
                     </TableCell>
                   </TableRow>

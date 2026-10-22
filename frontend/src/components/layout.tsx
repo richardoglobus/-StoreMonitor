@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { href: "/",                label: "Home",           icon: LayoutDashboard, permission: "viewDashboard" },
   { href: "/dashboard",       label: "Dashboard",      icon: BarChart3,       permission: "viewDashboard" },
   { href: "/departments",     label: "Departments",    icon: Building2,       permission: "viewDepartments" },
-  { href: "/assets",          label: "Asset Register", icon: Package2,        permission: "viewDashboard" },
+  { href: "/assets",          label: "Asset Register", icon: Package2,        permission: "viewAssets" },
   { href: "/digital-forms",   label: "Digital Forms",  icon: ClipboardList,   permission: "manageDigitalForms" },
   {
     label: "Catalog", icon: PackageSearch, permission: "viewCatalog",

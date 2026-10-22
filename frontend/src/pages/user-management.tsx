@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Edit, CheckCircle, XCircle, Users as UsersIcon, Shield, User as UserIcon, Loader2 } from "lucide-react";
+import { Plus, Trash2, Edit, CheckCircle, XCircle, Users as UsersIcon, Shield, User as UserIcon, Loader2, Search, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -183,6 +183,9 @@ export default function UserManagement() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [customRoles, setCustomRoles] = useState<any[]>([]);
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [userSearch, setUserSearch] = useState("");
   useEffect(() => { apiFetch<any>("/api/settings").then(s => setCustomRoles(Array.isArray(s.customRoles) ? s.customRoles : [])).catch(() => {}); }, []);
   const [formData, setFormData] = useState({
     username: "",
@@ -197,6 +200,14 @@ export default function UserManagement() {
   });
 
   const { data: users, isLoading } = useListUsers({ query: { queryKey: getListUsersQueryKey() } });
+  const roleOptions = ["admin", "manager", "accountant", "staff", ...customRoles.map(role => role.name)];
+  const filteredUsers = (users || []).filter(user => {
+    const query = userSearch.trim().toLowerCase();
+    const matchesSearch = !query || [user.fullName, user.username, user.email, user.phone].some(value => String(value || "").toLowerCase().includes(query));
+    const matchesRole = roleFilter === "all" || user.role === roleFilter;
+    const matchesStatus = statusFilter === "all" || (statusFilter === "pending" ? user.accountStatus === "pending_approval" : statusFilter === "active" ? user.accountStatus === "active" : user.accountStatus === statusFilter);
+    return matchesSearch && matchesRole && matchesStatus;
+  });
 
   const createUser = useCreateUser({
     mutation: {
@@ -288,7 +299,7 @@ export default function UserManagement() {
       case "admin": return <Badge className="bg-red-100 text-red-800 border-red-200">Admin</Badge>;
       case "manager": return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Manager</Badge>;
       case "accountant": return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Accountant</Badge>;
-      default: return <Badge variant="secondary">Staff</Badge>;
+      default: return <Badge variant="secondary">{role || "Staff"}</Badge>;
     }
   };
 
@@ -409,6 +420,22 @@ export default function UserManagement() {
         </div>
 
         <Card>
+          <div className="flex flex-wrap items-center gap-2 border-b p-3">
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Search name, username, email or phone" className="pl-9" />
+            </div>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="w-[160px]"><SelectValue placeholder="All roles" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">All roles</SelectItem>{roleOptions.map(role => <SelectItem key={role} value={role}>{role}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[170px]"><SelectValue placeholder="All statuses" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="active">Active</SelectItem><SelectItem value="pending">Awaiting approval</SelectItem><SelectItem value="pending_verification">Pending verification</SelectItem><SelectItem value="disabled">Disabled</SelectItem></SelectContent>
+            </Select>
+            {(userSearch || roleFilter !== "all" || statusFilter !== "all") && <Button variant="ghost" size="sm" onClick={() => { setUserSearch(""); setRoleFilter("all"); setStatusFilter("all"); }}><X className="mr-1 h-4 w-4" />Clear</Button>}
+            <span className="text-xs text-muted-foreground">{filteredUsers.length} of {users?.length || 0} users</span>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -434,7 +461,7 @@ export default function UserManagement() {
                   </TableRow>
                 ))
               ) : (
-                users?.map(u => (
+                filteredUsers.map(u => (
                   <TableRow key={u.id}>
                     <TableCell>
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">

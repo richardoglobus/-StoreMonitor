@@ -341,12 +341,19 @@ export default function Items() {
                     <TableCell><Skeleton className="h-4 w-16 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-16 ml-auto"/></TableCell>
                     <TableCell><Skeleton className="h-4 w-16 ml-auto"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16 ml-auto"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16 ml-auto"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-12"/></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20"/></TableCell>
                     {canManageCatalog&&<TableCell><Skeleton className="h-4 w-12 ml-auto"/></TableCell>}
                   </TableRow>
                 )) : filteredItems&&filteredItems.length>0 ? filteredItems.map(item=>{
                   const isNegative = item.stockBalance < 0;
                   return (
                   <TableRow key={item.id} className={isNegative ? "bg-red-600 dark:bg-red-800 hover:bg-red-500 dark:hover:bg-red-700" : ""}>
+                    <TableCell className={`font-mono text-xs font-semibold ${isNegative?"text-white":"text-primary"}`}>
+                      {item.itemCode || "—"}
+                    </TableCell>
                     <TableCell className={`font-medium ${isNegative?"text-white":""}`}>
                       {isNegative && <Zap className="h-3.5 w-3.5 inline mr-1 text-yellow-300 animate-pulse"/>}
                       {item.description}
@@ -365,7 +372,7 @@ export default function Items() {
                     <TableCell className={`text-right font-mono text-xs ${isNegative?"text-red-200":"text-muted-foreground"}`}>{item.lowStockThreshold!=null?item.lowStockThreshold:10}</TableCell>
                     <TableCell className={item.expired ? "text-destructive font-bold text-xs" : "text-xs text-muted-foreground"}>{item.expiryDate ? `${item.expiryDate}${item.expired ? " · EXPIRED" : ""}` : "—"}</TableCell>
                     {canManageCatalog&&(
-                      <TableCell className="text-right">
+                      <TableCell className="text-right whitespace-nowrap">
                         {canEditCatalog && <Button variant="ghost" size="icon" className={`h-8 w-8 ${isNegative?"text-white hover:bg-red-500":""}`} onClick={()=>openEditDialog(item)}><Pencil className="h-4 w-4"/></Button>}
                         <Button variant="ghost" size="icon" className={`h-8 w-8 ${isNegative?"text-red-200 hover:text-white hover:bg-red-500":"text-muted-foreground hover:text-destructive"}`} onClick={()=>handleDelete(item.id)}><Trash2 className="h-4 w-4"/></Button>
                       </TableCell>
@@ -374,7 +381,7 @@ export default function Items() {
                   );
                 }) : (
                   <TableRow>
-                    <TableCell colSpan={canManageCatalog?8:7} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={canManageCatalog?11:10} className="h-32 text-center text-muted-foreground">
                       <PackageSearch className="h-8 w-8 mx-auto mb-2 opacity-50"/>
                       {search?"No items match your search":"No items found in catalog"}
                     </TableCell>

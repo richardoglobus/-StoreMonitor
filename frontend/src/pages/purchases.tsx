@@ -378,7 +378,7 @@ export default function Purchases() {
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setHeader({supplierId:"",invoiceNo:"",purchasedAt:format(new Date(),"yyyy-MM-dd")}); setLines([emptyLine()]); }}>Cancel</Button>
+                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); setHeader({supplierId:"",invoiceNo:"",lpoNo:"",purchasedAt:format(new Date(),"yyyy-MM-dd")}); setLines([emptyLine()]); }}>Cancel</Button>
                   <Button type="submit" disabled={submitting || !header.supplierId || lines.some(l => !l.itemId || !l.quantity || !l.unitPrice)}>
                     {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Recording…</> : `Record ${lines.length} Purchase${lines.length>1?"s":""}`}
                   </Button>
@@ -408,12 +408,12 @@ export default function Purchases() {
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Batch</TableHead>
                   <TableHead>Expiry</TableHead>
-                  <TableHead className="w-20"></TableHead>
+                  <TableHead className="w-24 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? Array(5).fill(0).map((_,i) => (
-                  <TableRow key={i}>{Array(12).fill(0).map((_,j) => <TableCell key={j}><Skeleton className="h-4 w-full"/></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array(canDelete ? 13 : 12).fill(0).map((_,j) => <TableCell key={j}><Skeleton className="h-4 w-full"/></TableCell>)}</TableRow>
                 )) : displayed.length > 0 ? displayed.map(p => (
                   <TableRow key={p.id}>
                     {canDelete && <TableCell><Checkbox checked={selectedPurchaseIds.includes(p.id)} onCheckedChange={(checked) => setSelectedPurchaseIds(ids => checked ? [...new Set([...ids, p.id])] : ids.filter(id => id !== p.id))} aria-label={`Select purchase ${p.id}`} /></TableCell>}
@@ -428,15 +428,15 @@ export default function Purchases() {
                     <TableCell className="text-right font-mono text-sm font-semibold text-primary">{fmt(Number(p.quantity)*Number(p.unitPrice))}</TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground">{(p as any).batchNo||"—"}</TableCell>
                     <TableCell>{expiryBadge((p as any).expiryDate)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
+                    <TableCell className="text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1">
                         {canEdit && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5"/></Button>}
                         {canDelete && <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => { if(confirm("Delete this purchase?")) deletePurchase.mutate({purchaseId:p.id}); }}><Trash2 className="h-3.5 w-3.5"/></Button>}
                       </div>
                     </TableCell>
                   </TableRow>
                 )) : (
-                  <TableRow><TableCell colSpan={12} className="h-32 text-center text-muted-foreground"><ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-40"/>No purchases found for selected date range</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={canDelete ? 13 : 12} className="h-32 text-center text-muted-foreground"><ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-40"/>No purchases found for selected date range</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
