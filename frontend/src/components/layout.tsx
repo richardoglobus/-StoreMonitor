@@ -176,6 +176,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [maintenanceRemaining, setMaintenanceRemaining] = useState(0);
   const [appVersion, setAppVersion] = useState("dev");
   const [cinematicEnabled, setCinematicEnabled] = useState(() => localStorage.getItem("cinematic-background-enabled") !== "false");
+  const [blurIntensity, setBlurIntensity] = useState(() => Number(localStorage.getItem("cinematic-background-blur") || 16));
   const [backgroundIndex, setBackgroundIndex] = useState(0);
   const [pageActivity, setPageActivity] = useState<ActivityLog[]>([]);
 
@@ -205,7 +206,7 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => { setMobileOpen(false); }, [location]);
   useEffect(() => { fetch("/api/version", { credentials: "include", cache: "no-store" }).then(r => r.json()).then(v => { if (v.version) setAppVersion(String(v.version)); }).catch(() => {}); }, []);
   useEffect(() => { const timer = window.setInterval(() => setBackgroundIndex(index => (index + 1) % HOSPITAL_BACKGROUNDS.length), 18000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { const sync = () => setCinematicEnabled(localStorage.getItem("cinematic-background-enabled") !== "false"); window.addEventListener("cinematic-background-change", sync); return () => window.removeEventListener("cinematic-background-change", sync); }, []);
+  useEffect(() => { const sync = () => { setCinematicEnabled(localStorage.getItem("cinematic-background-enabled") !== "false"); setBlurIntensity(Number(localStorage.getItem("cinematic-background-blur") || 16)); }; window.addEventListener("cinematic-background-change", sync); return () => window.removeEventListener("cinematic-background-change", sync); }, []);
 
   useEffect(() => {
     const area = activityAreaForLocation(location);
@@ -331,7 +332,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open navigation"><Menu className="h-5 w-5" /></Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 max-w-[calc(100%-2rem)] h-dvh p-0 flex flex-col bg-card/90 backdrop-blur-xl">
+            <SheetContent side="left" style={{ backdropFilter: `blur(${blurIntensity}px)` }} className="w-72 max-w-[calc(100%-2rem)] h-dvh p-0 flex flex-col bg-card/90">
               <div className="shrink-0 p-5 pr-10 border-b flex items-center gap-2">
                 <div className="h-8 w-8 rounded bg-primary flex items-center justify-center">
                   <AppLogoIcon className="h-5 w-5 text-primary-foreground" />
@@ -363,7 +364,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Desktop sidebar ── */}
-      <aside className={`relative z-10 hidden md:flex flex-col border-r bg-card/90 backdrop-blur-xl h-dvh sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
+      <aside style={{ backdropFilter: `blur(${blurIntensity}px)` }} className={`relative z-10 hidden md:flex flex-col border-r bg-card/90 h-dvh sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
 
         {/* Logo + toggle button */}
         <div className={`flex items-center border-b h-14 shrink-0 ${collapsed ? "justify-center px-2" : "px-4 gap-2"}`}>

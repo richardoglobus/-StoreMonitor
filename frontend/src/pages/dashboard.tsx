@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -141,6 +142,8 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [cinematicEnabled, setCinematicEnabled] = useState(() => localStorage.getItem("cinematic-background-enabled") !== "false");
+  const [blurIntensity, setBlurIntensity] = useState(() => Number(localStorage.getItem("cinematic-background-blur") || 16));
+  const [videoBrightness, setVideoBrightness] = useState(() => Number(localStorage.getItem("cinematic-video-brightness") || 100));
   if (!user?.permissions?.viewDashboard) { setLocation("/"); return null; }
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());
@@ -177,6 +180,12 @@ export default function Dashboard() {
 
   const chartData = (deptUsage??[]).filter(d=>d.totalIssued>0)
     .map(d=>({...d, shortName: abbrevDept(d.departmentName)}));
+  const applyCinematicPreset = (blur: number, brightness: number) => {
+    setBlurIntensity(blur); setVideoBrightness(brightness);
+    localStorage.setItem("cinematic-background-blur", String(blur));
+    localStorage.setItem("cinematic-video-brightness", String(brightness));
+    window.dispatchEvent(new Event("cinematic-background-change"));
+  };
 
   return (
     <Layout>
@@ -196,6 +205,15 @@ export default function Dashboard() {
             <LiveClock />
           </div>
         </div>
+
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Cinematic background settings</CardTitle><CardDescription>Adjust the background blur and login video brightness for this browser.</CardDescription></CardHeader>
+          <CardContent className="grid gap-5 sm:grid-cols-2">
+            <div className="sm:col-span-2"><div className="mb-2 text-sm font-medium">Presets</div><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => applyCinematicPreset(16, 100)}>Standard</Button><Button type="button" size="sm" variant="outline" onClick={() => applyCinematicPreset(24, 80)}>Night Shift</Button><Button type="button" size="sm" variant="outline" onClick={() => applyCinematicPreset(8, 125)}>High Contrast</Button></div></div>
+            <div><div className="mb-2 flex justify-between text-sm"><Label>Background blur</Label><span className="text-muted-foreground">{blurIntensity}px</span></div><Slider min={0} max={32} step={1} value={[blurIntensity]} onValueChange={value => { const next = value[0] ?? 16; setBlurIntensity(next); localStorage.setItem("cinematic-background-blur", String(next)); window.dispatchEvent(new Event("cinematic-background-change")); }} /></div>
+            <div><div className="mb-2 flex justify-between text-sm"><Label>Login video brightness</Label><span className="text-muted-foreground">{videoBrightness}%</span></div><Slider min={50} max={150} step={5} value={[videoBrightness]} onValueChange={value => { const next = value[0] ?? 100; setVideoBrightness(next); localStorage.setItem("cinematic-video-brightness", String(next)); window.dispatchEvent(new Event("cinematic-background-change")); }} /></div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent className="pt-4 pb-4 flex flex-wrap items-end gap-4">

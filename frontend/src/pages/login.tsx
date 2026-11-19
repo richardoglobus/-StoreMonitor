@@ -502,11 +502,12 @@ export default function LoginPage(){
 
   const [mounted,setMounted]=useState(false);
   const [cinematicEnabled] = useState(() => localStorage.getItem("cinematic-background-enabled") !== "false");
+  const [videoBrightness] = useState(() => Number(localStorage.getItem("cinematic-video-brightness") || 100));
   useEffect(()=>{setTimeout(()=>setMounted(true),80);},[]);
 
   return (
     <div style={{position:"relative",minHeight:"100vh",overflow:"hidden",background:t.bg}}>
-      {cinematicEnabled && <><video aria-hidden="true" autoPlay muted loop playsInline poster="/backgrounds/hospital-stock-1.jpg" style={{position:"fixed",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:.34,filter:"saturate(.85) contrast(1.05)"}}><source src="/backgrounds/hospital-login.mp4" type="video/mp4" /></video><div aria-hidden="true" style={{position:"fixed",inset:0,background:"linear-gradient(120deg,rgba(4,15,31,.88),rgba(5,27,43,.62) 55%,rgba(1,9,20,.82))",zIndex:1}} /></>}
+      {cinematicEnabled && <><video aria-hidden="true" autoPlay muted loop playsInline poster="/backgrounds/hospital-stock-1.jpg" style={{position:"fixed",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:.34,filter:`saturate(.85) contrast(1.05) brightness(${videoBrightness}%)`}}><source src="/backgrounds/hospital-login.mp4" type="video/mp4" /></video><div aria-hidden="true" style={{position:"fixed",inset:0,background:"linear-gradient(120deg,rgba(4,15,31,.88),rgba(5,27,43,.62) 55%,rgba(1,9,20,.82))",zIndex:1}} /></>}
       <InstallBanner />
       <style>{BASE_CSS+`@keyframes wave{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}} @keyframes blob{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-20px) scale(1.08)}} @keyframes blob2{0%,100%{transform:translate(0,0)}50%{transform:translate(-25px,30px)}}`}</style>
       <EffectBg effect={effect}/>
