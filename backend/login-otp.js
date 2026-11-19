@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
@@ -42,7 +42,7 @@ function adminContactUpdates(current, input) {
 
 function registerLoginOtp(app, deps) {
   const { db, getSettings, deliverEmailOtp, safeUser, maskEmail, normalizePermissions,
-    logActivity, logSecurityEvent } = deps;
+    logActivity, logSecurityEvent, autoDisableInactiveUsers } = deps;
   const secret = deps.secret || process.env.SESSION_SECRET || "dev-secret-store-2024";
   const now = deps.now || Date.now;
   const ipAttempts = new Map();
@@ -64,7 +64,7 @@ function registerLoginOtp(app, deps) {
   };
   const otpRequired = () => getSettings().requireOtpForLogin === true;
   const eligible = user => !!(user && (otpRequired() ? user.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(user.email)) && user.emailVerifiedAt : user.accountStatus === "active"));
-  const inactive = user => user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.accountStatus === "pending_approval" || user.isActive === false;
+  const inactive = user => user.accountStatus === "disabled" || user.accountStatus === "suspended" || user.accountStatus === "pending_verification" || user.accountStatus === "pending_approval" || user.isActive === false;
   function contact(res) {
     return res.status(403).json({ code: "CONTACT_ADMIN_REQUIRED", error: CONTACT_MESSAGE });
   }
@@ -196,6 +196,7 @@ function registerLoginOtp(app, deps) {
 
   app.post("/api/auth/login", route(async (req, res) => {
     if (limited(req, res)) return;
+    autoDisableInactiveUsers?.(req);
     const input = req.body || {};
     const identifier = typeof (input.identifier ?? input.username) === "string" ? (input.identifier ?? input.username).trim() : "";
     if (!identifier || identifier.length > 254 || typeof input.password !== "string" || input.password.length > 1024) return res.status(401).json({ error: "Invalid credentials" });
@@ -214,7 +215,7 @@ function registerLoginOtp(app, deps) {
     if (!eligible(user) || user.accountStatus === "pending_verification") return contact(res);
     if (maintenance(user, res)) return;
     if (!otpRequired() || user.allowPasswordOnlyLogin === true) {
-      update(user.id, { loginOtp: null });
+      update(user.id, { loginOtp: null, lastLoginAt: new Date(now()).toISOString(), isActive: true });
       return completeLogin(req, res, user, "password_only");
     }
     const trustToken = readTrustToken(req);
@@ -253,9 +254,10 @@ function registerLoginOtp(app, deps) {
       return res.status(attempts + 1 >= MAX_ATTEMPTS ? 429 : 400).json({ error: attempts + 1 >= MAX_ATTEMPTS ? "Too many verification attempts. Please try again in 15 minutes." : "Invalid or expired verification code" });
     }
     // Consume synchronously before rotating/saving the session: concurrent replays fail.
-    update(user.id, { loginOtp: null, loginOtpVerifyAttempts: 0, loginOtpVerifyWindowAt: null });
+    update(user.id, { loginOtp: null, loginOtpVerifyAttempts: 0, loginOtpVerifyWindowAt: null, lastLoginAt: new Date(now()).toISOString(), isActive: true });
     return completeLogin(req, res, user, "email_otp");
   }));
 }
 
 module.exports = { registerLoginOtp, adminContactUpdates, CONTACT_MESSAGE };
+

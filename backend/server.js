@@ -35,7 +35,7 @@ function getAppVersion() {
   return "2.1";
 }
 
-// ── Supabase Storage sync ──────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Supabase Storage sync Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const BUCKET = "store-data";
@@ -44,7 +44,7 @@ const BACKUP_FILE = "store.json";
 let supabase = null;
 if (SUPABASE_URL && SUPABASE_KEY) {
   supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  console.log("✓ Supabase storage client ready");
+  console.log("Ã¢Å“â€œ Supabase storage client ready");
 }
 
 const dataPath = process.env.DATA_PATH || path.join(__dirname, "store.json");
@@ -62,7 +62,7 @@ async function downloadFromSupabase() {
   if (!supabase) return;
   try {
     const { data, error } = await supabase.storage.from(BUCKET).download(BACKUP_FILE);
-    if (error) { console.log("No Supabase backup yet — starting fresh"); return; }
+    if (error) { console.log("No Supabase backup yet Ã¢â‚¬â€ starting fresh"); return; }
     const text = await data.text();
     let remoteMeta = null;
     let localMeta = null;
@@ -77,23 +77,23 @@ async function downloadFromSupabase() {
     // the newer stamp; old un-stamped stores fall back to the remote backup so
     // an ephemeral Render filesystem can recover after a restart.
     if (localMeta?.updatedAt && remoteMeta?.updatedAt && localMeta.updatedAt >= remoteMeta.updatedAt) {
-      console.log("✓ Local store is newer than Supabase backup; keeping local data");
+      console.log("Ã¢Å“â€œ Local store is newer than Supabase backup; keeping local data");
       syncToSupabase();
       return;
     }
     if (localMeta?.updatedAt && !remoteMeta?.updatedAt) {
-      console.log("✓ Local store has a newer version marker; keeping local data");
+      console.log("Ã¢Å“â€œ Local store has a newer version marker; keeping local data");
       syncToSupabase();
       return;
     }
     if (hasLocalStore && !localMeta && !remoteMeta) {
-      console.log("✓ Preserving existing legacy local store; no versioned remote backup found");
+      console.log("Ã¢Å“â€œ Preserving existing legacy local store; no versioned remote backup found");
       syncToSupabase();
       return;
     }
     fs.mkdirSync(path.dirname(dataPath), { recursive: true });
     fs.writeFileSync(dataPath, text, "utf8");
-    console.log("✓ Store data restored from Supabase");
+    console.log("Ã¢Å“â€œ Store data restored from Supabase");
   } catch (e) { console.error("Supabase download error:", e.message); }
 }
 
@@ -146,13 +146,13 @@ async function flushSupabaseSync() {
     if (pendingSyncContent) flushSupabaseSync();
   }
 }
-// ──────────────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 fs.mkdirSync(path.dirname(dataPath), { recursive: true });
 const adapter = new FileSync(dataPath);
 const db = low(adapter);
 
-// ── ASSET REGISTER SEED ──────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ ASSET REGISTER SEED Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const SEED_ASSETS = [
 {id:1,category:"MEDICAL EQUIPMENT",description:"EXAMINATION LAMP",quantity:"1",serialNo:"202003044",model:"KS-Q3B",location:"MATERNITY",dateAcquired:"27TH SEPT 2021",status:"FUNCTIONAL",ownership:"FACILITY OWNED",notes:""},
 {id:2,category:"MEDICAL EQUIPMENT",description:"EXAMINATION LAMP",quantity:"1",serialNo:"202003042",model:"KS-Q3B",location:"MATERNITY",dateAcquired:"27TH SEPT 2021",status:"FUNCTIONAL",ownership:"FACILITY OWNED",notes:""},
@@ -1424,11 +1424,11 @@ function getCurrentStockForItem(itemId) {
 }
 
 function logActivity(req, action, entityType, entityId, details = null) {
-  if (!req?.session?.userId) return;
   db.get("activities").push({
     id: nextId("activities"),
-    userId: req.session.userId,
-    username: req.session.username || null,
+    userId: req?.session?.userId ?? null,
+    username: req?.session?.username || null,
+    ipAddress: req?.ip || req?.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || null,
     action,
     entityType,
     entityId: entityId ?? null,
@@ -1437,7 +1437,19 @@ function logActivity(req, action, entityType, entityId, details = null) {
   }).write();
 }
 function logSecurityEvent(req, action, details = null, userId = null) {
-  db.get("activities").push({ id: nextId("activities"), userId: userId ?? req?.session?.userId ?? null, username: req?.session?.username || null, action, entityType: "AUTH", entityId: userId, details, createdAt: new Date().toISOString() }).write();
+  db.get("activities").push({ id: nextId("activities"), userId: userId ?? req?.session?.userId ?? null, username: req?.session?.username || null, ipAddress: req?.ip || req?.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || null, action, entityType: "AUTH", entityId: userId, details, createdAt: new Date().toISOString() }).write();
+}
+
+function autoDisableInactiveUsers(req = null) {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  for (const user of db.get("users").value()) {
+    if (user.role === "admin" || user.accountStatus !== "active" || user.isActive === false) continue;
+    const lastUse = new Date(user.lastLoginAt || user.createdAt || 0).getTime();
+    if (!lastUse || lastUse > cutoff) continue;
+    const reason = "Automatically disabled after 7 days without a successful login";
+    db.get("users").find({ id: user.id }).assign({ accountStatus: "disabled", statusReason: reason, statusChangedAt: new Date().toISOString(), statusChangedBy: null, isActive: false }).write();
+    logActivity(req, "AUTO_DISABLE_INACTIVE_USER", "USER", user.id, { username: user.username, reason, lastLoginAt: user.lastLoginAt || null });
+  }
 }
 
 function seedAdmin() {
@@ -1584,6 +1596,10 @@ function runMigrations() {
     if (user.emailVerifiedAt === undefined) contactUpdates.emailVerifiedAt = null;
     if (user.phoneVerifiedAt === undefined) contactUpdates.phoneVerifiedAt = null;
     if (user.accountStatus === undefined) contactUpdates.accountStatus = "active";
+    if (user.lastLoginAt === undefined) contactUpdates.lastLoginAt = null;
+    if (user.statusReason === undefined) contactUpdates.statusReason = null;
+    if (user.statusChangedAt === undefined) contactUpdates.statusChangedAt = null;
+    if (user.statusChangedBy === undefined) contactUpdates.statusChangedBy = null;
     if (Object.keys(contactUpdates).length) db.get("users").find({ id: user.id }).assign(contactUpdates).write();
     const perms = user.permissions || {};
     const updates = {};
@@ -1725,7 +1741,7 @@ app.use(session({
   }
 }));
 
-function requireAuth(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); next(); }
+function requireAuth(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); const user=db.get("users").find({id:req.session.userId}).value(); if(!user || user.accountStatus === "disabled" || user.accountStatus === "suspended" || user.isActive===false) return res.status(403).json({code:"ACCOUNT_SUSPENDED",error:user?.statusReason || "This account has been suspended. Contact the administrator."}); next(); }
 function requireAdmin(req,res,next){ if(!req.session.userId) return res.status(401).json({error:"Unauthorized"}); const user=db.get("users").find({id:req.session.userId}).value(); if(!user || user.role!=="admin" || user.accountStatus==="disabled" || user.accountStatus==="pending_verification" || user.isActive===false) return res.status(403).json({error:"Forbidden"}); next(); }
 function requirePermission(perm){
   return (req,res,next)=>{
@@ -1786,7 +1802,7 @@ async function notifyAdminsOfRegistration(user) {
   const admins = db.get("users").value().filter(u => u.role === "admin" && u.accountStatus !== "disabled" && u.email).map(u => normalizeEmail(u.email));
   if (!admins.length) return;
   const subject = "New StoreMonitor account awaiting approval";
-  const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto"><h2>New account awaiting approval</h2><p>A new user has registered and requires administrator review:</p><p><strong>Name:</strong> ${String(user.fullName || "")}<br><strong>Username:</strong> ${String(user.username || "")}<br><strong>Email:</strong> ${String(user.email || "")}<br><strong>Registered:</strong> ${new Date(user.createdAt).toLocaleString("en-KE")}</p><p>Please open StoreMonitor → Users to approve or decline this account.</p></div>`;
+  const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto"><h2>New account awaiting approval</h2><p>A new user has registered and requires administrator review:</p><p><strong>Name:</strong> ${String(user.fullName || "")}<br><strong>Username:</strong> ${String(user.username || "")}<br><strong>Email:</strong> ${String(user.email || "")}<br><strong>Registered:</strong> ${new Date(user.createdAt).toLocaleString("en-KE")}</p><p>Please open StoreMonitor Ã¢â€ â€™ Users to approve or decline this account.</p></div>`;
   if (process.env.OTP_DEV_MODE === "true") { console.warn(`[OTP_DEV_MODE] New registration awaiting approval: ${user.username}; admin recipients: ${admins.join(", ")}`); return; }
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) { console.warn("[EMAIL] Admin registration notification skipped: Resend is not configured"); return; }
@@ -1795,20 +1811,20 @@ async function notifyAdminsOfRegistration(user) {
 }
 function safeUser(user) {
   const loginOtpTrustedUntil = user.loginOtpTrustedUntil && new Date(user.loginOtpTrustedUntil).getTime() > Date.now() ? user.loginOtpTrustedUntil : null;
-  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, loginOtpTrustedUntil, accountStatus: user.accountStatus || "active", allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, requestedRole: user.requestedRole || user.role, permissions: normalizePermissions(user.role, user.permissions) };
+  return { id: user.id, username: user.username, fullName: user.fullName, email: user.email || null, phone: user.phone || null, emailVerifiedAt: user.emailVerifiedAt || null, phoneVerifiedAt: user.phoneVerifiedAt || null, loginOtpTrustedUntil, accountStatus: user.accountStatus || "active", statusReason: user.statusReason || null, statusChangedAt: user.statusChangedAt || null, lastLoginAt: user.lastLoginAt || null, allowPasswordOnlyLogin: user.allowPasswordOnlyLogin === true, role: user.role, requestedRole: user.requestedRole || user.role, permissions: normalizePermissions(user.role, user.permissions) };
 }
 function maskEmail(value) { const email = normalizeEmail(value); const [name, domain] = email.split("@"); return name && domain ? `${name.slice(0, 2)}***@${domain}` : "unknown"; }
 
 // AUTH
 registerLoginOtp(app, {
   db, getSettings, deliverEmailOtp, safeUser, maskEmail,
-  normalizePermissions, logActivity, logSecurityEvent
+  normalizePermissions, logActivity, logSecurityEvent, autoDisableInactiveUsers
 });
 app.post("/api/auth/logout",(req,res)=>{
   logActivity(req, "LOGOUT", "AUTH", req.session.userId, null);
   req.session.destroy(()=>{ res.clearCookie("connect.sid"); res.status(204).send(); });
 });
-// Keepalive endpoint — touches Supabase Storage to prevent free-tier auto-pause
+// Keepalive endpoint Ã¢â‚¬â€ touches Supabase Storage to prevent free-tier auto-pause
 app.get("/api/keepalive", async (req, res) => {
   try {
     if (supabase) {
@@ -1842,7 +1858,7 @@ app.patch("/api/auth/change-password",requireAuth,(req,res)=>{
 });
 app.patch("/api/auth/change-username",requireAuth,(req,res)=>{
   const username = String(req.body?.username || "").trim();
-  if (!/^[A-Za-z0-9._-]{3,40}$/.test(username)) return res.status(400).json({error:"Username must be 3–40 characters and use only letters, numbers, dot, underscore, or hyphen"});
+  if (!/^[A-Za-z0-9._-]{3,40}$/.test(username)) return res.status(400).json({error:"Username must be 3Ã¢â‚¬â€œ40 characters and use only letters, numbers, dot, underscore, or hyphen"});
   const duplicate = db.get("users").find(u => String(u.username).toLowerCase() === username.toLowerCase() && u.id !== req.session.userId).value();
   if (duplicate) return res.status(409).json({error:"Username already exists"});
   const user = db.get("users").find({id:req.session.userId});
@@ -1852,7 +1868,7 @@ app.patch("/api/auth/change-username",requireAuth,(req,res)=>{
   logActivity(req, "CHANGE_USERNAME", "USER", req.session.userId, { username });
   res.json({success:true, username});
 });
-app.get("/api/auth/users",requirePermission("manageUsers"),(_,res)=>{ res.json(db.get("users").orderBy("username","asc").value().map(safeUser)); });
+app.get("/api/auth/users",requirePermission("manageUsers"),(req,res)=>{ autoDisableInactiveUsers(req); res.json(db.get("users").orderBy("username","asc").value().map(safeUser)); });
 app.post("/api/auth/users",requireAdmin,(req,res)=>{
   const {username,password,fullName,role,permissions,email,phone,adminEmailVerified,allowPasswordOnlyLogin}=req.body;
   if (allowPasswordOnlyLogin !== undefined && typeof allowPasswordOnlyLogin !== "boolean") return res.status(400).json({error:"Invalid password-only setting"});
@@ -1878,12 +1894,13 @@ app.post("/api/auth/users",requireAdmin,(req,res)=>{
 });
 app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   const userId=Number(req.params.userId);
-  const {fullName,role,password,permissions,email,phone,accountStatus,adminEmailVerified,allowPasswordOnlyLogin}=req.body;
+  const {fullName,role,password,permissions,email,phone,accountStatus,statusReason,adminEmailVerified,allowPasswordOnlyLogin}=req.body;
   if (allowPasswordOnlyLogin !== undefined && typeof allowPasswordOnlyLogin !== "boolean") return res.status(400).json({error:"Invalid password-only setting"});
   if (adminEmailVerified !== undefined && typeof adminEmailVerified !== "boolean") return res.status(400).json({error:"Invalid email verification setting"});
   const user=db.get("users").find({id:userId});
   if(!user.value()) return res.status(404).json({error:"Not found"});
   const current = user.value();
+  if (current.role === "admin" && ["disabled", "suspended"].includes(accountStatus)) return res.status(400).json({error:"Administrator accounts cannot be suspended or disabled"});
   const oldPasswordOnly = current.allowPasswordOnlyLogin === true;
   const oldEmail = current.email;
   const oldVerifiedAt = current.emailVerifiedAt;
@@ -1897,7 +1914,7 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   if (allowPasswordOnlyLogin === true && (!resulting.email || !resulting.emailVerifiedAt)) return res.status(400).json({error:"Password-only sign-in requires an administrator-verified email"});
   if (allowPasswordOnlyLogin !== undefined) { updates.allowPasswordOnlyLogin=allowPasswordOnlyLogin; updates.loginOtp=null; }
   if (!resulting.email || !resulting.emailVerifiedAt) updates.allowPasswordOnlyLogin=false;
-  if(accountStatus!==undefined && ["active","disabled","pending_verification","pending_approval"].includes(accountStatus)) updates.accountStatus=accountStatus;
+  if(accountStatus!==undefined && ["active","disabled","suspended","pending_verification","pending_approval"].includes(accountStatus)) { if (accountStatus !== current.accountStatus) { updates.accountStatus=accountStatus; updates.statusReason=String(statusReason || (accountStatus === "active" ? "Enabled by administrator" : "Suspended by administrator")).slice(0,500); updates.statusChangedAt=new Date().toISOString(); updates.statusChangedBy=req.session.userId; updates.isActive=accountStatus === "active"; } } if (statusReason !== undefined && accountStatus === undefined) updates.statusReason=String(statusReason).slice(0,500);
   if(role!==undefined) {
     const availableRoles = ["admin","manager","accountant","staff",...(Array.isArray(getSettings().customRoles) ? getSettings().customRoles.map(r => r.name) : [])];
     const canonicalRole = availableRoles.find(value => value.toLowerCase() === String(role).trim().toLowerCase());
@@ -1910,7 +1927,7 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   if (permissions !== undefined || role !== undefined) updates.permissions = normalizePermissions(resolvedRole, permissions !== undefined ? permissions : current.permissions);
   user.assign(updates).write();
   const u=user.value();
-  logActivity(req, "UPDATE_USER", "USER", u.id, { role: u.role });
+  logActivity(req, accountStatus === "active" ? "ENABLE_USER" : accountStatus === "suspended" ? "SUSPEND_USER" : accountStatus === "disabled" ? "DISABLE_USER" : "UPDATE_USER", "USER", u.id, { role: u.role, status: u.accountStatus, reason: u.statusReason || null });
   if (oldPasswordOnly !== (u.allowPasswordOnlyLogin === true)) logActivity(req, "LOGIN_OTP_EXEMPTION_CHANGED", "USER", u.id, {previous:oldPasswordOnly,allowPasswordOnlyLogin:u.allowPasswordOnlyLogin===true});
   if (oldEmail !== u.email || oldVerifiedAt !== u.emailVerifiedAt) logActivity(req, "USER_CONTACT_VERIFICATION_CHANGED", "USER", u.id, {emailVerified:!!u.emailVerifiedAt});
   res.json(safeUser(u));
@@ -1960,7 +1977,7 @@ app.delete("/api/departments/:id", requirePermission("manageDepartments"), (req,
   const hasIssues    = db.get("issues").filter({ departmentId: id }).value().length > 0;
   const hasReceipts  = db.get("receipts").filter({ departmentId: id }).value().length > 0;
   if (hasInventory || hasIssues || hasReceipts) {
-    return res.status(400).json({ error: "Cannot delete — department has existing inventory, issues, or receipts. Remove those records first." });
+    return res.status(400).json({ error: "Cannot delete Ã¢â‚¬â€ department has existing inventory, issues, or receipts. Remove those records first." });
   }
   db.get("departments").remove({ id }).write();
   logActivity(req, "DELETE_DEPARTMENT", "DEPARTMENT", id, { name: dept.name });
@@ -2404,9 +2421,9 @@ app.delete("/api/purchases/:id",requirePermission("deletePurchases"),(req,res)=>
   res.status(204).send();
 });
 
-// ══════════════════════════════════════════════════════════════════════════
-// ACCOUNTS SECTION — GRN, Stock Movement, Suppliers, Payments, Chart of Accounts
-// ══════════════════════════════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// ACCOUNTS SECTION Ã¢â‚¬â€ GRN, Stock Movement, Suppliers, Payments, Chart of Accounts
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 
 function accountByCode(code) { return db.get("chartOfAccounts").find({ code }); }
 function adjustAccountBalance(code, delta) {
@@ -2437,7 +2454,7 @@ function genSequentialNo(prefix, table) {
   return `${prefix}-${String(n).padStart(3, "0")}`;
 }
 
-// ── GRN (Goods Received Note) ───────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ GRN (Goods Received Note) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/accounts/grns", requirePermission("viewAccounts"), (req, res) => {
   const supplierMap = new Map(db.get("suppliers").value().map(s => [s.id, s]));
   const userMap = new Map(db.get("users").value().map(u => [u.id, u.username || u.fullName || `User ${u.id}`]));
@@ -2498,14 +2515,14 @@ function normalizeGrnItems(items) {
 function reverseApprovedGrnAccounting(row, req) {
   if (independentAccountingEnabled()) return;
   for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: `EDIT-${row.grnNo}`, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal before editing ${row.grnNo}`, voucherType: "Goods Received Note", supplierId: row.supplierId });
-  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `EDIT-REV-${row.grnNo}`, description: `Reverse goods received before editing — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `EDIT-REV-${row.grnNo}`, description: `Reverse goods received before editing Ã¢â‚¬â€ ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - Number(row.totalAmount || 0)).toFixed(2)) }).write();
 }
 function applyApprovedGrnAccounting(row) {
   if (independentAccountingEnabled()) return;
   for (const it of row.items || []) pushStockMovement({ date: row.date, itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Received from ${row.grnNo}` });
-  postJournalEntry({ date: row.date, reference: `EDIT-${row.grnNo}`, description: `Goods received after edit — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
+  postJournalEntry({ date: row.date, reference: `EDIT-${row.grnNo}`, description: `Goods received after edit Ã¢â‚¬â€ ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + Number(row.totalAmount || 0)).toFixed(2)) }).write();
 }
@@ -2641,7 +2658,7 @@ app.patch("/api/accounts/grns/:id/approve", requirePermission("manageAccounts"),
   // Accounting: Debit Inventory, Credit Accounts Payable
   postJournalEntry({
     date: row.date, reference: row.grnNo,
-    description: `Goods received — ${row.grnNo}`,
+    description: `Goods received Ã¢â‚¬â€ ${row.grnNo}`,
     debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId,
   });
   // Supplier now owes this amount (accounts payable)
@@ -2663,7 +2680,7 @@ function applyGrnVoid(req, rowRef, row, reason, action = "VOID_GRN") {
     if (!it.itemCode && !it.description) continue;
     pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN_REVERSAL", qtyIn: 0, qtyOut: Number(it.qtyReceived) || 0, note: `Reversal of ${row.grnNo}: ${reason}` });
   }
-  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `VOID-${row.grnNo}`, description: `Void goods received — ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `VOID-${row.grnNo}`, description: `Void goods received Ã¢â‚¬â€ ${row.grnNo}`, debitAccount: "2000", creditAccount: "1000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance - row.totalAmount).toFixed(2)) }).write();
   rowRef.assign({ status: "voided", voidedBy: req.session.userId, voidedAt: new Date().toISOString(), voidReason: reason, voidRequestStatus: "approved", voidReviewedBy: req.session.userId, voidReviewedAt: new Date().toISOString() }).write();
@@ -2712,7 +2729,7 @@ app.patch("/api/accounts/grns/:id/unvoid", requirePermission("manageAccounts"), 
     return res.json(ref.value());
   }
   for (const it of row.items || []) pushStockMovement({ date: new Date().toISOString().slice(0,10), itemCode: it.itemId || it.itemCode || it.description, description: it.description, unit: it.unit, reference: row.grnNo, transactionType: "GRN", qtyIn: Number(it.qtyReceived) || 0, qtyOut: 0, note: `Restored ${row.grnNo}: ${reason}` });
-  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `UNVOID-${row.grnNo}`, description: `Restore voided goods received — ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
+  postJournalEntry({ date: new Date().toISOString().slice(0,10), reference: `UNVOID-${row.grnNo}`, description: `Restore voided goods received Ã¢â‚¬â€ ${row.grnNo}`, debitAccount: "1000", creditAccount: "2000", amount: row.totalAmount, voucherType: "Goods Received Note", supplierId: row.supplierId });
   const supplierRef = db.get("suppliers").find({ id: row.supplierId });
   if (supplierRef.value()) supplierRef.assign({ balance: Number((supplierRef.value().balance + row.totalAmount).toFixed(2)) }).write();
   ref.assign({ status: "approved", approvedBy: row.approvedBy || req.session.userId, approvedAt: row.approvedAt || new Date().toISOString(), unvoidedBy: req.session.userId, unvoidedAt: new Date().toISOString(), unvoidReason: reason }).write();
@@ -2729,7 +2746,7 @@ app.delete("/api/accounts/grns/:id", requirePermission("deleteTransactions"), (r
   logActivity(req, "DELETE_GRN", "GRN", id, null);
   res.status(204).send();
 });
-// ── Stock Movement (ledger) ─────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Stock Movement (ledger) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function unifiedStockMovements(itemCodeFilter) {
   const itemMap = new Map(db.get("items").value().map(i => [String(i.id), i]));
   const base = db.get("stockMovements").value().map(r => ({ ...r }));
@@ -2772,13 +2789,13 @@ app.post("/api/accounts/stock-movements/adjustment", requirePermission("manageAc
     transactionType: "ADJUSTMENT",
     qtyIn: baseQty > 0 ? baseQty : 0,
     qtyOut: baseQty < 0 ? Math.abs(baseQty) : 0,
-    note: `${reason}${approvedBy ? ` — Approved by ${approvedBy}` : ""}${quantityUnit ? ` (entered as ${qty} ${quantityUnit})` : ""}`,
+    note: `${reason}${approvedBy ? ` Ã¢â‚¬â€ Approved by ${approvedBy}` : ""}${quantityUnit ? ` (entered as ${qty} ${quantityUnit})` : ""}`,
   });
   logActivity(req, "STOCK_ADJUSTMENT", "STOCK", row.id, { itemCode, adjustmentQty: qty, reason });
   res.status(201).json(row);
 });
 
-// ── Suppliers ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Suppliers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/accounts/suppliers", requireAnyPermission("viewAccounts", "managePurchases"), (_req, res) => {
   res.json(db.get("suppliers").orderBy("name", "asc").value());
 });
@@ -2871,7 +2888,7 @@ app.get("/api/accounts/suppliers/:id/ledger", requirePermission("viewAccounts"),
   res.json({ supplier, entries: withBalance });
 });
 
-// ── Payment Entries ──────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Payment Entries Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/accounts/payments", requirePermission("viewAccounts"), (req, res) => {
   const supplierMap = new Map(db.get("suppliers").value().map(s => [s.id, s]));
   let rows = db.get("paymentEntries").value().sort((a, b) => b.id - a.id);
@@ -2976,7 +2993,7 @@ app.delete("/api/accounts/payments/:id", requirePermission("deleteTransactions")
   res.status(204).send();
 });
 
-// ── Modes of Payment ─────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Modes of Payment Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/accounts/modes-of-payment", requireAnyPermission("viewAccounts", "manageAccounts"), (_req, res) => {
   res.json(db.get("modesOfPayment").sortBy("name").value());
 });
@@ -3010,12 +3027,12 @@ app.delete("/api/accounts/modes-of-payment/:id", requirePermission("deleteTransa
   const row = db.get("modesOfPayment").find({ id }).value();
   if (!row) return res.status(404).json({ error: "Mode of payment not found" });
   if (row.isDefault) return res.status(400).json({ error: "Default modes can be disabled but not deleted" });
-  if (db.get("paymentEntries").find({ modeOfPayment: row.name }).value()) return res.status(400).json({ error: "This mode is used by existing payments — disable it instead" });
+  if (db.get("paymentEntries").find({ modeOfPayment: row.name }).value()) return res.status(400).json({ error: "This mode is used by existing payments Ã¢â‚¬â€ disable it instead" });
   db.get("modesOfPayment").remove({ id }).write();
   res.status(204).send();
 });
 
-// ── Chart of Accounts ────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Chart of Accounts Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/accounts/chart-of-accounts", requirePermission("viewAccounts"), (_req, res) => {
   res.json(db.get("chartOfAccounts").orderBy("code", "asc").value());
 });
@@ -3251,7 +3268,7 @@ app.delete("/api/accounts/purchase-orders/:id", requirePermission("manageAccount
   if (!current) return res.status(404).json({ error: "Purchase order not found" });
   if (db.get("supplierInvoices").find({ purchaseOrderId: id }).value()) return res.status(400).json({ error: "Cannot delete a purchase order that already has a supplier invoice recorded against it" });
   const linkedGrns = db.get("grns").filter({ sourcePurchaseOrderId: id }).value();
-  if (linkedGrns.some(g => g.status === "approved")) return res.status(400).json({ error: "Cannot delete a purchase order while a linked GRN is approved — void it first" });
+  if (linkedGrns.some(g => g.status === "approved")) return res.status(400).json({ error: "Cannot delete a purchase order while a linked GRN is approved Ã¢â‚¬â€ void it first" });
   if (linkedGrns.some(g => !["voided", "pending"].includes(g.status))) return res.status(400).json({ error: "Cannot delete this purchase order until all linked GRNs are voided" });
   db.get("grns").remove(g => Number(g.sourcePurchaseOrderId) === id).write();
   db.get("purchaseOrders").remove({ id }).write();
@@ -3271,13 +3288,13 @@ app.post("/api/accounts/supplier-invoices", requirePermission("manageAccounts"),
   if (grnId && !db.get("grns").find({ id: Number(grnId) }).value()) return res.status(400).json({ error: "GRN not found" });
   const row = { id: nextId("supplierInvoices"), invoiceNo: String(invoiceNo).trim(), date, supplierId: supplier.id, purchaseOrderId: purchaseOrderId ? Number(purchaseOrderId) : null, grnId: grnId ? Number(grnId) : null, amount: value, paidAmount: 0, dueDate: dueDate || null, status: "unpaid", note: note || null, createdBy: req.session.userId, createdAt: new Date().toISOString() };
   db.get("supplierInvoices").push(row).write();
-  postJournalEntry({ date, reference: row.invoiceNo, description: `Supplier invoice — ${row.invoiceNo}`, debitAccount: debitAccount || "5000", creditAccount: "2000", amount: value, voucherType: "Purchase Invoice", supplierId: supplier.id });
+  postJournalEntry({ date, reference: row.invoiceNo, description: `Supplier invoice Ã¢â‚¬â€ ${row.invoiceNo}`, debitAccount: debitAccount || "5000", creditAccount: "2000", amount: value, voucherType: "Purchase Invoice", supplierId: supplier.id });
   db.get("suppliers").find({ id: supplier.id }).assign({ balance: Number((Number(supplier.balance || 0) + value).toFixed(2)) }).write();
   logActivity(req, "CREATE_SUPPLIER_INVOICE", "SUPPLIER_INVOICE", row.id, { invoiceNo: row.invoiceNo, amount: value });
   res.status(201).json({ ...row, supplier });
 });
 
-// ── Financial Reports ────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Financial Reports Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/accounts/reports/summary", requirePermission("viewAccounts"), (req, res) => {
   const { start, end } = req.query.from && req.query.to ? { start: req.query.from, end: req.query.to } : monthRange(currentMonth());
   const grns = db.get("grns").value();
@@ -3302,7 +3319,7 @@ app.get("/api/accounts/reports/summary", requirePermission("viewAccounts"), (req
 
 // DASHBOARD
 
-// ── Settings ─────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Settings Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const DEFAULT_SETTINGS = {
   // Session & Security
   inactivityTimeoutMinutes: 1,
@@ -3489,7 +3506,7 @@ app.get("/api/dashboard/summary",requirePermission("viewDashboard"),(req,res)=>{
 });
 
 // ACTIVITY LOG
-app.get("/api/activity",requireAdmin,(req,res)=>{
+app.get("/api/activity",requirePermission("viewActivityLogs"),(req,res)=>{
   const limit=req.query.limit?Number(req.query.limit):100;
   const rows=db.get("activities").value().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id-a.id).slice(0,limit);
   res.json(rows);
@@ -3765,7 +3782,7 @@ app.get("/api/export/monthly-report.csv",requirePermission("exportData"),(req,re
   res.send(lines.join("\n"));
 });
 
-// ── Excel Exports ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Excel Exports Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/export/monthly-report.xlsx", requirePermission("exportData"), async (req, res) => {
   try {
     const ExcelJS = require("exceljs");
@@ -4096,7 +4113,7 @@ app.get("/api/export/purchases.xlsx", requirePermission("exportData"), async (re
           }
         }
       });
-      // expired expiry date — red
+      // expired expiry date Ã¢â‚¬â€ red
       if(p.expiryDate) {
         const exp = new Date(p.expiryDate);
         const daysLeft = Math.floor((exp.getTime()-new Date().getTime())/(1000*60*60*24));
@@ -4125,7 +4142,7 @@ app.get("/api/export/purchases.xlsx", requirePermission("exportData"), async (re
   }
 });
 
-// ── Feature 8: Stock Valuation Report ────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Feature 8: Stock Valuation Report Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/reports/stock-valuation", requirePermission("viewReports"), (req, res) => {
   // asAt: calculate stock as at this date (default: today)
   const asAt = req.query.asAt || new Date().toISOString().slice(0,10);
@@ -4201,7 +4218,7 @@ app.get("/api/export/stock-valuation.xlsx", requirePermission("exportData"), asy
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Stock Valuation");
     ws.addRow([hospitalName]).getCell(1).font={bold:true,size:14,color:{argb:"FF4F46E5"}};
-    ws.addRow(["Stock Valuation Report — As at " + (data.asAt||new Date().toISOString().slice(0,10))]).getCell(1).font={italic:true};
+    ws.addRow(["Stock Valuation Report Ã¢â‚¬â€ As at " + (data.asAt||new Date().toISOString().slice(0,10))]).getCell(1).font={italic:true};
     if(officer) ws.addRow(["Responsible Officer: " + officer]).getCell(1).font={italic:true,color:{argb:"FF6B7280"}};
     ws.addRow([]);
     const hRow = ws.addRow(["#","Item Description","Unit","Stock Qty","Unit Price ("+currency+")","Total Value ("+currency+")","Last Purchase","Supplier","Status"]);
@@ -4239,7 +4256,7 @@ app.get("/api/export/stock-valuation.xlsx", requirePermission("exportData"), asy
   }
 });
 
-// ── Feature 6: Backup & Restore ──────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Feature 6: Backup & Restore Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/admin/backup", requirePermission("manageUsers"), (req, res) => {
   const backupAt = new Date().toISOString();
   db.set("settings.lastManualBackupAt", backupAt).write();
@@ -4253,9 +4270,9 @@ app.get("/api/admin/backup", requirePermission("manageUsers"), (req, res) => {
 
 app.post("/api/admin/restore/validate", requirePermission("manageUsers"), (req, res) => {
   const raw = req.body;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return res.status(400).json({error:"Invalid backup file — expected a JSON object"});
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return res.status(400).json({error:"Invalid backup file Ã¢â‚¬â€ expected a JSON object"});
   const collections = ["users","departments","items","inventory","receipts","issues","purchases","purchaseOrders","supplierInvoices","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements","modesOfPayment"];
-  if (!Array.isArray(raw.users) || !raw.users.length || !Array.isArray(raw.items) || !raw.items.length) return res.status(400).json({error:"Invalid backup file — users and catalog items are missing or empty"});
+  if (!Array.isArray(raw.users) || !raw.users.length || !Array.isArray(raw.items) || !raw.items.length) return res.status(400).json({error:"Invalid backup file Ã¢â‚¬â€ users and catalog items are missing or empty"});
   const counts = Object.fromEntries(collections.map(key => [key, Array.isArray(raw[key]) ? raw[key].length : 0]));
   res.json({valid:true, counts});
 });
@@ -4263,7 +4280,7 @@ app.post("/api/admin/restore/validate", requirePermission("manageUsers"), (req, 
 app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
   try {
     const raw = req.body;
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return res.status(400).json({error:"Invalid backup file — expected a JSON object"});
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return res.status(400).json({error:"Invalid backup file Ã¢â‚¬â€ expected a JSON object"});
     const data = { ...raw };
     // Accept older backup names and normalize them to the current schema.
     const aliases = {
@@ -4281,7 +4298,7 @@ app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
     }
     const collections = ["users","departments","items","inventory","receipts","issues","purchases","purchaseOrders","supplierInvoices","activities","assets","assetCategories","categories","grns","suppliers","paymentEntries","chartOfAccounts","journalEntries","stockMovements","modesOfPayment"];
     for (const key of collections) if (!Array.isArray(data[key])) data[key] = [];
-    if (!data.users.length || !data.items.length) return res.status(400).json({error:"Invalid backup file — users and catalog items are missing or empty"});
+    if (!data.users.length || !data.items.length) return res.status(400).json({error:"Invalid backup file Ã¢â‚¬â€ users and catalog items are missing or empty"});
     data._seq = { ...(data._seq || {}) };
     for (const key of collections) data._seq[key] = Math.max(Number(data._seq[key]) || 0, ...data[key].map(row => Number(row?.id) || 0));
     db.setState(data).write();
@@ -4295,7 +4312,7 @@ app.post("/api/admin/restore", requirePermission("manageUsers"), (req, res) => {
 });
 
 
-// ── Self Registration (if enabled in settings) ────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Self Registration (if enabled in settings) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.post("/api/auth/register",async (req,res)=>{
   const s=getSettings();
   if(!s.allowSelfRegistration) return res.status(403).json({error:"Self-registration is disabled"});
@@ -4330,14 +4347,14 @@ app.post("/api/auth/register",async (req,res)=>{
   res.status(201).json(response);
 });
 
-// ── Email OTP recovery and signup verification ─────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Email OTP recovery and signup verification Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.post("/api/auth/forgot-password",async (req,res)=>{
   const identifier=String(req.body?.identifier ?? req.body?.username ?? "").trim();
   const email=normalizeEmail(identifier);
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === identifier.toLowerCase() || normalizeEmail(u.email) === email || normalizePhone(u.phone) === normalizePhone(identifier)).value();
   const generic={success:true,message:"If an account matches those details, we will send a verification code."};
   if (getSettings().requireOtpForPasswordReset !== true) return res.json({ ...generic, otpRequired:false, message:"Password reset codes are disabled. Contact an administrator to reset your password." });
-  if(!identifier || !user || !user.email || !user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
+  if(!identifier || !user || !user.email || !user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "suspended" || user.accountStatus === "pending_verification" || user.isActive === false || !otpAllowed(`reset:${user.id}`)) return res.json(generic);
   const code=makeOtp();
   db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:"reset",emailOtpAttempts:0}).write();
   console.log(`[OTP] password-reset requested for ${maskEmail(user.email)}`);
@@ -4353,7 +4370,7 @@ app.post("/api/auth/resend-otp",async (req,res)=>{
   if (!key || !["signup","reset"].includes(purpose)) return res.status(400).json({error:"Invalid OTP request"});
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === key.toLowerCase() || normalizeEmail(u.email) === normalizeEmail(key) || normalizePhone(u.phone) === normalizePhone(key)).value();
   if (!user || !user.email || (purpose === "signup" && user.accountStatus !== "pending_verification")) return res.json({success:true,message:"If the account matches, a new code has been sent."});
-  if (purpose === "reset" && (!user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false)) return res.json({success:true,message:"If the account matches, a new code has been sent."});
+  if (purpose === "reset" && (!user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "suspended" || user.accountStatus === "pending_verification" || user.isActive === false)) return res.json({success:true,message:"If the account matches, a new code has been sent."});
   if (!otpAllowed(`resend:${purpose}:${user.id}`)) return res.status(429).json({error:"Please wait before requesting another code"});
   const code=makeOtp();
   db.get("users").find({id:user.id}).assign({emailOtpHash:hashOtp(code),emailOtpExpires:new Date(Date.now()+Math.max(1,Number(getSettings().otpExpiryMinutes)||10)*60*1000).toISOString(),emailOtpPurpose:purpose,emailOtpAttempts:0}).write();
@@ -4369,7 +4386,7 @@ app.post("/api/auth/verify-otp",(req,res)=>{
   if (!key || !["signup","reset"].includes(purpose)) return res.status(400).json({error:"Invalid OTP request"});
   const user=db.get("users").find(u => String(u.username || "").toLowerCase() === key.toLowerCase() || normalizeEmail(u.email) === normalizeEmail(key)).value();
   if(!user || !otp || !user.emailOtpHash || user.emailOtpPurpose !== purpose || !user.emailOtpExpires || new Date(user.emailOtpExpires) < new Date()) return res.status(400).json({error:"Invalid or expired verification code"});
-  if ((purpose === "signup" && user.accountStatus !== "pending_verification") || (purpose === "reset" && (!user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false))) return res.status(400).json({error:"Invalid or expired verification code"});
+  if ((purpose === "signup" && user.accountStatus !== "pending_verification") || (purpose === "reset" && (!user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "suspended" || user.accountStatus === "pending_verification" || user.isActive === false))) return res.status(400).json({error:"Invalid or expired verification code"});
   if ((user.emailOtpAttempts || 0) >= 5) return res.status(429).json({error:"Too many verification attempts. Request a new code."});
   if (hashOtp(otp) !== user.emailOtpHash) { db.get("users").find({id:user.id}).assign({emailOtpAttempts:(user.emailOtpAttempts || 0)+1}).write(); return res.status(400).json({error:"Invalid or expired verification code"}); }
   if (purpose === "signup") {
@@ -4387,14 +4404,14 @@ app.patch("/api/auth/reset-password",(req,res)=>{
   if(newPassword.length<12) return res.status(400).json({error:"New password must be at least 12 characters"});
   const user=db.get("users").find(u => u.resetSessionHash === hashOtp(resetSession)).value();
   if(!user||!user.resetSessionExpires||new Date(user.resetSessionExpires)<new Date()) return res.status(400).json({error:"Invalid or expired reset session"});
-  if (!user.email || !user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "pending_verification" || user.isActive === false) return res.status(400).json({error:"Invalid or expired reset session"});
+  if (!user.email || !user.emailVerifiedAt || user.accountStatus === "disabled" || user.accountStatus === "suspended" || user.accountStatus === "pending_verification" || user.isActive === false) return res.status(400).json({error:"Invalid or expired reset session"});
   const hash=bcrypt.hashSync(newPassword,10);
   db.get("users").find({id:user.id}).assign({passwordHash:hash,resetSessionHash:null,resetSessionExpires:null,loginOtp:null}).write();
   res.json({success:true,message:"Password reset successfully. You can now log in."});
 });
 
 
-// ── Units Management ──────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Units Management Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 app.get("/api/catalog/units", requirePermission("manageCatalog"), (req, res) => {
   const items = db.get("items").value();
   const unitMap = new Map();
@@ -4479,9 +4496,9 @@ downloadFromSupabase().finally(() => {
   seedAdmin();
   seedAssets();
   
-// ─────────────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // ASSET REGISTER ROUTES
-// ─────────────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 // List all assets (with optional filters)
 app.get('/api/assets', requireAuth, (req, res) => {
@@ -4592,7 +4609,7 @@ app.delete('/api/asset-categories/:id', requirePermission('manageAssets'), (req,
   const cat = db.get('assetCategories').find({ id }).value();
   if (!cat) return res.status(404).json({ error: 'Category not found' });
   const hasAssets = db.get('assets').filter({ category: cat.name }).value().length > 0;
-  if (hasAssets) return res.status(400).json({ error: 'Cannot delete — category has assets. Move or delete them first.' });
+  if (hasAssets) return res.status(400).json({ error: 'Cannot delete Ã¢â‚¬â€ category has assets. Move or delete them first.' });
   db.get('assetCategories').remove({ id }).write();
   res.status(204).send();
 });
@@ -4655,7 +4672,7 @@ app.get('/api/assets/export/xlsx', requireAuth, async (req, res) => {
 });
 
 
-// ── DIGITAL FORMS (CCTV LOGS) ─────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ DIGITAL FORMS (CCTV LOGS) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const CCTV_DAILY_SEED    = [{"id":1,"date":"2026-02-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":2,"date":"2026-02-03","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":3,"date":"2026-02-04","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":4,"date":"2026-02-05","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":5,"date":"2026-02-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":6,"date":"2026-02-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":7,"date":"2026-02-10","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":8,"date":"2026-02-11","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":9,"date":"2026-02-12","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":10,"date":"2026-02-13","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":11,"date":"2026-02-16","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":12,"date":"2026-02-17","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":13,"date":"2026-02-18","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":14,"date":"2026-02-19","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":15,"date":"2026-02-20","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":16,"date":"2026-02-23","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":17,"date":"2026-02-24","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":18,"date":"2026-02-25","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":19,"date":"2026-02-26","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":"Minor dust cleaned from lens"},{"id":20,"date":"2026-02-27","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":21,"date":"2026-03-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":22,"date":"2026-03-03","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":23,"date":"2026-03-04","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":24,"date":"2026-03-05","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":25,"date":"2026-03-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":26,"date":"2026-03-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":"Minor dust cleaned from lens"},{"id":27,"date":"2026-03-10","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":28,"date":"2026-03-11","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":29,"date":"2026-03-12","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":30,"date":"2026-03-13","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":31,"date":"2026-03-16","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":32,"date":"2026-03-17","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":33,"date":"2026-03-18","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":34,"date":"2026-03-19","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":35,"date":"2026-03-20","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":36,"date":"2026-03-23","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":"Minor dust cleaned from lens"},{"id":37,"date":"2026-03-24","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":38,"date":"2026-03-25","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":39,"date":"2026-03-26","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":40,"date":"2026-03-27","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":41,"date":"2026-03-30","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":42,"date":"2026-03-31","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":43,"date":"2026-04-01","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":44,"date":"2026-04-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":45,"date":"2026-04-03","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":46,"date":"2026-04-06","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":47,"date":"2026-04-07","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":48,"date":"2026-04-08","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":49,"date":"2026-04-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":50,"date":"2026-04-10","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":51,"date":"2026-04-13","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":52,"date":"2026-04-14","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":53,"date":"2026-04-15","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":54,"date":"2026-04-16","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":55,"date":"2026-04-17","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":56,"date":"2026-04-20","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":57,"date":"2026-04-21","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":58,"date":"2026-04-22","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":"Minor dust cleaned from lens"},{"id":59,"date":"2026-04-23","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":60,"date":"2026-04-24","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":61,"date":"2026-04-27","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":62,"date":"2026-04-28","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":63,"date":"2026-04-29","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":64,"date":"2026-04-30","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":65,"date":"2026-05-01","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":66,"date":"2026-05-04","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":67,"date":"2026-05-05","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":68,"date":"2026-05-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":69,"date":"2026-05-07","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":70,"date":"2026-05-08","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":71,"date":"2026-05-11","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":72,"date":"2026-05-12","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":73,"date":"2026-05-13","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":74,"date":"2026-05-14","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":75,"date":"2026-05-15","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":"Minor dust cleaned from lens"},{"id":76,"date":"2026-05-18","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":77,"date":"2026-05-19","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":78,"date":"2026-05-20","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":79,"date":"2026-05-21","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":80,"date":"2026-05-22","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":81,"date":"2026-05-25","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":82,"date":"2026-05-26","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":"Minor dust cleaned from lens"},{"id":83,"date":"2026-05-27","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":84,"date":"2026-05-28","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":85,"date":"2026-05-29","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":86,"date":"2026-06-01","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":87,"date":"2026-06-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":88,"date":"2026-06-03","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":89,"date":"2026-06-04","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":90,"date":"2026-06-05","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":91,"date":"2026-06-08","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":92,"date":"2026-06-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":93,"date":"2026-06-10","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":"Minor dust cleaned from lens"},{"id":94,"date":"2026-06-11","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":95,"date":"2026-06-12","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":96,"date":"2026-06-15","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":97,"date":"2026-06-16","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":98,"date":"2026-06-17","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":99,"date":"2026-06-18","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"JOHN MWENDA","remarks":""},{"id":100,"date":"2026-06-19","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":101,"date":"2026-06-22","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":102,"date":"2026-06-23","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":103,"date":"2026-06-24","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":104,"date":"2026-06-25","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":105,"date":"2026-06-26","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":106,"date":"2026-06-29","cameraStatus":"CAMERA 3 OFFLINE - REPORTED","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":107,"date":"2026-06-30","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":108,"date":"2026-07-01","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":109,"date":"2026-07-02","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"ALICE WERU","remarks":""},{"id":110,"date":"2026-07-03","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":111,"date":"2026-07-06","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":112,"date":"2026-07-07","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":113,"date":"2026-07-08","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":""},{"id":114,"date":"2026-07-09","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":115,"date":"2026-07-10","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"JOHN MWENDA","remarks":"Minor dust cleaned from lens"},{"id":116,"date":"2026-07-13","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - PETER KAMAU","ictOfficer":"ALICE WERU","remarks":""},{"id":117,"date":"2026-07-14","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"SECURITY OFFICER - SARAH NJOKI","ictOfficer":"ALICE WERU","remarks":""},{"id":118,"date":"2026-07-15","cameraStatus":"ALL CAMERAS OPERATIONAL","nvrStatus":"NVR RECORDING - OK","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""},{"id":119,"date":"2026-07-16","cameraStatus":"CAMERA 7 BLURRY - CLEANED","nvrStatus":"NVR STORAGE 85% - ALERT SENT","checkedBy":"FACILITY IN-CHARGE","ictOfficer":"JOHN MWENDA","remarks":""}];
 const CCTV_WEEKLY_SEED   = [{"id":1,"date":"2026-02-03","recordingVerified":true,"storageSpaceGb":135,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""},{"id":2,"date":"2026-02-10","recordingVerified":true,"storageSpaceGb":184,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""},{"id":3,"date":"2026-02-17","recordingVerified":true,"storageSpaceGb":308,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""},{"id":4,"date":"2026-02-24","recordingVerified":true,"storageSpaceGb":279,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":5,"date":"2026-03-03","recordingVerified":false,"storageSpaceGb":323,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":"Cleared old recordings to free space"},{"id":6,"date":"2026-03-10","recordingVerified":true,"storageSpaceGb":427,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""},{"id":7,"date":"2026-03-17","recordingVerified":false,"storageSpaceGb":309,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":"Cleared old recordings to free space"},{"id":8,"date":"2026-03-24","recordingVerified":false,"storageSpaceGb":370,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":9,"date":"2026-03-31","recordingVerified":false,"storageSpaceGb":198,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":10,"date":"2026-04-07","recordingVerified":false,"storageSpaceGb":358,"networkConnectivity":"STABLE","firmwareUpdated":true,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":11,"date":"2026-04-14","recordingVerified":true,"storageSpaceGb":164,"networkConnectivity":"STABLE","firmwareUpdated":true,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""},{"id":12,"date":"2026-04-21","recordingVerified":false,"storageSpaceGb":292,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":"Cleared old recordings to free space"},{"id":13,"date":"2026-04-28","recordingVerified":true,"storageSpaceGb":301,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":14,"date":"2026-05-05","recordingVerified":true,"storageSpaceGb":163,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":15,"date":"2026-05-12","recordingVerified":true,"storageSpaceGb":363,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":16,"date":"2026-05-19","recordingVerified":true,"storageSpaceGb":270,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""},{"id":17,"date":"2026-05-26","recordingVerified":true,"storageSpaceGb":362,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":18,"date":"2026-06-02","recordingVerified":true,"storageSpaceGb":300,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":19,"date":"2026-06-09","recordingVerified":true,"storageSpaceGb":218,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":"Cleared old recordings to free space"},{"id":20,"date":"2026-06-16","recordingVerified":false,"storageSpaceGb":261,"networkConnectivity":"INTERMITTENT","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":21,"date":"2026-06-23","recordingVerified":true,"storageSpaceGb":271,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":"Cleared old recordings to free space"},{"id":22,"date":"2026-06-30","recordingVerified":true,"storageSpaceGb":260,"networkConnectivity":"STABLE","firmwareUpdated":true,"conductedBy":"ICT DEPARTMENT","ictOfficer":"ALICE WERU","remarks":""},{"id":23,"date":"2026-07-07","recordingVerified":true,"storageSpaceGb":446,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""},{"id":24,"date":"2026-07-14","recordingVerified":false,"storageSpaceGb":365,"networkConnectivity":"STABLE","firmwareUpdated":false,"conductedBy":"ICT DEPARTMENT","ictOfficer":"JOHN MWENDA","remarks":""}];
 const CCTV_FOOTAGE_SEED  = [{"id":1,"date":"2026-02-14","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Investigation of missing equipment from store","footageDate":"2026-02-12","authorizedBy":"FACILITY IN-CHARGE","retrievedBy":"JOHN MWENDA","ictOfficer":"JOHN MWENDA","witness":"SECURITY OFFICER"},{"id":2,"date":"2026-02-28","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Verification of access times - HR request","footageDate":"2026-02-25","authorizedBy":"FACILITY IN-CHARGE","retrievedBy":"ALICE WERU","ictOfficer":"ALICE WERU","witness":"HR OFFICER"},{"id":3,"date":"2026-03-15","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Patient complaint - alleged staff misconduct","footageDate":"2026-03-14","authorizedBy":"MEDICAL SUPERINTENDENT","retrievedBy":"JOHN MWENDA","ictOfficer":"JOHN MWENDA","witness":"SECURITY OFFICER"},{"id":4,"date":"2026-04-03","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Theft investigation - pharmacy corridor","footageDate":"2026-04-01","authorizedBy":"FACILITY IN-CHARGE","retrievedBy":"JOHN MWENDA","ictOfficer":"JOHN MWENDA","witness":"POLICE OFFICER - OB NO 045/2026"},{"id":5,"date":"2026-04-22","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Routine quality audit","footageDate":"2026-04-20","authorizedBy":"COUNTY ICT AUDITOR","retrievedBy":"ALICE WERU","ictOfficer":"ALICE WERU","witness":"FACILITY IN-CHARGE"},{"id":6,"date":"2026-05-10","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Accident verification - parking area incident","footageDate":"2026-05-09","authorizedBy":"FACILITY IN-CHARGE","retrievedBy":"ALICE WERU","ictOfficer":"ALICE WERU","witness":"SECURITY OFFICER"},{"id":7,"date":"2026-06-05","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Staff attendance verification - disciplinary case","footageDate":"2026-06-03","authorizedBy":"MEDICAL SUPERINTENDENT","retrievedBy":"JOHN MWENDA","ictOfficer":"JOHN MWENDA","witness":"HR OFFICER"},{"id":8,"date":"2026-07-02","facility":"MUKURWEINI SUB-COUNTY HOSPITAL","reason":"Vandalism report - male ward window","footageDate":"2026-07-01","authorizedBy":"FACILITY IN-CHARGE","retrievedBy":"ALICE WERU","ictOfficer":"ALICE WERU","witness":"SECURITY OFFICER"}];
@@ -4722,7 +4739,7 @@ function filterByDateRange(rows, field, from, to) {
   return out;
 }
 
-// ── AUTO-FILL MISSED DAILY CHECKLIST DAYS ─────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ AUTO-FILL MISSED DAILY CHECKLIST DAYS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // If a day passes with no daily checklist entry, backfill it the next time
 // the server starts or the daily log is fetched, so no day is ever silently skipped.
 function backfillMissingDailyLogs() {
@@ -4734,7 +4751,7 @@ function backfillMissingDailyLogs() {
   if (rows.length) {
     lastDate = rows.map(r => r.date).sort().slice(-1)[0];
   } else {
-    // Nothing seeded yet — nothing to backfill against, skip
+    // Nothing seeded yet Ã¢â‚¬â€ nothing to backfill against, skip
     return;
   }
 
@@ -4766,7 +4783,7 @@ function backfillMissingDailyLogs() {
   }
 }
 
-// ── CCTV ROUTES ───────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ CCTV ROUTES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 ['daily','weekly','footage','incident'].forEach(kind => {
   const col = 'cctv' + kind.charAt(0).toUpperCase() + kind.slice(1);
   const dateField = CCTV_DATE_FIELD[col];
@@ -4804,7 +4821,7 @@ function backfillMissingDailyLogs() {
   });
 });
 
-// EXPORT EXCEL — all entries, all 4 sheets, no filtering applied
+// EXPORT EXCEL Ã¢â‚¬â€ all entries, all 4 sheets, no filtering applied
 app.get('/api/cctv/export/xlsx', requireAuth, async (req, res) => {
   try {
     const ExcelJS = require('exceljs');
@@ -4865,7 +4882,7 @@ app.get('/api/cctv/export/xlsx', requireAuth, async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`\n✅ Store Monitor API running → http://localhost:${PORT}`);
+    console.log(`\nÃ¢Å“â€¦ Store Monitor API running Ã¢â€ â€™ http://localhost:${PORT}`);
     console.log(`   Data: ${dataPath}`);
     console.log(`   Supabase sync: ${supabase ? "enabled" : "disabled"}\n`);
   });
@@ -4880,3 +4897,7 @@ function requireAnyPermission(...permissions){
     return res.status(403).json({error:"Forbidden"});
   };
 }
+
+
+
+

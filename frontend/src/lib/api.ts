@@ -47,7 +47,7 @@ export type Permissions = {
   manageAssets: boolean;
   manageDigitalForms: boolean;
 };
-export type AuthUser = { id: number; username: string; fullName: string | null; email?: string | null; phone?: string | null; emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null; loginOtpTrustedUntil?: string | null; accountStatus?: string; allowPasswordOnlyLogin?: boolean; role: string; permissions: Permissions };
+export type AuthUser = { id: number; username: string; fullName: string | null; email?: string | null; phone?: string | null; emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null; loginOtpTrustedUntil?: string | null; accountStatus?: string; statusReason?: string | null; statusChangedAt?: string | null; lastLoginAt?: string | null; allowPasswordOnlyLogin?: boolean; role: string; permissions: Permissions };
 export type LoginOtpChallenge = { status: "otp_required"; maskedEmail: string; expiresInSeconds: number; resendAfterSeconds: number };
 export type LoginResult = AuthUser | LoginOtpChallenge;
 export type Department = { id: number; name: string; slug: string };
@@ -90,7 +90,7 @@ export type MonthlyReport = {
     }[];
   }[];
 };
-export type ActivityLog = { id: number; userId: number; username: string | null; action: string; entityType: string; entityId: number | null; details: any; createdAt: string };
+export type ActivityLog = { id: number; userId: number | null; username: string | null; ipAddress?: string | null; action: string; entityType: string; entityId: number | null; details: any; createdAt: string };
 export type ChargeItemCode = { code: string; name: string };
 
 export const ReceiptSource = { KEMSA: "KEMSA", MEDS: "MEDS" } as const;

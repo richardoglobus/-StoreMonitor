@@ -23,6 +23,8 @@ interface User {
     manageAccounts: boolean;
     exportData: boolean;
     deleteTransactions: boolean;
+    deletePurchases: boolean;
+    deleteIssues: boolean;
     editCatalog: boolean;
     editPurchases: boolean;
     editIssues: boolean;

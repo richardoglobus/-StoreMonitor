@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Edit, CheckCircle, XCircle, Users as UsersIcon, Shield, User as UserIcon, Loader2, Search, X } from "lucide-react";
+import { Plus, Trash2, Edit, CheckCircle, XCircle, PauseCircle, PlayCircle, Users as UsersIcon, Shield, User as UserIcon, Loader2, Search, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -431,7 +431,7 @@ export default function UserManagement() {
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[170px]"><SelectValue placeholder="All statuses" /></SelectTrigger>
-              <SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="active">Active</SelectItem><SelectItem value="pending">Awaiting approval</SelectItem><SelectItem value="pending_verification">Pending verification</SelectItem><SelectItem value="disabled">Disabled</SelectItem></SelectContent>
+              <SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="active">Active</SelectItem><SelectItem value="pending">Awaiting approval</SelectItem><SelectItem value="pending_verification">Pending verification</SelectItem><SelectItem value="suspended">Suspended</SelectItem><SelectItem value="disabled">Auto-disabled</SelectItem></SelectContent>
             </Select>
             {(userSearch || roleFilter !== "all" || statusFilter !== "all") && <Button variant="ghost" size="sm" onClick={() => { setUserSearch(""); setRoleFilter("all"); setStatusFilter("all"); }}><X className="mr-1 h-4 w-4" />Clear</Button>}
             <span className="text-xs text-muted-foreground">{filteredUsers.length} of {users?.length || 0} users</span>
@@ -473,9 +473,11 @@ export default function UserManagement() {
                     <TableCell className="text-sm">{u.email || <span className="text-muted-foreground">Not set</span>}{u.emailVerifiedAt && <span className="ml-1 text-xs text-emerald-600">Verified</span>}</TableCell>
                     <TableCell className="text-sm">{u.phone || <span className="text-muted-foreground">Not set</span>}</TableCell>
                     <TableCell className="text-sm whitespace-nowrap"><TrustedOtpCountdown until={u.loginOtpTrustedUntil} /></TableCell>
-                    <TableCell>{getRoleBadge(u.role)}<div className="mt-1 text-xs text-muted-foreground">{u.accountStatus === "pending_approval" ? <span className="text-amber-600">Awaiting approval</span> : !u.email || !u.emailVerifiedAt ? "Sign-in blocked: verify email" : u.allowPasswordOnlyLogin ? "Password only (admin approved)" : "Email OTP required"}</div></TableCell>
+                    <TableCell>{getRoleBadge(u.role)}<div className="mt-1 text-xs text-muted-foreground">{u.accountStatus === "pending_approval" ? <span className="text-amber-600">Awaiting approval</span> : u.accountStatus === "suspended" ? <span className="text-red-600">Suspended: {u.statusReason || "Administrator action"}</span> : u.accountStatus === "disabled" ? <span className="text-amber-600">Auto-disabled: {u.statusReason || "Inactive account"}</span> : !u.email || !u.emailVerifiedAt ? "Sign-in blocked: verify email" : u.allowPasswordOnlyLogin ? "Password only (admin approved)" : "Email OTP required"}{u.lastLoginAt && <div>Last login: {new Date(u.lastLoginAt).toLocaleDateString()}</div>}</div></TableCell>
                     <TableCell className="text-right flex items-center justify-end gap-1">
                       {u.accountStatus === "pending_approval" && <><Button variant="outline" size="sm" className="h-8 gap-1 text-emerald-700" onClick={() => handleApprove(u)} disabled={updateUser.isPending}><CheckCircle className="h-4 w-4" />Approve</Button><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Decline user" onClick={() => handleDecline(u)} disabled={updateUser.isPending}><XCircle className="h-4 w-4" /></Button></>}
+                      {u.id !== currentUser?.id && u.role !== "admin" && u.accountStatus === "active" && <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-600" title="Suspend account" onClick={() => { const reason = prompt("Reason for suspending this account:", "Suspended by administrator"); if (reason?.trim()) updateUser.mutate({ userId: u.id, data: { accountStatus: "suspended", statusReason: reason.trim() } }); }} disabled={updateUser.isPending}><PauseCircle className="h-4 w-4" /></Button>}
+                      {u.id !== currentUser?.id && u.role !== "admin" && ["suspended", "disabled"].includes(u.accountStatus || "") && <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600" title="Enable account" onClick={() => updateUser.mutate({ userId: u.id, data: { accountStatus: "active", statusReason: "Enabled by administrator" } })} disabled={updateUser.isPending}><PlayCircle className="h-4 w-4" /></Button>}
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(u)}>
                         <Edit className="h-4 w-4" />
                       </Button>

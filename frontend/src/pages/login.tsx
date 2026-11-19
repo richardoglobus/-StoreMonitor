@@ -222,6 +222,7 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
   };
   const loginError=(err:any)=>{
     if(err?.code==="ACCOUNT_PENDING_APPROVAL") { setP(""); setLoginChallenge(null); setPanel("pending_approval"); }
+    else if(err?.code==="ACCOUNT_SUSPENDED") { setP(""); setLoginChallenge(null); setPanel("suspended"); toast.error(err?.error || "This account has been suspended. Contact the administrator."); }
     else if(err?.code==="CONTACT_ADMIN_REQUIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("contact_admin"); }
     else { setShowSignupPrompt(true); if(err?.code==="LOGIN_CHALLENGE_EXPIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("login"); } toast.error(err?.error||err?.message||"Unable to sign in. Please try again."); }
   };
@@ -261,6 +262,13 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
     <UserPlus size={32} color={accentColor}/>
     <p style={{color:"#fff",fontSize:15,lineHeight:1.6,margin:0}}>Your account is awaiting administrator approval.</p>
     <p style={{color:textMuted,fontSize:13,lineHeight:1.6,margin:0}}>An administrator must review your account and assign access rights before you can sign in.</p>
+    <button type="button" onClick={()=>{setP("");setPanel("login");}} style={{...linkStyle,textAlign:"left"}}>← Back to sign in</button>
+  </section>;
+
+  if(panel==="suspended") return <section role="alert" style={{display:"flex",flexDirection:"column",gap:16,animation:"fadeUp 0.4s ease"}}>
+    <Lock size={32} color="#f87171"/>
+    <p style={{color:"#fff",fontSize:15,lineHeight:1.6,margin:0}}>This account has been suspended after suspicious activity was detected.</p>
+    <p style={{color:textMuted,fontSize:13,lineHeight:1.6,margin:0}}>Please contact the administrator to review the suspension and enable your account.</p>
     <button type="button" onClick={()=>{setP("");setPanel("login");}} style={{...linkStyle,textAlign:"left"}}>← Back to sign in</button>
   </section>;
 

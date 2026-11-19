@@ -13,6 +13,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme, THEMES, LOGOS, AppTheme, AppLogo } from "@/lib/theme-context";
 import { Badge } from "@/components/ui/badge";
+import { apiFetch, ActivityLog } from "@/lib/api";
 
 const LOGO_ICONS: Record<AppLogo, React.FC<any>> = {
   Building2, Heart, Shield, Star,
@@ -154,6 +155,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [maintenanceEndsAt, setMaintenanceEndsAt] = useState<string | null>(null);
   const [maintenanceRemaining, setMaintenanceRemaining] = useState(0);
   const [appVersion, setAppVersion] = useState("dev");
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
 
   useEffect(() => {
     try { localStorage.setItem("sidebar-collapsed", String(collapsed)); } catch {}
@@ -180,6 +183,11 @@ export function Layout({ children }: { children: ReactNode }) {
   // Close mobile sheet on navigation
   useEffect(() => { setMobileOpen(false); }, [location]);
   useEffect(() => { fetch("/api/version", { credentials: "include", cache: "no-store" }).then(r => r.json()).then(v => { if (v.version) setAppVersion(String(v.version)); }).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (!user?.id || !(user.role === "admin" || user.permissions?.viewActivityLogs)) { setActivityLog([]); return; }
+    apiFetch<ActivityLog[]>("/api/activity?limit=20").then(setActivityLog).catch(() => setActivityLog([]));
+  }, [user?.id, user?.role, user?.permissions?.viewActivityLogs, location]);
 
   useEffect(() => {
     if (user?.role !== "admin") { setMaintenanceEndsAt(null); return; }
@@ -402,6 +410,15 @@ export function Layout({ children }: { children: ReactNode }) {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
               <div className="flex items-center gap-2 text-sm font-medium"><Timer className="h-4 w-4" />Maintenance is active</div>
               <div className="font-mono text-lg font-bold tabular-nums" aria-label="Maintenance time remaining">{maintenanceClock}</div>
+            </div>
+          )}
+          {(user?.role === "admin" || user?.permissions?.viewActivityLogs) && (
+            <div className="mb-4 rounded-lg border bg-card">
+              <button type="button" className="flex w-full items-center justify-between px-4 py-3 text-left" onClick={() => setActivityOpen(value => !value)}>
+                <span className="flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-primary" />Activity Log <Badge variant="secondary">{activityLog.length}</Badge></span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${activityOpen ? "rotate-180" : ""}`} />
+              </button>
+              {activityOpen && <div className="max-h-72 overflow-auto border-t px-4 py-2"><table className="w-full text-xs"><thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 pr-3">Time</th><th className="py-2 pr-3">User</th><th className="py-2 pr-3">IP address</th><th className="py-2 pr-3">Action</th><th className="py-2">Details</th></tr></thead><tbody>{activityLog.map(entry => <tr key={entry.id} className="border-b last:border-0"><td className="whitespace-nowrap py-2 pr-3">{new Date(entry.createdAt).toLocaleString()}</td><td className="py-2 pr-3">{entry.username || "System"}</td><td className="py-2 pr-3 font-mono">{entry.ipAddress || "—"}</td><td className="py-2 pr-3 font-mono font-semibold">{entry.action}</td><td className="max-w-xs truncate py-2 text-muted-foreground">{entry.details ? Object.entries(entry.details).map(([key, value]) => `${key}: ${String(value)}`).join(", ") : ""}</td></tr>)}</tbody></table>{!activityLog.length && <p className="py-3 text-muted-foreground">No activity recorded.</p>}</div>}
             </div>
           )}
           {children}
