@@ -331,7 +331,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open navigation"><Menu className="h-5 w-5" /></Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 max-w-[calc(100%-2rem)] h-dvh p-0 flex flex-col">
+            <SheetContent side="left" className="w-72 max-w-[calc(100%-2rem)] h-dvh p-0 flex flex-col bg-card/90 backdrop-blur-xl">
               <div className="shrink-0 p-5 pr-10 border-b flex items-center gap-2">
                 <div className="h-8 w-8 rounded bg-primary flex items-center justify-center">
                   <AppLogoIcon className="h-5 w-5 text-primary-foreground" />
@@ -363,7 +363,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Desktop sidebar ── */}
-      <aside className={`relative z-10 hidden md:flex flex-col border-r bg-card h-dvh sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
+      <aside className={`relative z-10 hidden md:flex flex-col border-r bg-card/90 backdrop-blur-xl h-dvh sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
 
         {/* Logo + toggle button */}
         <div className={`flex items-center border-b h-14 shrink-0 ${collapsed ? "justify-center px-2" : "px-4 gap-2"}`}>
