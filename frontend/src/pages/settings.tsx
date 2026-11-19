@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Save, RotateCcw, Settings2, Timer, Bell, FileText, Shield, Building2, ShoppingCart, Package, Database, AlertTriangle, Palette, Pencil, Trash2, Tag, Camera, Plus, X } from "lucide-react";
 import { useTheme, THEMES, LOGOS, AppTheme, AppLogo } from "@/lib/theme-context";
@@ -164,6 +165,9 @@ function ToggleRow({ label, description, checked, onChange }: any) {
 export default function SettingsPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const [cinematicEnabled, setCinematicEnabled] = useState(() => localStorage.getItem("cinematic-background-enabled") !== "false");
+  const [cinematicBlur, setCinematicBlur] = useState(() => Number(localStorage.getItem("cinematic-background-blur") || 16));
+  const [videoBrightness, setVideoBrightness] = useState(() => Number(localStorage.getItem("cinematic-video-brightness") || 100));
   if (!user?.permissions?.manageUsers) { setLocation("/"); return null; }
 
   const queryClient = useQueryClient();
@@ -240,6 +244,14 @@ export default function SettingsPage() {
   const [editingUnit, setEditingUnit] = useState<string|null>(null);
   const [newUnitName, setNewUnitName] = useState("");
   const [unitSearch, setUnitSearch] = useState("");
+
+  const saveCinematicPreferences = (enabled: boolean, blur: number, brightness: number) => {
+    setCinematicEnabled(enabled); setCinematicBlur(blur); setVideoBrightness(brightness);
+    localStorage.setItem("cinematic-background-enabled", String(enabled));
+    localStorage.setItem("cinematic-background-blur", String(blur));
+    localStorage.setItem("cinematic-video-brightness", String(brightness));
+    window.dispatchEvent(new Event("cinematic-background-change"));
+  };
 
   const loadUnits = () => {
     setUnitsLoading(true);
@@ -495,10 +507,10 @@ export default function SettingsPage() {
   return (
     <Layout>
       <settingsModeContext.Provider value={settingsMode}>
-      <div className="flex flex-col gap-6 max-w-2xl mx-auto">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-6xl mx-auto items-start">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="xl:col-span-2 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
               <Settings2 className="h-7 w-7 text-primary" />System Settings
@@ -517,15 +529,24 @@ export default function SettingsPage() {
         </div>
 
         {dirty && (
-          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded-lg px-4 py-2 text-amber-700 dark:text-amber-400 text-sm font-medium">
+          <div className="xl:col-span-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded-lg px-4 py-2 text-amber-700 dark:text-amber-400 text-sm font-medium">
             Unsaved changes — click "Save Settings" to apply.
           </div>
         )}
 
-        <div className="flex gap-2 border-b pb-2">
+        <div className="xl:col-span-2 flex gap-2 border-b pb-2">
           <Button variant={settingsMode === "general" ? "default" : "outline"} onClick={() => setSettingsMode("general")}>General Settings</Button>
           <Button variant={settingsMode === "manage" ? "default" : "outline"} onClick={() => setSettingsMode("manage")}>Manage Lists & Dropdowns</Button>
         </div>
+
+        <SectionCard icon={Palette} title="Cinematic Background" description="Personal display preferences saved locally in this browser.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border bg-muted/20 p-4 md:col-span-2"><ToggleRow label="Enable cinematic background" description="Show hospital photography in the app and the cinematic video on the login screen." checked={cinematicEnabled} onChange={(enabled: boolean) => saveCinematicPreferences(enabled, cinematicBlur, videoBrightness)} /></div>
+            <div className="rounded-lg border bg-muted/20 p-4"><div className="mb-3 flex justify-between text-sm"><Label>Background blur</Label><span className="text-muted-foreground">{cinematicBlur}px</span></div><Slider min={0} max={32} step={1} value={[cinematicBlur]} onValueChange={value => saveCinematicPreferences(cinematicEnabled, value[0] ?? 16, videoBrightness)} /></div>
+            <div className="rounded-lg border bg-muted/20 p-4"><div className="mb-3 flex justify-between text-sm"><Label>Login video brightness</Label><span className="text-muted-foreground">{videoBrightness}%</span></div><Slider min={50} max={150} step={5} value={[videoBrightness]} onValueChange={value => saveCinematicPreferences(cinematicEnabled, cinematicBlur, value[0] ?? 100)} /></div>
+            <div className="rounded-lg border bg-muted/20 p-4 md:col-span-2"><div className="mb-2 text-sm font-medium">Presets</div><div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => saveCinematicPreferences(cinematicEnabled, 16, 100)}>Standard</Button><Button type="button" size="sm" variant="outline" onClick={() => saveCinematicPreferences(cinematicEnabled, 24, 80)}>Night Shift</Button><Button type="button" size="sm" variant="outline" onClick={() => saveCinematicPreferences(cinematicEnabled, 8, 125)}>High Contrast</Button></div></div>
+          </div>
+        </SectionCard>
 
         <SectionCard icon={Shield} title="User Roles" description="Add custom roles for assigning users. Built-in roles cannot be deleted.">
           <div className="flex gap-2">
