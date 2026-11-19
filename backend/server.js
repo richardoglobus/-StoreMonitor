@@ -1463,7 +1463,7 @@ function autoDisableInactiveUsers(req = null) {
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   for (const user of db.get("users").value()) {
     if (user.role === "admin" || user.accountStatus !== "active" || user.isActive === false) continue;
-    const lastUse = new Date(user.lastLoginAt || user.createdAt || 0).getTime();
+    const lastUse = Math.max(new Date(user.lastLoginAt || user.createdAt || 0).getTime(), new Date(user.statusChangedAt || 0).getTime());
     if (!lastUse || lastUse > cutoff) continue;
     const reason = "Automatically disabled after 7 days without a successful login";
     db.get("users").find({ id: user.id }).assign({ accountStatus: "disabled", statusReason: reason, statusChangedAt: new Date().toISOString(), statusChangedBy: null, isActive: false }).write();
@@ -1933,7 +1933,22 @@ app.patch("/api/auth/users/:userId",requireAdmin,(req,res)=>{
   if (allowPasswordOnlyLogin === true && (!resulting.email || !resulting.emailVerifiedAt)) return res.status(400).json({error:"Password-only sign-in requires an administrator-verified email"});
   if (allowPasswordOnlyLogin !== undefined) { updates.allowPasswordOnlyLogin=allowPasswordOnlyLogin; updates.loginOtp=null; }
   if (!resulting.email || !resulting.emailVerifiedAt) updates.allowPasswordOnlyLogin=false;
-  if(accountStatus!==undefined && ["active","disabled","suspended","pending_verification","pending_approval"].includes(accountStatus)) { if (accountStatus !== current.accountStatus) { updates.accountStatus=accountStatus; updates.statusReason=String(statusReason || (accountStatus === "active" ? "Enabled by administrator" : "Suspended by administrator")).slice(0,500); updates.statusChangedAt=new Date().toISOString(); updates.statusChangedBy=req.session.userId; updates.isActive=accountStatus === "active"; } } if (statusReason !== undefined && accountStatus === undefined) updates.statusReason=String(statusReason).slice(0,500);
+  if(accountStatus!==undefined && ["active","disabled","suspended","pending_verification","pending_approval"].includes(accountStatus)) {
+    if (accountStatus === "active") {
+      updates.accountStatus = "active";
+      updates.isActive = true;
+      updates.statusReason = null;
+      updates.statusChangedAt = new Date().toISOString();
+      updates.statusChangedBy = req.session.userId;
+    } else if (accountStatus !== current.accountStatus) {
+      updates.accountStatus=accountStatus;
+      updates.statusReason=String(statusReason || "Suspended by administrator").slice(0,500);
+      updates.statusChangedAt=new Date().toISOString();
+      updates.statusChangedBy=req.session.userId;
+      updates.isActive=accountStatus === "active";
+    }
+  }
+  if (statusReason !== undefined && accountStatus === undefined) updates.statusReason=String(statusReason).slice(0,500);
   if(role!==undefined) {
     const availableRoles = ["admin","manager","accountant","staff",...(Array.isArray(getSettings().customRoles) ? getSettings().customRoles.map(r => r.name) : [])];
     const canonicalRole = availableRoles.find(value => value.toLowerCase() === String(role).trim().toLowerCase());
