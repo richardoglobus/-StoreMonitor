@@ -222,7 +222,7 @@ function FormContent({ panel, setPanel, onLogin, onVerifyLogin, onSignup, accent
   };
   const loginError=(err:any)=>{
     if(err?.code==="ACCOUNT_PENDING_APPROVAL") { setP(""); setLoginChallenge(null); setPanel("pending_approval"); }
-    else if(err?.code==="ACCOUNT_SUSPENDED") { setP(""); setLoginChallenge(null); setPanel("suspended"); toast.error(err?.error || "This account has been suspended. Contact the administrator."); }
+    else if(err?.code==="ACCOUNT_SUSPENDED" || /account is inactive|account has been suspended/i.test(String(err?.error || ""))) { setP(""); setShowSignupPrompt(false); setLoginChallenge(null); setPanel("suspended"); toast.error(err?.error || "This account has been suspended. Contact the system administrator."); }
     else if(err?.code==="CONTACT_ADMIN_REQUIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("contact_admin"); }
     else { setShowSignupPrompt(true); if(err?.code==="LOGIN_CHALLENGE_EXPIRED") { setP(""); setOtp(""); setLoginChallenge(null); setPanel("login"); } toast.error(err?.error||err?.message||"Unable to sign in. Please try again."); }
   };

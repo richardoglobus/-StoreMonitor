@@ -1423,12 +1423,31 @@ function getCurrentStockForItem(itemId) {
   return opening + purchasedTotal + adjustmentTotal - issuedTotal;
 }
 
+function activityArea(req, entityType = "SYSTEM") {
+  const path = String(req?.path || req?.originalUrl || "");
+  if (path.includes("/auth")) return "AUTH";
+  if (path.includes("/activity")) return "ACTIVITY_LOG";
+  if (path.includes("/catalog") || path.includes("/items")) return "CATALOG";
+  if (path.includes("/issues")) return "ISSUES";
+  if (path.includes("/purchases") || path.includes("/purchase-orders") || path.includes("/grns")) return "PURCHASES";
+  if (path.includes("/suppliers")) return "SUPPLIERS";
+  if (path.includes("/payments") || path.includes("/accounts")) return "ACCOUNTS";
+  if (path.includes("/departments")) return "DEPARTMENTS";
+  if (path.includes("/assets")) return "ASSETS";
+  if (path.includes("/digital-forms")) return "DIGITAL_FORMS";
+  if (path.includes("/export")) return "EXPORTS";
+  if (path.includes("/reports") || path.includes("/dashboard")) return "REPORTS";
+  if (path.includes("/settings")) return "SETTINGS";
+  return entityType || "SYSTEM";
+}
+
 function logActivity(req, action, entityType, entityId, details = null) {
   db.get("activities").push({
     id: nextId("activities"),
     userId: req?.session?.userId ?? null,
     username: req?.session?.username || null,
     ipAddress: req?.ip || req?.headers?.["x-forwarded-for"]?.split(",")[0]?.trim() || null,
+    area: activityArea(req, entityType),
     action,
     entityType,
     entityId: entityId ?? null,

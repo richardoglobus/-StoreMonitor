@@ -4,10 +4,10 @@ import { Layout } from "@/components/layout";
 import { DateRangePicker, dateToMonth, todayStr, firstOfMonth } from "@/components/date-range-picker";
 import {
   useGetDashboardSummary, useGetRecentIssues, useGetLowStock,
-  useGetDepartmentUsage, useGetTopUsedItems, useListActivity, useListItemStock,
+  useGetDepartmentUsage, useGetTopUsedItems, useListItemStock,
   getGetDashboardSummaryQueryKey, getGetRecentIssuesQueryKey,
   getGetLowStockQueryKey, getGetDepartmentUsageQueryKey,
-  getGetTopUsedItemsQueryKey, getListActivityQueryKey, getListItemStockQueryKey,
+  getGetTopUsedItemsQueryKey, getListItemStockQueryKey,
   useChangePassword, useChangeUsername, getGetCurrentUserQueryKey,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -159,11 +159,6 @@ export default function Dashboard() {
   );
   const { data: topItems, isLoading: isLoadingTopItems } = useGetTopUsedItems(
     { month, limit: 5 }, { query: { queryKey: getGetTopUsedItemsQueryKey({ month, limit: 5 }) } }
-  );
-  const canViewActivity = user?.role === "admin";
-  const [activityLimit, setActivityLimit] = useState(20);
-  const { data: activityLog, isLoading: isLoadingActivity } = useListActivity(
-    { limit: activityLimit }, { query: { enabled: canViewActivity, queryKey: getListActivityQueryKey({ limit: activityLimit }) } }
   );
   const { data: allItems } = useListItemStock({ query: { queryKey: getListItemStockQueryKey(), refetchInterval: 300_000 } });
   const negativeStock = (allItems ?? []).filter(i => i.stockBalance < 0);
@@ -397,82 +392,6 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {canViewActivity && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-primary"/>Activity Log
-                </CardTitle>
-                <CardDescription>Tracks who changed what in the system.</CardDescription>
-              </div>
-              {activityLog && activityLog.length > 0 && (
-                <Badge variant="secondary" className="font-mono">{activityLog.length} entries</Badge>
-              )}
-            </CardHeader>
-            <CardContent className="p-0">
-              {isLoadingActivity
-                ? <div className="space-y-2 p-4">{[1,2,3,4].map(i=><Skeleton key={i} className="h-8 w-full"/>)}</div>
-                : activityLog && activityLog.length > 0 ? (
-                  <>
-                    <div className="overflow-y-auto" style={{ maxHeight: "400px" }}>
-                      <Table>
-                        <TableHeader className="sticky top-0 bg-card z-10">
-                          <TableRow>
-                            <TableHead className="w-32">Time</TableHead>
-                            <TableHead className="w-28">User</TableHead>
-                            <TableHead>Action</TableHead>
-                            <TableHead className="w-36">Entity</TableHead>
-                            <TableHead>Details</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {activityLog.map(entry => {
-                            const actionColor = entry.action.startsWith("DELETE") ? "text-destructive"
-                              : entry.action.startsWith("CREATE") ? "text-green-600 dark:text-green-400"
-                              : entry.action.startsWith("UPDATE") || entry.action.startsWith("EDIT") ? "text-blue-600 dark:text-blue-400"
-                              : entry.action === "LOGIN" ? "text-primary"
-                              : "text-muted-foreground";
-                            const detailStr = entry.details
-                              ? Object.entries(entry.details).map(([k,v])=>`${k}: ${v}`).join(", ")
-                              : "";
-                            return (
-                              <TableRow key={entry.id} className="hover:bg-muted/40">
-                                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                                  {format(new Date(entry.createdAt),"d MMM, HH:mm")}
-                                </TableCell>
-                                <TableCell className="text-sm font-medium">{entry.username || `#${entry.userId}`}</TableCell>
-                                <TableCell>
-                                  <span className={`font-mono text-xs font-semibold ${actionColor}`}>{entry.action}</span>
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {entry.entityType}{entry.entityId ? ` #${entry.entityId}` : ""}
-                                </TableCell>
-                                <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={detailStr}>
-                                  {detailStr}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <div className="flex items-center justify-between px-4 py-2 border-t bg-muted/20">
-                      <span className="text-xs text-muted-foreground">
-                        Showing {activityLog.length} most recent entries
-                      </span>
-                      <Button
-                        size="sm" variant="outline" className="h-7 text-xs gap-1"
-                        onClick={() => setActivityLimit(l => l + 50)}
-                      >
-                        <ChevronDown className="h-3 w-3"/>Load 50 more
-                      </Button>
-                    </div>
-                  </>
-                ) : <div className="px-4 pb-4 text-sm text-muted-foreground">No activity yet.</div>}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </Layout>
   );

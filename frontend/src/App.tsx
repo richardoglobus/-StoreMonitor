@@ -21,6 +21,7 @@ import SettingsPage from "@/pages/settings";
 import StockValuationPage from "@/pages/stock-valuation";
 import Exports from "@/pages/exports";
 import LoginPage from "@/pages/login";
+import ActivityLogPage from "@/pages/activity-log";
 import NotFound from "@/pages/not-found";
 import DigitalForms from "@/pages/digital-forms";
 import GrnPage from "@/pages/accounts/grn";
@@ -140,6 +141,7 @@ function AppWithAuth() {
         <Route path="/assets" component={Assets} />
         <Route path="/admin/users" component={UserManagement} />
         <Route path="/admin/settings" component={SettingsPage} />
+        <Route path="/activity-log" component={ActivityLogPage} />
         <Route path="/stock-valuation" component={StockValuationPage} />
           <Route path="/digital-forms" component={DigitalForms} />
         <Route path="/accounts/purchase-orders" component={PurchaseOrdersPage} />

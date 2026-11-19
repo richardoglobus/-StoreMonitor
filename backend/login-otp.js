@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
@@ -209,7 +209,7 @@ function registerLoginOtp(app, deps) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
     if (digest(userById(user.id)?.passwordHash) !== passwordFingerprint) return res.status(401).json({ error: "Invalid credentials" });
-    if (user.accountStatus === "disabled" || user.isActive === false) return res.status(403).json({ error: "This account is inactive" });
+    if (user.accountStatus === "suspended" || user.accountStatus === "disabled" || user.isActive === false) return res.status(403).json({ code: "ACCOUNT_SUSPENDED", error: `This account has been suspended${user.statusReason ? `: ${user.statusReason}` : ""}. Contact the system administrator due to suspicious activity.` });
     if (user.accountStatus === "pending_approval") return res.status(403).json({ code: "ACCOUNT_PENDING_APPROVAL", error: "Your account is awaiting administrator approval." });
     // Never accept email/phone supplied alongside credentials as an enrollment request.
     if (!eligible(user) || user.accountStatus === "pending_verification") return contact(res);

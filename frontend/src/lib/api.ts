@@ -90,7 +90,7 @@ export type MonthlyReport = {
     }[];
   }[];
 };
-export type ActivityLog = { id: number; userId: number | null; username: string | null; ipAddress?: string | null; action: string; entityType: string; entityId: number | null; details: any; createdAt: string };
+export type ActivityLog = { id: number; userId: number | null; username: string | null; ipAddress?: string | null; area?: string | null; action: string; entityType: string; entityId: number | null; details: any; createdAt: string };
 export type ChargeItemCode = { code: string; name: string };
 
 export const ReceiptSource = { KEMSA: "KEMSA", MEDS: "MEDS" } as const;

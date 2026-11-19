@@ -65,9 +65,27 @@ const NAV_ITEMS = [
     ],
   },
   { href: "/exports",         label: "Exports",        icon: Download,        permission: "exportData" },
+  { href: "/activity-log",    label: "Activity Log",   icon: Activity,       permission: "viewActivityLogs" },
   { href: "/admin/users",     label: "Users",          icon: Users,           permission: "manageUsers" },
   { href: "/admin/settings",  label: "Settings",       icon: Settings2,       permission: "manageUsers" },
 ];
+
+function activityAreaForLocation(location: string) {
+  if (location.startsWith("/activity-log")) return "ACTIVITY_LOG";
+  if (location.startsWith("/items")) return "CATALOG";
+  if (location.startsWith("/issues")) return "ISSUES";
+  if (location.startsWith("/purchases")) return "PURCHASES";
+  if (location.startsWith("/accounts/suppliers")) return "SUPPLIERS";
+  if (location.startsWith("/accounts")) return "ACCOUNTS";
+  if (location.startsWith("/departments")) return "DEPARTMENTS";
+  if (location.startsWith("/assets")) return "ASSETS";
+  if (location.startsWith("/digital-forms")) return "DIGITAL_FORMS";
+  if (location.startsWith("/exports")) return "EXPORTS";
+  if (location.startsWith("/reports") || location.startsWith("/dashboard")) return "REPORTS";
+  if (location.startsWith("/admin/settings")) return "SETTINGS";
+  if (location.startsWith("/admin/users")) return "AUTH";
+  return null;
+}
 
 function ThemeToggle() {
   const { darkMode, toggleDarkMode } = useTheme();
@@ -155,8 +173,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [maintenanceEndsAt, setMaintenanceEndsAt] = useState<string | null>(null);
   const [maintenanceRemaining, setMaintenanceRemaining] = useState(0);
   const [appVersion, setAppVersion] = useState("dev");
-  const [activityOpen, setActivityOpen] = useState(false);
-  const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
+  const [pageActivity, setPageActivity] = useState<ActivityLog[]>([]);
 
   useEffect(() => {
     try { localStorage.setItem("sidebar-collapsed", String(collapsed)); } catch {}
@@ -169,7 +186,7 @@ export function Layout({ children }: { children: ReactNode }) {
       "/issues": "Issues Log", "/purchases": "Purchases", "/items": "Item Catalog",
       "/accounts/purchase-orders": "Purchase Orders", "/accounts/grn": "GRN / Delivery Notes",
       "/accounts/supplier-invoices": "Supplier Invoices", "/accounts/payments": "Payment Entries", "/accounts/payments/new": "New Payment Entry", "/accounts/modes-of-payment": "Modes of Payment",
-      "/accounts/journal-entries": "Journal Entries", "/reports": "Reports",
+      "/accounts/journal-entries": "Journal Entries", "/reports": "Reports", "/activity-log": "Activity Log",
     };
     const key = `storemonitor.recentVisits.${user.id}`;
     try {
@@ -185,9 +202,11 @@ export function Layout({ children }: { children: ReactNode }) {
   useEffect(() => { fetch("/api/version", { credentials: "include", cache: "no-store" }).then(r => r.json()).then(v => { if (v.version) setAppVersion(String(v.version)); }).catch(() => {}); }, []);
 
   useEffect(() => {
-    if (!user?.id || !(user.role === "admin" || user.permissions?.viewActivityLogs)) { setActivityLog([]); return; }
-    apiFetch<ActivityLog[]>("/api/activity?limit=20").then(setActivityLog).catch(() => setActivityLog([]));
-  }, [user?.id, user?.role, user?.permissions?.viewActivityLogs, location]);
+    const area = activityAreaForLocation(location);
+    if (!area || !(user?.role === "admin" || user?.permissions?.viewActivityLogs)) { setPageActivity([]); return; }
+    apiFetch<ActivityLog[]>("/api/activity?limit=300").then(rows => setPageActivity(rows.filter(row => row.area === area).slice(0, 20))).catch(() => setPageActivity([]));
+  }, [location, user?.id, user?.role, user?.permissions?.viewActivityLogs]);
+
 
   useEffect(() => {
     if (user?.role !== "admin") { setMaintenanceEndsAt(null); return; }
@@ -412,16 +431,13 @@ export function Layout({ children }: { children: ReactNode }) {
               <div className="font-mono text-lg font-bold tabular-nums" aria-label="Maintenance time remaining">{maintenanceClock}</div>
             </div>
           )}
-          {(user?.role === "admin" || user?.permissions?.viewActivityLogs) && (
-            <div className="mb-4 rounded-lg border bg-card">
-              <button type="button" className="flex w-full items-center justify-between px-4 py-3 text-left" onClick={() => setActivityOpen(value => !value)}>
-                <span className="flex items-center gap-2 text-sm font-semibold"><Activity className="h-4 w-4 text-primary" />Activity Log <Badge variant="secondary">{activityLog.length}</Badge></span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${activityOpen ? "rotate-180" : ""}`} />
-              </button>
-              {activityOpen && <div className="max-h-72 overflow-auto border-t px-4 py-2"><table className="w-full text-xs"><thead><tr className="border-b text-left text-muted-foreground"><th className="py-2 pr-3">Time</th><th className="py-2 pr-3">User</th><th className="py-2 pr-3">IP address</th><th className="py-2 pr-3">Action</th><th className="py-2">Details</th></tr></thead><tbody>{activityLog.map(entry => <tr key={entry.id} className="border-b last:border-0"><td className="whitespace-nowrap py-2 pr-3">{new Date(entry.createdAt).toLocaleString()}</td><td className="py-2 pr-3">{entry.username || "System"}</td><td className="py-2 pr-3 font-mono">{entry.ipAddress || "—"}</td><td className="py-2 pr-3 font-mono font-semibold">{entry.action}</td><td className="max-w-xs truncate py-2 text-muted-foreground">{entry.details ? Object.entries(entry.details).map(([key, value]) => `${key}: ${String(value)}`).join(", ") : ""}</td></tr>)}</tbody></table>{!activityLog.length && <p className="py-3 text-muted-foreground">No activity recorded.</p>}</div>}
+          {children}
+          {pageActivity.length > 0 && (user?.role === "admin" || user?.permissions?.viewActivityLogs) && (
+            <div className="mt-6 rounded-lg border bg-card">
+              <div className="border-b px-4 py-3 text-sm font-semibold">Recent activity for this page</div>
+              <div className="max-h-64 overflow-auto"><table className="w-full text-xs"><thead><tr className="border-b text-left text-muted-foreground"><th className="px-4 py-2">Time</th><th className="px-4 py-2">User</th><th className="px-4 py-2">IP address</th><th className="px-4 py-2">Action</th><th className="px-4 py-2">Details</th></tr></thead><tbody>{pageActivity.map(entry => <tr key={entry.id} className="border-b last:border-0"><td className="whitespace-nowrap px-4 py-2">{new Date(entry.createdAt).toLocaleString()}</td><td className="px-4 py-2">{entry.username || "System"}</td><td className="px-4 py-2 font-mono">{entry.ipAddress || "—"}</td><td className="px-4 py-2 font-mono font-semibold">{entry.action}</td><td className="max-w-md truncate px-4 py-2 text-muted-foreground">{entry.details ? Object.entries(entry.details).map(([key, value]) => `${key}: ${String(value)}`).join(", ") : "—"}</td></tr>)}</tbody></table></div>
             </div>
           )}
-          {children}
           <div className="mt-6 text-center text-xs text-muted-foreground">Version {appVersion}</div>
         </div>
       </main>
