@@ -87,6 +87,8 @@ function activityAreaForLocation(location: string) {
   return null;
 }
 
+const HOSPITAL_BACKGROUNDS = ["/backgrounds/hospital-stock-1.jpg", "/backgrounds/hospital-stock-2.jpg", "/backgrounds/hospital-stock-3.jpg"];
+
 function ThemeToggle() {
   const { darkMode, toggleDarkMode } = useTheme();
   return (
@@ -173,6 +175,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [maintenanceEndsAt, setMaintenanceEndsAt] = useState<string | null>(null);
   const [maintenanceRemaining, setMaintenanceRemaining] = useState(0);
   const [appVersion, setAppVersion] = useState("dev");
+  const [cinematicEnabled, setCinematicEnabled] = useState(() => localStorage.getItem("cinematic-background-enabled") !== "false");
+  const [backgroundIndex, setBackgroundIndex] = useState(0);
   const [pageActivity, setPageActivity] = useState<ActivityLog[]>([]);
 
   useEffect(() => {
@@ -200,6 +204,8 @@ export function Layout({ children }: { children: ReactNode }) {
   // Close mobile sheet on navigation
   useEffect(() => { setMobileOpen(false); }, [location]);
   useEffect(() => { fetch("/api/version", { credentials: "include", cache: "no-store" }).then(r => r.json()).then(v => { if (v.version) setAppVersion(String(v.version)); }).catch(() => {}); }, []);
+  useEffect(() => { const timer = window.setInterval(() => setBackgroundIndex(index => (index + 1) % HOSPITAL_BACKGROUNDS.length), 18000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { const sync = () => setCinematicEnabled(localStorage.getItem("cinematic-background-enabled") !== "false"); window.addEventListener("cinematic-background-change", sync); return () => window.removeEventListener("cinematic-background-change", sync); }, []);
 
   useEffect(() => {
     const area = activityAreaForLocation(location);
@@ -308,7 +314,8 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-dvh bg-background flex flex-col md:flex-row">
+    <div className="relative min-h-dvh bg-background flex flex-col md:flex-row">
+      {cinematicEnabled && <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-[0.12] transition-[background-image] duration-1000" style={{ backgroundImage: `url(${HOSPITAL_BACKGROUNDS[backgroundIndex]})` }} />}
 
       {/* ── Mobile / Tablet header ── */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b bg-card sticky top-0 z-30">
@@ -356,7 +363,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </header>
 
       {/* ── Desktop sidebar ── */}
-      <aside className={`hidden md:flex flex-col border-r bg-card h-dvh sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
+      <aside className={`relative z-10 hidden md:flex flex-col border-r bg-card h-dvh sticky top-0 shrink-0 transition-all duration-300 ${collapsed ? "w-[60px]" : "w-60"}`}>
 
         {/* Logo + toggle button */}
         <div className={`flex items-center border-b h-14 shrink-0 ${collapsed ? "justify-center px-2" : "px-4 gap-2"}`}>
@@ -423,7 +430,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 overflow-auto">
+      <main className="relative z-10 flex-1 p-3 sm:p-4 md:p-6 lg:p-8 min-w-0 overflow-auto">
         <div className="app-content min-w-0 max-w-6xl mx-auto">
           {user?.role === "admin" && maintenanceEndsAt && maintenanceRemaining > 0 && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">

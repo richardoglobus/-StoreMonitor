@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown, Zap, RefreshCw, KeyRound, Plus, ShoppingCart, ClipboardList, ReceiptText, PackageSearch, Wallet, BookOpen, BarChart3, ArrowRight, FileText } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, ArrowDownRight, Calendar, Activity, Clock, ChevronDown, Zap, RefreshCw, KeyRound, Plus, ShoppingCart, ClipboardList, ReceiptText, PackageSearch, Wallet, BookOpen, BarChart3, ArrowRight, FileText, Film } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip, Cell } from "recharts";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -140,6 +140,7 @@ function LiveClock() {
 export default function Dashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const [cinematicEnabled, setCinematicEnabled] = useState(() => localStorage.getItem("cinematic-background-enabled") !== "false");
   if (!user?.permissions?.viewDashboard) { setLocation("/"); return null; }
   const [from, setFrom] = useState(firstOfMonth());
   const [to, setTo] = useState(todayStr());
@@ -188,6 +189,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <ChangeUsernameDialog />
             <ChangePasswordDialog />
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => { const next = !cinematicEnabled; setCinematicEnabled(next); localStorage.setItem("cinematic-background-enabled", String(next)); window.dispatchEvent(new Event("cinematic-background-change")); }} title="Toggle cinematic background"><Film className="h-4 w-4" />{cinematicEnabled ? "Cinematic on" : "Cinematic off"}</Button>
             <Button variant="ghost" size="icon" onClick={() => refetchDash()} disabled={isFetchingDash} title="Refresh">
               <RefreshCw className={`h-4 w-4 ${isFetchingDash ? "animate-spin" : ""}`}/>
             </Button>

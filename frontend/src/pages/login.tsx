@@ -501,10 +501,12 @@ export default function LoginPage(){
   const countdown=maintenanceRemaining ? `${String(Math.floor(maintenanceRemaining/86400000)).padStart(2,"0")}d:${String(Math.floor((maintenanceRemaining%86400000)/3600000)).padStart(2,"0")}h:${String(Math.floor((maintenanceRemaining%3600000)/60000)).padStart(2,"0")}m:${String(Math.floor((maintenanceRemaining%60000)/1000)).padStart(2,"0")}s` : "Soon";
 
   const [mounted,setMounted]=useState(false);
+  const [cinematicEnabled] = useState(() => localStorage.getItem("cinematic-background-enabled") !== "false");
   useEffect(()=>{setTimeout(()=>setMounted(true),80);},[]);
 
   return (
     <div style={{position:"relative",minHeight:"100vh",overflow:"hidden",background:t.bg}}>
+      {cinematicEnabled && <><video aria-hidden="true" autoPlay muted loop playsInline poster="/backgrounds/hospital-stock-1.jpg" style={{position:"fixed",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:.34,filter:"saturate(.85) contrast(1.05)"}}><source src="/backgrounds/hospital-login.mp4" type="video/mp4" /></video><div aria-hidden="true" style={{position:"fixed",inset:0,background:"linear-gradient(120deg,rgba(4,15,31,.88),rgba(5,27,43,.62) 55%,rgba(1,9,20,.82))",zIndex:1}} /></>}
       <InstallBanner />
       <style>{BASE_CSS+`@keyframes wave{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}} @keyframes blob{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-20px) scale(1.08)}} @keyframes blob2{0%,100%{transform:translate(0,0)}50%{transform:translate(-25px,30px)}}`}</style>
       <EffectBg effect={effect}/>
@@ -525,7 +527,7 @@ export default function LoginPage(){
       </button>
 
       {/* Main card */}
-      <div style={{position:"relative",zIndex:maintenance.active?1:10,minHeight:"100vh",display:maintenance.active?"none":"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{position:"relative",zIndex:maintenance.active?2:10,minHeight:"100vh",display:maintenance.active?"none":"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <div style={{width:"100%",maxWidth:860,borderRadius:22,overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,0.6)",display:"flex",flexDirection:isSignup?"row-reverse":"row",minHeight:520,animation:shake?"shake 0.5s ease":undefined,transition:"all 0.5s"}}>
 
           {/* Form panel */}
